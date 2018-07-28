@@ -6,7 +6,7 @@ language: go
 addons:
   apt:
     packages:
-    - lcov
+    - realpath
 
 before_install:
   - go get github.com/go-playground/overalls
