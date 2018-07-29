@@ -15,7 +15,7 @@ import (
 	"os"
 	"unsafe"
 
-	"github.com/CanonicalLtd/dqlite/internal/logging"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/pkg/errors"
 )
 

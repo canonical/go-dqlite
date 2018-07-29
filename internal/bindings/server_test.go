@@ -2,19 +2,17 @@ package bindings_test
 
 import (
 	"encoding/binary"
-	"io"
-	"io/ioutil"
 	"net"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestServer_Lifecycle(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	cluster := newTestCluster()
 
 	server, err := bindings.NewServer(cluster)
@@ -24,6 +22,8 @@ func TestServer_Lifecycle(t *testing.T) {
 }
 
 func TestServer_Run(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	cluster := newTestCluster()
 
 	server, err := bindings.NewServer(cluster)
@@ -44,6 +44,8 @@ func TestServer_Run(t *testing.T) {
 }
 
 func TestServer_Handle(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	cluster := newTestCluster()
 
 	server, err := bindings.NewServer(cluster)
@@ -100,6 +102,8 @@ func TestServer_Handle(t *testing.T) {
 }
 
 func TestServer_ConcurrentHandleAndClose(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	cluster := newTestCluster()
 
 	server, err := bindings.NewServer(cluster)
@@ -136,69 +140,6 @@ func TestServer_ConcurrentHandleAndClose(t *testing.T) {
 
 	assert.NoError(t, <-runCh)
 	<-acceptCh
-}
-
-func TestVfs_Content(t *testing.T) {
-	vfs, err := bindings.NewVfs("test")
-	require.NoError(t, err)
-
-	defer vfs.Close()
-
-	conn, err := bindings.Open("test.db", "test")
-	require.NoError(t, err)
-
-	err = conn.Exec("CREATE TABLE foo (n INT)")
-	require.NoError(t, err)
-
-	// Dump the in-memory files to a temporary directory.
-	dir, err := ioutil.TempDir("", "dqlite-bindings-")
-	require.NoError(t, err)
-
-	defer os.RemoveAll(dir)
-
-	database, err := vfs.Content("test.db")
-	require.NoError(t, err)
-
-	err = ioutil.WriteFile(filepath.Join(dir, "test.db"), database, 0600)
-	require.NoError(t, err)
-
-	wal, err := vfs.Content("test.db-wal")
-	require.NoError(t, err)
-
-	err = ioutil.WriteFile(filepath.Join(dir, "test.db-wal"), wal, 0600)
-	require.NoError(t, err)
-
-	require.NoError(t, conn.Close())
-
-	// Open the files that we have dumped and check that the table we
-	// created is there.
-	conn, err = bindings.Open(filepath.Join(dir, "test.db"), "unix")
-	require.NoError(t, err)
-
-	rows, err := conn.Query("SELECT * FROM foo")
-	require.NoError(t, err)
-
-	assert.Equal(t, io.EOF, rows.Next(nil))
-
-	require.NoError(t, conn.Close())
-
-	// Restore the files that we have dumped and check that the table we
-	// created is there.
-	err = vfs.Restore("test.db", database)
-	require.NoError(t, err)
-
-	err = vfs.Restore("test.db-wal", wal)
-	require.NoError(t, err)
-
-	conn, err = bindings.Open("test.db", "test")
-	require.NoError(t, err)
-
-	rows, err = conn.Query("SELECT * FROM foo")
-	require.NoError(t, err)
-
-	assert.Equal(t, io.EOF, rows.Next(nil))
-
-	require.NoError(t, conn.Close())
 }
 
 type testCluster struct {

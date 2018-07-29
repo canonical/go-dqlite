@@ -52,7 +52,7 @@ static dqlite_logger *dqliteLoggerAlloc(uintptr_t handle) {
 */
 import "C"
 import (
-	"github.com/CanonicalLtd/dqlite/internal/logging"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 )
 
 // Logging levels.
