@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/jitter"
 	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
 
@@ -153,11 +152,10 @@ func defaultDriverOptions() *driverOptions {
 // given amount of time.
 func driverConnectionRetryStrategy(factor, cap time.Duration) strategy.Strategy {
 	backoff := backoff.BinaryExponential(factor)
-	jitter := jitter.Equal(nil)
 
 	return func(attempt uint) bool {
 		if attempt > 0 {
-			duration := jitter(backoff(attempt))
+			duration := backoff(attempt)
 			if duration > cap {
 				duration = cap
 			}
