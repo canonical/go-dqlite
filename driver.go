@@ -116,7 +116,7 @@ func NewDriver(store ServerStore, options ...DriverOption) (*Driver, error) {
 	}
 
 	driver.clientConfig.Dial = o.Dial
-	driver.clientConfig.AttemptTimeout = o.ConnectionTimeout / 10
+	driver.clientConfig.AttemptTimeout = 5 * time.Second
 	driver.clientConfig.RetryStrategies = []strategy.Strategy{
 		driverConnectionRetryStrategy(
 			o.ConnectionBackoffFactor,
