@@ -5,8 +5,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/connection"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/connection"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,6 +19,9 @@ func TestSnapshot(t *testing.T) {
 
 	// Create a database with some content.
 	conn, err := bindings.Open("test.db", "test")
+	require.NoError(t, err)
+
+	err = conn.Exec("PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
 	require.NoError(t, err)
 
 	err = conn.Exec("CREATE TABLE foo (n INT); INSERT INTO foo VALUES(1)")

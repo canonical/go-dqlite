@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/CanonicalLtd/dqlite/internal/connection"
+	"github.com/CanonicalLtd/go-dqlite/internal/connection"
 )
 
 // Parse and encode dqlite-compatbile URIs.

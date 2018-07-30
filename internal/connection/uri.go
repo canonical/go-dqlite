@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 )
 
 // ParseURI parses the given sqlite3 URI checking if it's compatible with

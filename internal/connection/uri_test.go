@@ -3,8 +3,8 @@ package connection_test
 import (
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/connection"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/connection"
 )
 
 // If the given sqlite DSN string is compatible with SQLite, no error
