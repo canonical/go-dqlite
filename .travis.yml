@@ -22,7 +22,7 @@ before_install:
   - dqlite_tmp_dir=/tmp/dqlite
   - mkdir $dqlite_tmp_dir
   - $GOPATH/bin/gh-asset -d $dqlite_tmp_dir -x CanonicalLtd dqlite "dqlite-amd64-.*.tar.gz"
-  - sudo cp $dqlite_tmp_dir/libdqlite.so.* /usr/lib/x86_64-linux-gnu
+  - sudo cp $dqlite_tmp_dir/libdqlite.so /usr/lib/
   - sudo cp $dqlite_tmp_dir/dqlite.h /usr/include/dqlite.h
   - mkdir -p $GOPATH/src/github.com/hashicorp/raft
   - raft_fork=https://github.com/freeekanayaka/raft.git
@@ -33,11 +33,10 @@ script:
   - go vet
   - golint
   - deadcode
-  - project=github.com/CanonicalLtd/dqlite
+  - project=github.com/CanonicalLtd/go-dqlite
   - GO_RAFT_TEST_LATENCY=10.0 $GOPATH/bin/overalls -ignore internal/protocol -project $project -covermode=count -- -tags libsqlite3 -timeout 240s
   - $GOPATH/bin/goveralls -coverprofile overalls.coverprofile -service=travis-ci
 
 go:
-  - "1.9"
   - "1.10"
   - "master"
