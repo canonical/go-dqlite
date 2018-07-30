@@ -5,8 +5,8 @@ import (
 	"io"
 	"log"
 
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
-	"github.com/CanonicalLtd/dqlite/internal/store"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/store"
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 )

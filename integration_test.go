@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CanonicalLtd/dqlite"
+	"github.com/CanonicalLtd/go-dqlite"
 	"github.com/CanonicalLtd/raft-test"
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"

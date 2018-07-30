@@ -3,8 +3,8 @@ package dqlite
 import (
 	"fmt"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/registry"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/registry"
 )
 
 // Registry tracks internal data shared by the dqlite Driver and FSM.

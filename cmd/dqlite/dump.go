@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/CanonicalLtd/dqlite/recover"
-	"github.com/CanonicalLtd/dqlite/recover/dump"
+	"github.com/CanonicalLtd/go-dqlite/recover"
+	"github.com/CanonicalLtd/go-dqlite/recover/dump"
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/raft-boltdb"
 	"github.com/pkg/errors"

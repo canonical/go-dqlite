@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/CanonicalLtd/dqlite/internal/logging"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 )
 
 // LogFunc is a function that can be used for logging.

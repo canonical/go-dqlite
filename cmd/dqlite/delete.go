@@ -3,8 +3,8 @@ package main
 import (
 	"strconv"
 
-	"github.com/CanonicalLtd/dqlite/recover"
-	"github.com/CanonicalLtd/dqlite/recover/delete"
+	"github.com/CanonicalLtd/go-dqlite/recover"
+	"github.com/CanonicalLtd/go-dqlite/recover/delete"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )

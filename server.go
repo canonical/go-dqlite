@@ -8,20 +8,21 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/replication"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/replication"
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 )
 
 // Server implements the dqlite network protocol.
 type Server struct {
-	log      LogFunc          // Logger
-	registry *Registry        // Registry wrapper
-	server   *bindings.Server // Low-level C implementation
-	listener net.Listener     // Queue of new connections
-	runCh    chan error       // Receives the low-level C server return code
-	acceptCh chan error       // Receives connection handling errors
+	log         LogFunc          // Logger
+	registry    *Registry        // Registry wrapper
+	server      *bindings.Server // Low-level C implementation
+	listener    net.Listener     // Queue of new connections
+	runCh       chan error       // Receives the low-level C server return code
+	acceptCh    chan error       // Receives connection handling errors
+	replication *bindings.WalReplication
 }
 
 // ServerOption can be used to tweak server parameters.
@@ -51,11 +52,8 @@ func NewServer(raft *raft.Raft, registry *Registry, listener net.Listener, optio
 
 	methods := replication.NewMethods(registry.registry, raft)
 
-	if replication := bindings.FindWalReplication(registry.name); replication != nil {
-		return nil, fmt.Errorf("replication name already in use")
-	}
-
-	if err := bindings.RegisterWalReplication(registry.name, methods); err != nil {
+	replication, err := bindings.NewWalReplication(registry.name, methods)
+	if err != nil {
 		return nil, errors.Wrap(err, "failed to register WAL replication")
 	}
 
@@ -74,12 +72,13 @@ func NewServer(raft *raft.Raft, registry *Registry, listener net.Listener, optio
 	server.SetWalReplication(registry.name)
 
 	s := &Server{
-		log:      o.Log,
-		registry: registry,
-		server:   server,
-		listener: listener,
-		runCh:    make(chan error),
-		acceptCh: make(chan error, 1),
+		log:         o.Log,
+		registry:    registry,
+		server:      server,
+		listener:    listener,
+		runCh:       make(chan error),
+		acceptCh:    make(chan error, 1),
+		replication: replication,
 	}
 
 	go s.run()
@@ -133,7 +132,7 @@ func (s *Server) acceptLoop() {
 // Dump the files of a database to disk.
 func (s *Server) Dump(name string, dir string) error {
 	// Dump the database file.
-	bytes, err := s.registry.vfs.Content(name)
+	bytes, err := s.registry.vfs.ReadFile(name)
 	if err != nil {
 		return errors.Wrap(err, "failed to get database file content")
 	}
@@ -144,7 +143,7 @@ func (s *Server) Dump(name string, dir string) error {
 	}
 
 	// Dump the WAL file.
-	bytes, err = s.registry.vfs.Content(name + "-wal")
+	bytes, err = s.registry.vfs.ReadFile(name + "-wal")
 	if err != nil {
 		return errors.Wrap(err, "failed to get WAL file content")
 	}
@@ -192,7 +191,7 @@ func (s *Server) Close() error {
 
 	s.server.Close()
 
-	bindings.UnregisterWalReplication(s.registry.name)
+	s.replication.Close()
 	s.registry.Close()
 
 	return nil

@@ -1,7 +1,7 @@
 package dqlite
 
 import (
-	"github.com/CanonicalLtd/dqlite/internal/replication"
+	"github.com/CanonicalLtd/go-dqlite/internal/replication"
 	"github.com/hashicorp/raft"
 )
 
