@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/transaction"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -222,12 +222,22 @@ func newFollowerTxn(t *testing.T, id uint64) (*transaction.Txn, func()) {
 
 	vfs, name := newVfs(t)
 
-	conn, err := bindings.OpenFollower("test.db", name)
+	conn, err := bindings.Open("test.db", name)
+	require.NoError(t, err)
+
+	err = conn.Exec("PRAGMA synchronous=off; PRAGMA journal_mode=wal")
+	require.NoError(t, err)
+
+	err = conn.WalReplicationFollower()
 	require.NoError(t, err)
 
 	txn := transaction.New(conn, id)
 
-	return txn, vfs.Close
+	cleanup := func() {
+		require.NoError(t, vfs.Close())
+	}
+
+	return txn, cleanup
 }
 
 func newLeaderTxn(t *testing.T, id uint64) (*transaction.Txn, func()) {
@@ -235,19 +245,25 @@ func newLeaderTxn(t *testing.T, id uint64) (*transaction.Txn, func()) {
 
 	vfs, name := newVfs(t)
 
-	replication := &testWalReplication{}
-	err := bindings.RegisterWalReplication("test", replication)
+	conn, err := bindings.Open("test.db", name)
 	require.NoError(t, err)
 
-	conn, err := bindings.OpenLeader("test.db", name, "test")
+	err = conn.Exec("PRAGMA synchronous=off; PRAGMA journal_mode=wal")
+	require.NoError(t, err)
+
+	methods := &testWalReplicationMethods{}
+	replication, err := bindings.NewWalReplication("test", methods)
+	require.NoError(t, err)
+
+	err = conn.WalReplicationLeader("test")
 	require.NoError(t, err)
 
 	txn := transaction.New(conn, id)
 	txn.Leader()
 
 	cleanup := func() {
-		bindings.UnregisterWalReplication("test")
-		vfs.Close()
+		require.NoError(t, replication.Close())
+		require.NoError(t, vfs.Close())
 	}
 
 	return txn, cleanup
@@ -269,25 +285,25 @@ func newVfs(t *testing.T) (*bindings.Vfs, string) {
 
 var serial int
 
-type testWalReplication struct {
+type testWalReplicationMethods struct {
 }
 
-func (r *testWalReplication) Begin(*bindings.Conn) int {
+func (r *testWalReplicationMethods) Begin(*bindings.Conn) int {
 	return 0
 }
 
-func (r *testWalReplication) Abort(*bindings.Conn) int {
+func (r *testWalReplicationMethods) Abort(*bindings.Conn) int {
 	return 0
 }
 
-func (r *testWalReplication) Frames(*bindings.Conn, bindings.WalReplicationFrameList) int {
+func (r *testWalReplicationMethods) Frames(*bindings.Conn, bindings.WalReplicationFrameList) int {
 	return 0
 }
 
-func (r *testWalReplication) Undo(*bindings.Conn) int {
+func (r *testWalReplicationMethods) Undo(*bindings.Conn) int {
 	return 0
 }
 
-func (r *testWalReplication) End(*bindings.Conn) int {
+func (r *testWalReplicationMethods) End(*bindings.Conn) int {
 	return 0
 }

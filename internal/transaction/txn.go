@@ -3,7 +3,7 @@ package transaction
 import (
 	"fmt"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/ryanfaerman/fsm"
 )
 

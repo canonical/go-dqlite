@@ -331,12 +331,9 @@ func (i *WalReplicationFrameInfo) IsCommit(flag bool) {
 	}
 }
 
-/*
-
 func (i *WalReplicationFrameInfo) IsCommitGet() bool {
 	return i.isCommit > 0
 }
-*/
 
 //export walReplicationBegin
 func walReplicationBegin(handle C.uintptr_t, db *C.sqlite3) C.int {

@@ -9,8 +9,6 @@ import (
 	"database/sql/driver"
 	"io"
 	"unsafe"
-
-	"github.com/pkg/errors"
 )
 
 // Open modes.
@@ -22,47 +20,6 @@ const (
 
 // Conn is a Go wrapper around a SQLite database handle.
 type Conn C.sqlite3
-
-// OpenFollower is a wrapper around Open that opens the connection in follower
-// replication mode, and sets any additional dqlite-related options.
-func OpenFollower(name string, vfs string) (*Conn, error) {
-	flags := OpenReadWrite | OpenCreate
-
-	db, err := open(name, flags, vfs)
-	if err != nil {
-		return nil, err
-	}
-
-	rc := C.sqlite3_wal_replication_follower(db, walReplicationSchema)
-	if rc != C.SQLITE_OK {
-		err := codeToError(rc)
-		return nil, errors.Wrap(err, "failed to set follower mode")
-	}
-
-	return (*Conn)(unsafe.Pointer(db)), nil
-}
-
-// OpenLeader is a wrapper around open that opens connection in leader
-// replication mode, and sets any additional dqlite-related options.
-func OpenLeader(name string, vfs string, replication string) (*Conn, error) {
-	flags := OpenReadWrite | OpenCreate
-
-	db, err := open(name, flags, vfs)
-	if err != nil {
-		return nil, err
-	}
-
-	creplication := C.CString(replication)
-	defer C.free(unsafe.Pointer(creplication))
-
-	rc := C.sqlite3_wal_replication_leader(db, walReplicationSchema, creplication, unsafe.Pointer(db))
-	if rc != C.SQLITE_OK {
-		err := codeToError(rc)
-		return nil, errors.Wrap(err, "failed to set leader mode")
-	}
-
-	return (*Conn)(unsafe.Pointer(db)), nil
-}
 
 // Open a SQLite connection.
 func Open(name string, vfs string) (*Conn, error) {
@@ -85,26 +42,6 @@ func Open(name string, vfs string) (*Conn, error) {
 	}
 
 	return (*Conn)(unsafe.Pointer(db)), nil
-}
-
-// Open a SQLite connection, setting anything that is common between leader and
-// follower connections.
-func open(name string, flags int, vfs string) (db *C.sqlite3, err error) {
-	// Open the database.
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
-
-	cvfs := C.CString(vfs)
-	defer C.free(unsafe.Pointer(cvfs))
-
-	rc := C.sqlite3_open_v2(cname, &db, C.int(flags), cvfs)
-	if rc != C.SQLITE_OK {
-		err := lastError(db)
-		C.sqlite3_close_v2(db)
-		return nil, err
-	}
-
-	return db, nil
 }
 
 // Close the connection.
