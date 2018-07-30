@@ -17,7 +17,7 @@ package trace_test
 import (
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/trace"
+	"github.com/CanonicalLtd/go-dqlite/internal/trace"
 	"github.com/stretchr/testify/assert"
 )
 
