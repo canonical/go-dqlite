@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
 )
 
 // Create a new dqlite Command with a few parameters, serialize it, and the

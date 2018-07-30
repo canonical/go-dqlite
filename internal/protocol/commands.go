@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 )

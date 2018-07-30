@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
 	"github.com/CanonicalLtd/go-sqlite3"
 	"github.com/mpvl/subtest"
 )
