@@ -17,8 +17,8 @@ package registry
 import (
 	"fmt"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/transaction"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 )
 
 // TxnLeaderAdd adds a new transaction to the registry.

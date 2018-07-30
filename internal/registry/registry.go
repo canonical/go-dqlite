@@ -20,9 +20,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/trace"
-	"github.com/CanonicalLtd/dqlite/internal/transaction"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/trace"
+	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 )
 
 // Registry is a dqlite node-level data structure that tracks:

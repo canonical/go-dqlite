@@ -17,8 +17,8 @@ package registry
 import (
 	"fmt"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/trace"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/trace"
 )
 
 // TracerFSM returns the tracer that should be used by the replication.FSM

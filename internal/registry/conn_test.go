@@ -17,7 +17,7 @@ package registry_test
 import (
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -154,9 +154,20 @@ func TestRegistry_SerialNotRegistered(t *testing.T) {
 
 // Create a new sqlite connection against a memory database.
 func newConn() *bindings.Conn {
-	conn, err := bindings.OpenFollower("test.db", "test")
+	conn, err := bindings.Open("test.db", "test")
 	if err != nil {
 		panic(err)
 	}
+
+	err = conn.Exec("PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
+	if err != nil {
+		panic(err)
+	}
+
+	err = conn.WalReplicationFollower()
+	if err != nil {
+		panic(err)
+	}
+
 	return conn
 }
