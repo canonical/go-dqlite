@@ -18,11 +18,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
-	"github.com/CanonicalLtd/dqlite/internal/registry"
-	"github.com/CanonicalLtd/dqlite/internal/trace"
-	"github.com/CanonicalLtd/dqlite/internal/transaction"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/registry"
+	"github.com/CanonicalLtd/go-dqlite/internal/trace"
+	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 	"github.com/hashicorp/raft"
 )
 

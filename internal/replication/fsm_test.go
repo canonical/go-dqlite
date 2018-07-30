@@ -9,11 +9,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
-	"github.com/CanonicalLtd/dqlite/internal/registry"
-	"github.com/CanonicalLtd/dqlite/internal/replication"
-	"github.com/CanonicalLtd/dqlite/internal/transaction"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/registry"
+	"github.com/CanonicalLtd/go-dqlite/internal/replication"
+	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -338,6 +338,10 @@ func TestFSM_Snapshot(t *testing.T) {
 	vfs := fsm.Registry().Vfs().Name()
 	conn, err := bindings.Open("test.db", vfs)
 	require.NoError(t, err)
+	err = conn.Exec("PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
+	require.NoError(t, err)
+	err = conn.ConfigNoCkptOnClose(true)
+	require.NoError(t, err)
 	err = conn.Exec("CREATE TABLE foo (n INT); INSERT INTO foo VALUES(1)")
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
@@ -419,7 +423,8 @@ func newSnapshotSink(t *testing.T, store raft.SnapshotStore) raft.SnapshotSink {
 func newFSM(t *testing.T) (*replication.FSM, func()) {
 	t.Helper()
 
-	err := bindings.RegisterWalReplication("test", newNoopWalReplication())
+	methods := newNoopWalReplication()
+	r, err := bindings.NewWalReplication("test", methods)
 	require.NoError(t, err)
 
 	vfs, err := bindings.NewVfs("test")
@@ -431,8 +436,8 @@ func newFSM(t *testing.T) (*replication.FSM, func()) {
 	fsm := replication.NewFSM(registry)
 
 	cleanup := func() {
-		vfs.Close()
-		bindings.UnregisterWalReplication("test")
+		require.NoError(t, vfs.Close())
+		require.NoError(t, r.Close())
 	}
 
 	// We need to disable replication mode checks, because leader
@@ -482,15 +487,23 @@ func newFSMWithFollower(t *testing.T) (*replication.FSM, func()) {
 func newLeaderConn(t *testing.T, vfs string, replication string) (*bindings.Conn, func()) {
 	t.Helper()
 
-	conn, err := bindings.OpenLeader("test.db", vfs, replication)
-	if err != nil {
-		t.Fatalf("failed to open leader connection: %v", err)
-	}
+	conn, err := bindings.Open("test.db", vfs)
+	require.NoError(t, err)
+
+	err = conn.Exec("PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
+	require.NoError(t, err)
+
+	err = conn.ConfigNoCkptOnClose(true)
+	require.NoError(t, err)
+
+	err = conn.WalReplicationLeader(replication)
+	require.NoError(t, err)
 
 	cleanup := func() {
-		if err := conn.Close(); err != nil {
-			t.Fatalf("failed to close leader connection: %v", err)
-		}
+		conn.Close()
+		//if err := conn.Close(); err != nil {
+		//t.Fatalf("failed to close leader connection: %v", err)
+		//}
 	}
 
 	return conn, cleanup
@@ -544,7 +557,7 @@ func newRaftLog(index uint64, cmd *protocol.Command) *raft.Log {
 
 // NoopWalReplication returns a new instance of a WalReplication implementation
 // whose hooks do nothing.
-func newNoopWalReplication() bindings.WalReplication {
+func newNoopWalReplication() bindings.WalReplicationMethods {
 	return &noopWalReplication{}
 }
 

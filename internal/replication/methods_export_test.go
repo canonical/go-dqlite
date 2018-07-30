@@ -1,7 +1,7 @@
 package replication
 
 import (
-	"github.com/CanonicalLtd/dqlite/internal/registry"
+	"github.com/CanonicalLtd/go-dqlite/internal/registry"
 	"github.com/hashicorp/raft"
 )
 

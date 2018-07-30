@@ -24,10 +24,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
-	"github.com/CanonicalLtd/dqlite/internal/registry"
-	"github.com/CanonicalLtd/dqlite/internal/replication"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/registry"
+	"github.com/CanonicalLtd/go-dqlite/internal/replication"
 	"github.com/CanonicalLtd/raft-test"
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/raft-boltdb"
@@ -1691,7 +1691,7 @@ func newCluster(t *testing.T, opts ...clusterOption) (clusterConns, *rafttest.Co
 		vfs, err := bindings.NewVfs(fmt.Sprintf("test-%d", i))
 		require.NoError(t, err)
 		cleanups = append(cleanups, func() {
-			vfs.Close()
+			require.NoError(t, vfs.Close())
 		})
 
 		registries[i] = registry.New(vfs)
@@ -1725,19 +1725,25 @@ func newCluster(t *testing.T, opts ...clusterOption) (clusterConns, *rafttest.Co
 		methods[i] = replication.NewMethods(registries[i], rafts[id])
 
 		name := fmt.Sprintf("test-%d", i)
-		err := bindings.RegisterWalReplication(name, methods[i])
+		r, err := bindings.NewWalReplication(name, methods[i])
 		require.NoError(t, err)
+
+		cleanups = append(cleanups, func() {
+			require.NoError(t, r.Close())
+		})
 
 		//dir := dirs[i]
 		//timeout := rafttest.Duration(100*time.Millisecond).Nanoseconds() / (1000 * 1000)
 		//path := filepath.Join(dir, fmt.Sprintf("test.db?_busy_timeout=%d", timeout))
 
-		conn1, err := bindings.OpenLeader("test.db", name, name)
+		conn1, _ := newLeaderConn(t, name, name)
 		require.NoError(t, err)
+
 		methods[i].Registry().ConnLeaderAdd("test.db", conn1)
 
-		conn2, err := bindings.OpenLeader("test.db", name, name)
+		conn2, _ := newLeaderConn(t, name, name)
 		require.NoError(t, err)
+
 		methods[i].Registry().ConnLeaderAdd("test.db", conn2)
 
 		conns[id] = [2]*bindings.Conn{conn1, conn2}
@@ -1762,11 +1768,10 @@ func newCluster(t *testing.T, opts ...clusterOption) (clusterConns, *rafttest.Co
 
 	cleanup := func() {
 		for i := range conns {
-			require.NoError(t, conns[i][0].Close())
-			require.NoError(t, conns[i][1].Close())
-		}
-		for i := range methods {
-			bindings.UnregisterWalReplication(fmt.Sprintf("test-%d", i))
+			conns[i][0].Close()
+			conns[i][1].Close()
+			//require.NoError(t, conns[i][0].Close())
+			//require.NoError(t, conns[i][1].Close())
 		}
 		control.Close()
 		if !t.Failed() {

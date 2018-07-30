@@ -22,12 +22,12 @@ import (
 	"io"
 	"unsafe"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/connection"
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
-	"github.com/CanonicalLtd/dqlite/internal/registry"
-	"github.com/CanonicalLtd/dqlite/internal/trace"
-	"github.com/CanonicalLtd/dqlite/internal/transaction"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/connection"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/registry"
+	"github.com/CanonicalLtd/go-dqlite/internal/trace"
+	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 )
@@ -141,12 +141,9 @@ func (f *FSM) applyOpen(tracer *trace.Tracer, params *protocol.Open) error {
 	)
 	tracer.Message("start")
 
-	vfs := f.registry.Vfs().Name()
-	conn, err := bindings.OpenFollower(params.Name, vfs)
-	if err != nil {
+	if err := f.openFollower(params.Name); err != nil {
 		return err
 	}
-	f.registry.ConnFollowerAdd(params.Name, conn)
 
 	tracer.Message("done")
 
@@ -640,11 +637,9 @@ func (f *FSM) restoreDatabase(tracer *trace.Tracer, reader io.ReadCloser) (bool,
 	}
 
 	tracer.Message("open follower: %s", filename)
-	conn, err := bindings.OpenFollower(filename, vfs.Name())
-	if err != nil {
+	if err := f.openFollower(filename); err != nil {
 		return false, err
 	}
-	f.registry.ConnFollowerAdd(filename, conn)
 
 	if txid != "" {
 		// txid, err := strconv.ParseUint(txid, 10, 64)
@@ -660,6 +655,38 @@ func (f *FSM) restoreDatabase(tracer *trace.Tracer, reader io.ReadCloser) (bool,
 	}
 
 	return done, nil
+}
+
+func (f *FSM) openFollower(filename string) error {
+	vfs := f.registry.Vfs().Name()
+	conn, err := bindings.Open(filename, vfs)
+	if err != nil {
+		return errors.Wrap(err, "failed to open connection")
+	}
+
+	err = conn.Exec("PRAGMA synchronous=OFF")
+	if err != nil {
+		return errors.Wrap(err, "failed to disable syncs")
+	}
+
+	err = conn.Exec("PRAGMA journal_mode=wal")
+	if err != nil {
+		return errors.Wrap(err, "failed to set WAL mode")
+	}
+
+	err = conn.ConfigNoCkptOnClose(false)
+	if err != nil {
+		return errors.Wrap(err, "failed to disable checkpoints on close")
+	}
+
+	err = conn.WalReplicationFollower()
+	if err != nil {
+		return errors.Wrap(err, "failed to set follower replication mode")
+	}
+
+	f.registry.ConnFollowerAdd(filename, conn)
+
+	return nil
 }
 
 // FSMSnapshot is returned by an FSM in response to a Snapshot

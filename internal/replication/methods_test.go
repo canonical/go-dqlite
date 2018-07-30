@@ -3,10 +3,10 @@ package replication_test
 import (
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/registry"
-	"github.com/CanonicalLtd/dqlite/internal/replication"
-	"github.com/CanonicalLtd/dqlite/internal/transaction"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/registry"
+	"github.com/CanonicalLtd/go-dqlite/internal/replication"
+	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 	"github.com/CanonicalLtd/raft-test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -121,7 +121,7 @@ func newMethods(t *testing.T) (*replication.Methods, *bindings.Conn, func()) {
 
 	methods := replication.NewMethods(registry, raft)
 
-	err = bindings.RegisterWalReplication("test", methods)
+	r, err := bindings.NewWalReplication("test", methods)
 	require.NoError(t, err)
 
 	conn, connCleanup := newLeaderConn(t, "test", "test")
@@ -133,8 +133,8 @@ func newMethods(t *testing.T) (*replication.Methods, *bindings.Conn, func()) {
 
 		connCleanup()
 		raftCleanup()
-		vfs.Close()
-		bindings.UnregisterWalReplication("test")
+		require.NoError(t, vfs.Close())
+		require.NoError(t, r.Close())
 	}
 
 	// Don't actually run the SQLite replication APIs, since the tests
