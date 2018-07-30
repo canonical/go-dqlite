@@ -1,5 +1,5 @@
 dist: trusty
-sudo: false
+sudo: required
 
 language: go
 
@@ -25,8 +25,9 @@ before_install:
   - dqlite_tmp_dir=/tmp/dqlite
   - mkdir $dqlite_tmp_dir
   - $GOPATH/bin/gh-asset -d $dqlite_tmp_dir -x CanonicalLtd dqlite "dqlite-amd64-.*.tar.gz"
-  - sudo cp $dqlite_tmp_dir/libdqlite.so /usr/lib/
+  - sudo cp $dqlite_tmp_dir/libdqlite.so* /usr/lib/
   - sudo cp $dqlite_tmp_dir/dqlite.h /usr/include/dqlite.h
+  - sudo ldconfig
   - mkdir -p $GOPATH/src/github.com/hashicorp/raft
   - raft_fork=https://github.com/freeekanayaka/raft.git
   - git clone -b assorted-fixes $raft_fork $GOPATH/src/github.com/hashicorp/raft
