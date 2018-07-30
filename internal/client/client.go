@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -169,8 +168,6 @@ func (c *Client) recvBody(res *Message) error {
 	}
 
 	if n2 > 0 {
-		fmt.Println("BUF 1", n1)
-		fmt.Println("BUF 2", n2)
 		res.body2.Bytes = make([]byte, n2)
 		res.body2.Offset = 0
 		buf = res.body2.Bytes
