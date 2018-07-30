@@ -5,8 +5,8 @@ import (
 	"io"
 	"log"
 
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
-	"github.com/CanonicalLtd/dqlite/internal/store"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/store"
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 )
@@ -89,7 +89,7 @@ func dumpBegin(params *protocol.Begin) string {
 
 func dumpFrames(params *protocol.Frames) string {
 	return fmt.Sprintf("name: %8s txn: %6d commit: %d pages: %2d",
-		params.Filename, params.Txid, params.IsCommit, len(params.Pages))
+		params.Filename, params.Txid, params.IsCommit, len(params.PageNumbers))
 }
 
 func dumpUndo(params *protocol.Undo) string {

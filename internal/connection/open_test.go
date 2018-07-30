@@ -1,5 +1,6 @@
 package connection_test
 
+/*
 import (
 	"fmt"
 	"io/ioutil"
@@ -7,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite/internal/connection"
+	"github.com/CanonicalLtd/go-dqlite/internal/connection"
 	"github.com/CanonicalLtd/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,3 +86,4 @@ func newDir() (string, func()) {
 
 	return dir, cleanup
 }
+*/

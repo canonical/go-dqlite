@@ -13,11 +13,12 @@
 // limitations under the License.
 package protocol_test
 
+/*
 import (
 	"fmt"
 	"log"
 
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
 )
 
 // Create a new dqlite Command with a few parameters, serialize it, and the
@@ -41,3 +42,4 @@ func Example() {
 	fmt.Println(cmd.Name())
 	fmt.Println(params.Open.Name)
 }
+*/

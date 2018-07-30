@@ -1,7 +1,7 @@
 package dump
 
 import (
-	"github.com/CanonicalLtd/dqlite/internal/store"
+	"github.com/CanonicalLtd/go-dqlite/internal/store"
 	"github.com/hashicorp/raft"
 )
 

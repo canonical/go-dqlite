@@ -18,11 +18,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
-	"github.com/CanonicalLtd/dqlite/internal/registry"
-	"github.com/CanonicalLtd/dqlite/internal/trace"
-	"github.com/CanonicalLtd/dqlite/internal/transaction"
-	"github.com/CanonicalLtd/go-sqlite3"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/registry"
+	"github.com/CanonicalLtd/go-dqlite/internal/trace"
+	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 	"github.com/hashicorp/raft"
 )
 
@@ -57,7 +57,7 @@ func (m *Methods) ApplyTimeout(timeout time.Duration) {
 // Begin is the hook invoked by SQLite when a new write transaction is
 // being started within a connection in leader replication mode on
 // this server.
-func (m *Methods) Begin(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
+func (m *Methods) Begin(conn *bindings.Conn) int {
 	// We take a the lock for the entire duration of the hook to avoid
 	// races between to concurrent hooks.
 	//
@@ -132,7 +132,7 @@ func (m *Methods) Begin(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
 		// No dqlite state has been modified, and the WAL write lock
 		// has not been acquired. Just return ErrIoErrNotLeader.
 		tracer.Message("not leader")
-		return sqlite3.ErrNo(sqlite3.ErrIoErrNotLeader)
+		return bindings.ErrIoErrNotLeader
 	}
 
 	// Update the noLeaderCheck counter (used for tests).
@@ -180,7 +180,7 @@ func (m *Methods) Begin(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
 
 // Check if a follower connection is already open for this database, if not
 // open one with the Open raft command.
-func (m *Methods) beginMaybeAddFollowerConn(tracer *trace.Tracer, conn *sqlite3.SQLiteConn) error {
+func (m *Methods) beginMaybeAddFollowerConn(tracer *trace.Tracer, conn *bindings.Conn) error {
 	filename := m.registry.ConnLeaderFilename(conn)
 
 	if m.registry.ConnFollowerExists(filename) {
@@ -197,7 +197,7 @@ func (m *Methods) beginMaybeAddFollowerConn(tracer *trace.Tracer, conn *sqlite3.
 // If one is found, this method will try take appropriate measures.
 //
 // If an error is returned, Begin should stop and return it.
-func (m *Methods) beginMaybeHandleInProgressTxn(tracer *trace.Tracer, conn *sqlite3.SQLiteConn) error {
+func (m *Methods) beginMaybeHandleInProgressTxn(tracer *trace.Tracer, conn *bindings.Conn) error {
 	filename := m.registry.ConnLeaderFilename(conn)
 	txn := m.registry.TxnByFilename(filename)
 	if txn == nil {
@@ -226,7 +226,7 @@ func (m *Methods) beginMaybeHandleInProgressTxn(tracer *trace.Tracer, conn *sqli
 			// the concurrent write transaction ends and we're free
 			// to go.
 			tracer.Message("busy")
-			return sqlite3.Error{Code: sqlite3.ErrBusy}
+			return bindings.Error{Code: bindings.ErrBusy}
 		}
 
 		// There a's transaction originated on this Methods instance for
@@ -267,7 +267,7 @@ func (m *Methods) beginMaybeHandleInProgressTxn(tracer *trace.Tracer, conn *sqli
 
 // Abort is the hook invoked by SQLite when a write transaction fails
 // to begin.
-func (m *Methods) Abort(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
+func (m *Methods) Abort(conn *bindings.Conn) int {
 	// We take a the lock for the entire duration of the hook to avoid
 	// races between to cocurrent hooks.
 	m.mu.Lock()
@@ -303,7 +303,7 @@ func (m *Methods) Abort(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
 
 // Frames is the hook invoked by sqlite when new frames need to be
 // flushed to the write-ahead log.
-func (m *Methods) Frames(conn *sqlite3.SQLiteConn, frames *sqlite3.ReplicationFramesParams) sqlite3.ErrNo {
+func (m *Methods) Frames(conn *bindings.Conn, frames bindings.WalReplicationFrameList) int {
 	// We take a the lock for the entire duration of the hook to avoid
 	// races between to cocurrent hooks. See the comments in Begin for more
 	// details.
@@ -341,7 +341,7 @@ func (m *Methods) Frames(conn *sqlite3.SQLiteConn, frames *sqlite3.ReplicationFr
 	defer m.registry.HookSyncReset()
 
 	tracer := m.registry.TracerConn(conn, "frames")
-	tracer.Message("start (commit=%d)", frames.IsCommit)
+	tracer.Message("start (commit=%v)", frames.IsCommit())
 
 	txn := m.registry.TxnByConn(conn)
 	if txn == nil {
@@ -392,7 +392,7 @@ func (m *Methods) Frames(conn *sqlite3.SQLiteConn, frames *sqlite3.ReplicationFr
 			// no-op.
 			return errno(m.framesNotLeader(tracer, txn))
 		} else if isErrLeadershipLost(err) {
-			if frames.IsCommit == 0 {
+			if frames.IsCommit() {
 				// Mark the transaction as zombie. Possible scenarios:
 				//
 				// 1. This server gets re-elected right away as leader.
@@ -530,15 +530,12 @@ func (m *Methods) framesNotLeader(tracer *trace.Tracer, txn *transaction.Txn) er
 	// When we return an error, SQLite will fire the End hook.
 	tracer.Message("not leader")
 
-	return sqlite3.Error{
-		Code:         sqlite3.ErrIoErr,
-		ExtendedCode: sqlite3.ErrIoErrNotLeader,
-	}
+	return bindings.Error{Code: bindings.ErrIoErrNotLeader}
 }
 
 // Undo is the hook invoked by sqlite when a write transaction needs
 // to be rolled back.
-func (m *Methods) Undo(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
+func (m *Methods) Undo(conn *bindings.Conn) int {
 	// We take a the lock for the entire duration of the hook to avoid
 	// races between to cocurrent hooks.
 	m.mu.Lock()
@@ -611,7 +608,7 @@ func (m *Methods) Undo(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
 		// undo it across all nodes.
 		tracer.Message("not leader")
 		m.surrogateWriting(tracer, txn)
-		return sqlite3.ErrNo(sqlite3.ErrIoErrNotLeader)
+		return bindings.ErrIoErrNotLeader
 	}
 
 	// Update the noLeaderCheck counter.
@@ -639,7 +636,7 @@ func (m *Methods) Undo(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
 }
 
 // End is the hook invoked by sqlite when ending a write transaction.
-func (m *Methods) End(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
+func (m *Methods) End(conn *bindings.Conn) int {
 	// We take a the lock for the entire duration of the hook to avoid
 	// races between to cocurrent hooks.
 	m.mu.Lock()
@@ -701,12 +698,13 @@ func (m *Methods) End(conn *sqlite3.SQLiteConn) sqlite3.ErrNo {
 // Create a surrogate follower transaction, transiting it to the Writing state.
 func (m *Methods) surrogateWriting(tracer *trace.Tracer, txn *transaction.Txn) {
 	tracer.Message("surrogate to Writing")
-	txn = m.registry.TxnFollowerSurrogate(txn)
-	txn.Frames(true, &sqlite3.ReplicationFramesParams{IsCommit: 0})
+	// TODO: fix
+	//txn = m.registry.TxnFollowerSurrogate(txn)
+	//txn.Frames(true, &sqlite3.ReplicationFramesParams{IsCommit: 0})
 }
 
 // Apply the given command through raft.
-func (m *Methods) apply(tracer *trace.Tracer, conn *sqlite3.SQLiteConn, cmd *protocol.Command) error {
+func (m *Methods) apply(tracer *trace.Tracer, conn *bindings.Conn, cmd *protocol.Command) error {
 	tracer = tracer.With(trace.String("cmd", cmd.Name()))
 	tracer.Message("apply start")
 
@@ -738,15 +736,9 @@ func (m *Methods) apply(tracer *trace.Tracer, conn *sqlite3.SQLiteConn, cmd *pro
 			// to not being the leader anymore.
 			fallthrough
 		case raft.ErrNotLeader:
-			return sqlite3.Error{
-				Code:         sqlite3.ErrIoErr,
-				ExtendedCode: sqlite3.ErrIoErrNotLeader,
-			}
+			return bindings.Error{Code: bindings.ErrIoErrNotLeader}
 		case raft.ErrLeadershipLost:
-			return sqlite3.Error{
-				Code:         sqlite3.ErrIoErr,
-				ExtendedCode: sqlite3.ErrIoErrLeadershipLost,
-			}
+			return bindings.Error{Code: bindings.ErrIoErrLeadershipLost}
 		case raft.ErrEnqueueTimeout:
 			// This should be pretty much impossible, since Methods
 			// hooks are the only way to apply command logs, and
@@ -755,10 +747,7 @@ func (m *Methods) apply(tracer *trace.Tracer, conn *sqlite3.SQLiteConn, cmd *pro
 			// above). We return SQLITE_INTERRUPT, which for our
 			// purposes has the same semantics as SQLITE_IOERR,
 			// i.e. it will automatically rollback the transaction.
-			return sqlite3.Error{
-				Code:         sqlite3.ErrInterrupt,
-				ExtendedCode: 0,
-			}
+			return bindings.Error{Code: bindings.ErrInterrupt}
 		default:
 			// This is an unexpected raft error of some kind.
 			//
@@ -767,10 +756,7 @@ func (m *Methods) apply(tracer *trace.Tracer, conn *sqlite3.SQLiteConn, cmd *pro
 			//       or log-store related errors. We should also
 			//       examine what SQLite exactly does if we return
 			//       SQLITE_INTERNAL.
-			return sqlite3.Error{
-				Code:         sqlite3.ErrInternal,
-				ExtendedCode: 0,
-			}
+			return bindings.Error{Code: bindings.ErrInternal}
 		}
 
 	}
@@ -780,21 +766,18 @@ func (m *Methods) apply(tracer *trace.Tracer, conn *sqlite3.SQLiteConn, cmd *pro
 }
 
 // Convert a Go error into a SQLite error number.
-func errno(err error) sqlite3.ErrNo {
+func errno(err error) int {
 	switch e := err.(type) {
-	case sqlite3.Error:
-		if e.ExtendedCode != 0 {
-			return sqlite3.ErrNo(e.ExtendedCode)
-		}
-		return sqlite3.ErrNo(e.Code)
+	case bindings.Error:
+		return e.Code
 	default:
-		return sqlite3.ErrInternal
+		return bindings.ErrInternal
 	}
 }
 
 func isErrNotLeader(err error) bool {
-	if err, ok := err.(sqlite3.Error); ok {
-		if err.ExtendedCode == sqlite3.ErrIoErrNotLeader {
+	if err, ok := err.(bindings.Error); ok {
+		if err.Code == bindings.ErrIoErrNotLeader {
 			return true
 		}
 	}
@@ -802,8 +785,8 @@ func isErrNotLeader(err error) bool {
 }
 
 func isErrLeadershipLost(err error) bool {
-	if err, ok := err.(sqlite3.Error); ok {
-		if err.ExtendedCode == sqlite3.ErrIoErrLeadershipLost {
+	if err, ok := err.(bindings.Error); ok {
+		if err.Code == bindings.ErrIoErrLeadershipLost {
 			return true
 		}
 	}

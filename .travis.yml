@@ -1,5 +1,5 @@
 dist: trusty
-sudo: false
+sudo: required
 
 language: go
 
@@ -9,6 +9,9 @@ addons:
     - realpath
 
 before_install:
+  - wget https://github.com/libuv/libuv/archive/v1.22.0.tar.gz
+  - tar -xzvf v1.22.0.tar.gz
+  - pushd libuv-1.22.0 && sh autogen.sh && ./configure --prefix=/usr && make && sudo make install && popd
   - go get github.com/go-playground/overalls
   - go get github.com/mattn/goveralls
   - go get github.com/golang/lint/golint
@@ -19,6 +22,12 @@ before_install:
   - $GOPATH/bin/gh-asset -d $sqlite_tmp_dir -x CanonicalLtd sqlite "sqlite-amd64--enable-debug-.*.tar.gz"
   - sudo cp $sqlite_tmp_dir/libsqlite3.so.* /usr/lib/x86_64-linux-gnu
   - sudo cp $sqlite_tmp_dir/sqlite3.h /usr/include/sqlite3.h
+  - dqlite_tmp_dir=/tmp/dqlite
+  - mkdir $dqlite_tmp_dir
+  - $GOPATH/bin/gh-asset -d $dqlite_tmp_dir -x CanonicalLtd dqlite "dqlite-amd64-.*.tar.gz"
+  - sudo cp $dqlite_tmp_dir/libdqlite.so* /usr/lib/
+  - sudo cp $dqlite_tmp_dir/dqlite.h /usr/include/dqlite.h
+  - sudo ldconfig
   - mkdir -p $GOPATH/src/github.com/hashicorp/raft
   - raft_fork=https://github.com/freeekanayaka/raft.git
   - git clone -b assorted-fixes $raft_fork $GOPATH/src/github.com/hashicorp/raft
@@ -28,11 +37,10 @@ script:
   - go vet
   - golint
   - deadcode
-  - project=github.com/CanonicalLtd/dqlite
+  - project=github.com/CanonicalLtd/go-dqlite
   - GO_RAFT_TEST_LATENCY=10.0 $GOPATH/bin/overalls -ignore internal/protocol -project $project -covermode=count -- -tags libsqlite3 -timeout 240s
   - $GOPATH/bin/goveralls -coverprofile overalls.coverprofile -service=travis-ci
 
 go:
-  - "1.9"
   - "1.10"
   - "master"

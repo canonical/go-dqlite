@@ -1,8 +1,7 @@
 package dqlite
 
 import (
-	"github.com/CanonicalLtd/dqlite/internal/registry"
-	"github.com/CanonicalLtd/dqlite/internal/replication"
+	"github.com/CanonicalLtd/go-dqlite/internal/replication"
 	"github.com/hashicorp/raft"
 )
 
@@ -14,5 +13,5 @@ import (
 // be exposed since the raft.Raft parameter that NewDriver accepts doesn't
 // allow access to the FSM that it was passed when created with raft.NewRaft().
 func NewFSM(r *Registry) raft.FSM {
-	return replication.NewFSM((*registry.Registry)(r))
+	return replication.NewFSM(r.registry)
 }

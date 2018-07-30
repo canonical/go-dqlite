@@ -20,14 +20,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"path/filepath"
+	"unsafe"
 
-	"github.com/CanonicalLtd/dqlite/internal/connection"
-	"github.com/CanonicalLtd/dqlite/internal/protocol"
-	"github.com/CanonicalLtd/dqlite/internal/registry"
-	"github.com/CanonicalLtd/dqlite/internal/trace"
-	"github.com/CanonicalLtd/dqlite/internal/transaction"
-	"github.com/CanonicalLtd/go-sqlite3"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/connection"
+	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
+	"github.com/CanonicalLtd/go-dqlite/internal/registry"
+	"github.com/CanonicalLtd/go-dqlite/internal/trace"
+	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 )
@@ -141,11 +141,9 @@ func (f *FSM) applyOpen(tracer *trace.Tracer, params *protocol.Open) error {
 	)
 	tracer.Message("start")
 
-	conn, err := connection.OpenFollower(filepath.Join(f.registry.Dir(), params.Name))
-	if err != nil {
+	if err := f.openFollower(params.Name); err != nil {
 		return err
 	}
-	f.registry.ConnFollowerAdd(params.Name, conn)
 
 	tracer.Message("done")
 
@@ -169,7 +167,7 @@ func (f *FSM) applyBegin(tracer *trace.Tracer, params *protocol.Begin) error {
 func (f *FSM) applyFrames(tracer *trace.Tracer, params *protocol.Frames) error {
 	tracer = tracer.With(
 		trace.Integer("txn", int64(params.Txid)),
-		trace.Integer("pages", int64(len(params.Pages))),
+		trace.Integer("pages", int64(len(params.PageNumbers))),
 		trace.Integer("commit", int64(params.IsCommit)))
 	tracer.Message("start")
 
@@ -282,25 +280,50 @@ func (f *FSM) applyFrames(tracer *trace.Tracer, params *protocol.Frames) error {
 		txn = f.registry.TxnFollowerAdd(conn, params.Txid)
 	}
 
-	framesParams := &sqlite3.ReplicationFramesParams{
-		PageSize:  int(params.PageSize),
-		Truncate:  uint32(params.Truncate),
-		IsCommit:  int(params.IsCommit),
-		SyncFlags: uint8(params.SyncFlags),
-	}
-	pages := sqlite3.NewReplicationPages(len(params.Pages), int(params.PageSize))
+	if len(params.Pages) != 0 {
+		// This should be a v1 log entry.
+		if len(params.PageNumbers) != 0 || len(params.PageData) != 0 {
+			tracer.Panic("unexpected data mix between v1 and v2")
+		}
 
-	for i, page := range params.Pages {
-		pages[i].Fill(page.Data, uint16(page.Flags), page.Number)
+		// Convert to v2.
+		params.PageNumbers = make([]uint32, 0)
+		params.PageData = make([]byte, int(params.PageSize)*len(params.Pages))
+
+		for i := range params.Pages {
+			params.PageNumbers = append(params.PageNumbers, params.Pages[i].Number)
+			copy(
+				params.PageData[(i*int(params.PageSize)):((i+1)*int(params.PageSize))],
+				params.Pages[i].Data,
+			)
+		}
 	}
 
-	framesParams.Pages = pages
-	if err := txn.Frames(begin, framesParams); err != nil {
+	info := bindings.WalReplicationFrameInfo{}
+	info.IsBegin(begin)
+	info.PageSize(int(params.PageSize))
+	info.Len(len(params.PageNumbers))
+	info.Truncate(uint(params.Truncate))
+
+	isCommit := false
+	if params.IsCommit > 0 {
+		isCommit = true
+	}
+	info.IsCommit(isCommit)
+
+	numbers := make([]bindings.PageNumber, len(params.PageNumbers))
+	for i, pgno := range params.PageNumbers {
+		numbers[i] = bindings.PageNumber(pgno)
+	}
+
+	info.Pages(numbers, unsafe.Pointer(&params.PageData[0]))
+
+	if err := txn.Frames(begin, info); err != nil {
 		return err
 	}
 
 	// If the commit flag is on, this is the final write of a transaction,
-	if framesParams.IsCommit > 0 {
+	if isCommit {
 		// Save the ID of this transaction in the buffer of recently committed
 		// transactions.
 		f.registry.TxnCommittedAdd(txn)
@@ -399,7 +422,7 @@ func (f *FSM) applyCheckpoint(tracer *trace.Tracer, params *protocol.Checkpoint)
 	}
 
 	// Run the checkpoint.
-	logFrames, checkpointedFrames, err := conn.WalCheckpoint("main", sqlite3.WalCheckpointTruncate)
+	logFrames, checkpointedFrames, err := conn.WalCheckpoint("main", bindings.WalCheckpointTruncate)
 	if err != nil {
 		return err
 	}
@@ -497,7 +520,7 @@ func (f *FSM) snapshotDatabase(tracer *trace.Tracer, filename string) (*fsmDatab
 		}
 	}
 
-	database, wal, err := connection.Snapshot(filepath.Join(f.registry.Dir(), filename))
+	database, wal, err := connection.Snapshot(f.registry.Vfs(), filename)
 	if err != nil {
 		return nil, err
 	}
@@ -626,33 +649,63 @@ func (f *FSM) restoreDatabase(tracer *trace.Tracer, reader io.ReadCloser) (bool,
 	}
 	tracer.Message("transaction ID: %s", txid)
 
-	path := filepath.Join(f.registry.Dir(), filename)
-	if err := connection.Restore(path, data, wal); err != nil {
+	vfs := f.registry.Vfs()
+
+	if err := connection.Restore(vfs, filename, data, wal); err != nil {
 		return false, err
 	}
 
 	tracer.Message("open follower: %s", filename)
-	conn, err := connection.OpenFollower(path)
-	if err != nil {
+	if err := f.openFollower(filename); err != nil {
 		return false, err
 	}
-	f.registry.ConnFollowerAdd(filename, conn)
 
 	if txid != "" {
-		/*
-			txid, err := strconv.ParseUint(txid, 10, 64)
-			if err != nil {
-				return false, err
-			}
-			tracer.Message("add transaction: %d", txid)
-			conn := f.registry.ConnFollower(filename)
-			txn := f.registry.TxnFollowerAdd(conn, txid)
-			if err := txn.Begin(); err != nil {
-				return false, err
-			}*/
+		// txid, err := strconv.ParseUint(txid, 10, 64)
+		// if err != nil {
+		// 	return false, err
+		// }
+		// tracer.Message("add transaction: %d", txid)
+		// conn := f.registry.ConnFollower(filename)
+		// txn := f.registry.TxnFollowerAdd(conn, txid)
+		// if err := txn.Begin(); err != nil {
+		// 	return false, err
+		// }
 	}
 
 	return done, nil
+}
+
+func (f *FSM) openFollower(filename string) error {
+	vfs := f.registry.Vfs().Name()
+	conn, err := bindings.Open(filename, vfs)
+	if err != nil {
+		return errors.Wrap(err, "failed to open connection")
+	}
+
+	err = conn.Exec("PRAGMA synchronous=OFF")
+	if err != nil {
+		return errors.Wrap(err, "failed to disable syncs")
+	}
+
+	err = conn.Exec("PRAGMA journal_mode=wal")
+	if err != nil {
+		return errors.Wrap(err, "failed to set WAL mode")
+	}
+
+	err = conn.ConfigNoCkptOnClose(false)
+	if err != nil {
+		return errors.Wrap(err, "failed to disable checkpoints on close")
+	}
+
+	err = conn.WalReplicationFollower()
+	if err != nil {
+		return errors.Wrap(err, "failed to set follower replication mode")
+	}
+
+	f.registry.ConnFollowerAdd(filename, conn)
+
+	return nil
 }
 
 // FSMSnapshot is returned by an FSM in response to a Snapshot

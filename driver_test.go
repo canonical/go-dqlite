@@ -15,6 +15,215 @@
 package dqlite_test
 
 import (
+	"database/sql/driver"
+	"fmt"
+	"io"
+	"testing"
+
+	"github.com/CanonicalLtd/go-dqlite"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestDriver_Open(t *testing.T) {
+	driver, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := driver.Open("test.db")
+	require.NoError(t, err)
+
+	assert.NoError(t, conn.Close())
+}
+
+func TestDriver_Prepare(t *testing.T) {
+	driver, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := driver.Open("test.db")
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, stmt.NumInput())
+
+	assert.NoError(t, conn.Close())
+}
+
+func TestConn_Exec(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	execer := conn.(driver.Execer)
+
+	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	require.NoError(t, err)
+
+	result, err := execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+	require.NoError(t, err)
+
+	lastInsertID, err := result.LastInsertId()
+	require.NoError(t, err)
+
+	assert.Equal(t, lastInsertID, int64(1))
+
+	rowsAffected, err := result.RowsAffected()
+	require.NoError(t, err)
+
+	assert.Equal(t, rowsAffected, int64(1))
+
+	assert.NoError(t, conn.Close())
+}
+
+func TestConn_Query(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	execer := conn.(driver.Execer)
+
+	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	require.NoError(t, err)
+
+	_, err = execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+	require.NoError(t, err)
+
+	queryer := conn.(driver.Queryer)
+
+	_, err = queryer.Query("SELECT n FROM test", nil)
+	require.NoError(t, err)
+
+	assert.NoError(t, conn.Close())
+}
+
+func TestStmt_Exec(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, stmt.Close())
+
+	values := []driver.Value{
+		int64(1),
+	}
+
+	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(?)")
+	require.NoError(t, err)
+
+	result, err := stmt.Exec(values)
+	require.NoError(t, err)
+
+	lastInsertID, err := result.LastInsertId()
+	require.NoError(t, err)
+
+	assert.Equal(t, lastInsertID, int64(1))
+
+	rowsAffected, err := result.RowsAffected()
+	require.NoError(t, err)
+
+	assert.Equal(t, rowsAffected, int64(1))
+
+	require.NoError(t, stmt.Close())
+
+	assert.NoError(t, conn.Close())
+}
+
+func TestStmt_Query(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, stmt.Close())
+
+	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(-123)")
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, stmt.Close())
+
+	stmt, err = conn.Prepare("SELECT n FROM test")
+	require.NoError(t, err)
+
+	rows, err := stmt.Query(nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, rows.Columns(), []string{"n"})
+
+	values := make([]driver.Value, 1)
+	require.NoError(t, rows.Next(values))
+
+	assert.Equal(t, int64(-123), values[0])
+
+	require.Equal(t, io.EOF, rows.Next(values))
+
+	require.NoError(t, stmt.Close())
+
+	assert.NoError(t, conn.Close())
+}
+
+func newDriver(t *testing.T) (*dqlite.Driver, func()) {
+	t.Helper()
+
+	listener := newListener(t)
+	address := listener.Addr().String()
+
+	_, cleanup := newServer(t, listener)
+
+	store := newStore(t, address)
+
+	log := testingLogFunc(t)
+	driver, err := dqlite.NewDriver(store, dqlite.WithLogFunc(log))
+	require.NoError(t, err)
+
+	return driver, cleanup
+}
+
+func testingLogFunc(t *testing.T) dqlite.LogFunc {
+	return func(l logging.Level, format string, a ...interface{}) {
+		format = fmt.Sprintf("%s: %s", l.String(), format)
+		t.Logf(format, a...)
+	}
+
+}
+
+/*
+import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -23,7 +232,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/CanonicalLtd/dqlite"
+	"github.com/CanonicalLtd/go-dqlite"
 	"github.com/CanonicalLtd/go-sqlite3"
 	"github.com/CanonicalLtd/raft-test"
 	"github.com/hashicorp/raft"
@@ -320,21 +529,4 @@ func newDir(t *testing.T) (string, func()) {
 	}
 	return dir, cleanup
 }
-
-// Return a logger forwarding its output to the test logger.
-func newTestingLogger(t *testing.T, n int) *log.Logger {
-	return log.New(&testingWriter{t}, fmt.Sprintf("%d: ", n), log.LstdFlags)
-}
-
-// Implement io.Writer and forward what it receives to a
-// testing logger.
-type testingWriter struct {
-	t testing.TB
-}
-
-// Write a single log entry. It's assumed that p is always a \n-terminated UTF
-// string.
-func (w *testingWriter) Write(p []byte) (n int, err error) {
-	w.t.Logf(string(p))
-	return len(p), nil
-}
+*/
