@@ -280,6 +280,25 @@ func (f *FSM) applyFrames(tracer *trace.Tracer, params *protocol.Frames) error {
 		txn = f.registry.TxnFollowerAdd(conn, params.Txid)
 	}
 
+	if len(params.Pages) != 0 {
+		// This should be a v1 log entry.
+		if len(params.PageNumbers) != 0 || len(params.PageData) != 0 {
+			tracer.Panic("unexpected data mix between v1 and v2")
+		}
+
+		// Convert to v2.
+		params.PageNumbers = make([]uint32, 0)
+		params.PageData = make([]byte, int(params.PageSize)*len(params.Pages))
+
+		for i := range params.Pages {
+			params.PageNumbers = append(params.PageNumbers, params.Pages[i].Number)
+			copy(
+				params.PageData[(i*int(params.PageSize)):((i+1)*int(params.PageSize))],
+				params.Pages[i].Data,
+			)
+		}
+	}
+
 	info := bindings.WalReplicationFrameInfo{}
 	info.IsBegin(begin)
 	info.PageSize(int(params.PageSize))
