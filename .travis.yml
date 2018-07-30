@@ -19,6 +19,11 @@ before_install:
   - $GOPATH/bin/gh-asset -d $sqlite_tmp_dir -x CanonicalLtd sqlite "sqlite-amd64--enable-debug-.*.tar.gz"
   - sudo cp $sqlite_tmp_dir/libsqlite3.so.* /usr/lib/x86_64-linux-gnu
   - sudo cp $sqlite_tmp_dir/sqlite3.h /usr/include/sqlite3.h
+  - dqlite_tmp_dir=/tmp/dqlite
+  - mkdir $dqlite_tmp_dir
+  - $GOPATH/bin/gh-asset -d $dqlite_tmp_dir -x CanonicalLtd dqlite "dqlite-amd64-.*.tar.gz"
+  - sudo cp $dqlite_tmp_dir/libdqlite.so.* /usr/lib/x86_64-linux-gnu
+  - sudo cp $dqlite_tmp_dir/dqlite.h /usr/include/dqlite.h
   - mkdir -p $GOPATH/src/github.com/hashicorp/raft
   - raft_fork=https://github.com/freeekanayaka/raft.git
   - git clone -b assorted-fixes $raft_fork $GOPATH/src/github.com/hashicorp/raft
