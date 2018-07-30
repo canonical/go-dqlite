@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/client"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

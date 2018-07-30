@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/client"
-	"github.com/CanonicalLtd/dqlite/internal/logging"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/client"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
@@ -278,7 +278,8 @@ func newServer(t *testing.T, index int, listener net.Listener, cluster bindings.
 	vfs, err := bindings.NewVfs(name)
 	require.NoError(t, err)
 
-	err = bindings.RegisterWalReplication(name, &testWalReplication{})
+	methods := &testWalReplicationMethods{}
+	replication, err := bindings.NewWalReplication(name, methods)
 	require.NoError(t, err)
 
 	server, err := bindings.NewServer(cluster)
@@ -339,8 +340,8 @@ func newServer(t *testing.T, index int, listener net.Listener, cluster bindings.
 
 		server.Close()
 
-		bindings.UnregisterWalReplication("test")
-		vfs.Close()
+		require.NoError(t, replication.Close())
+		require.NoError(t, vfs.Close())
 	}
 
 	return cleanup
@@ -394,26 +395,26 @@ func (c *testCluster) Checkpoint(*bindings.Conn) error {
 	return nil
 }
 
-type testWalReplication struct {
+type testWalReplicationMethods struct {
 }
 
-func (r *testWalReplication) Begin(*bindings.Conn) int {
+func (r *testWalReplicationMethods) Begin(*bindings.Conn) int {
 	return 0
 }
 
-func (r *testWalReplication) Abort(*bindings.Conn) int {
+func (r *testWalReplicationMethods) Abort(*bindings.Conn) int {
 	return 0
 }
 
-func (r *testWalReplication) Frames(*bindings.Conn, bindings.WalReplicationFrameList) int {
+func (r *testWalReplicationMethods) Frames(*bindings.Conn, bindings.WalReplicationFrameList) int {
 	return 0
 }
 
-func (r *testWalReplication) Undo(*bindings.Conn) int {
+func (r *testWalReplicationMethods) Undo(*bindings.Conn) int {
 	return 0
 }
 
-func (r *testWalReplication) End(*bindings.Conn) int {
+func (r *testWalReplicationMethods) End(*bindings.Conn) int {
 	return 0
 }
 

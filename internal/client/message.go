@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 )
 
 type NamedValues = []driver.NamedValue

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CanonicalLtd/dqlite/internal/bindings"
-	"github.com/CanonicalLtd/dqlite/internal/logging"
+	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/pkg/errors"
 )
 
