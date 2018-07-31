@@ -9,6 +9,8 @@ import (
 )
 
 func TestNewVfs_AlreadyRegistered(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	vfs, cleanup := newVfsWithName(t, "foo")
 	defer cleanup()
 
@@ -19,6 +21,8 @@ func TestNewVfs_AlreadyRegistered(t *testing.T) {
 }
 
 func TestNewVfs_ReadFile_Error(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	vfs, cleanup := newVfs(t)
 	defer cleanup()
 
@@ -29,30 +33,30 @@ func TestNewVfs_ReadFile_Error(t *testing.T) {
 }
 
 func TestNewVfs_ReadFile_Empty(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	vfs, cleanup := newVfs(t)
 	defer cleanup()
 
-	conn, err := bindings.Open("test.db", "test")
-	require.NoError(t, err)
+	_, cleanup = newConnWithVfs(t, "test.db", "test")
+	defer cleanup()
 
 	data, err := vfs.ReadFile("test.db")
 	require.NoError(t, err)
 
 	assert.Len(t, data, 0)
-
-	defer conn.Close()
 }
 
 func TestNewVfs_ReadFile(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	vfs, cleanup := newVfs(t)
 	defer cleanup()
 
-	conn, err := bindings.Open("test.db", "test")
-	require.NoError(t, err)
+	conn, cleanup := newConnWithVfs(t, "test.db", "test")
+	defer cleanup()
 
-	defer conn.Close()
-
-	err = conn.Exec("PRAGMA synchronous=OFF")
+	err := conn.Exec("PRAGMA synchronous=OFF")
 	require.NoError(t, err)
 
 	err = conn.Exec("CREATE TABLE test (n INT)")
@@ -67,17 +71,13 @@ func TestNewVfs_ReadFile(t *testing.T) {
 func TestNewVfs_WriteFile(t *testing.T) {
 	defer bindings.AssertNoMemoryLeaks(t)
 
-	vfs1, err := bindings.NewVfs("test1")
-	defer vfs1.Close()
+	vfs1, cleanup := newVfsWithName(t, "test1")
+	defer cleanup()
 
-	require.NoError(t, err)
+	conn, cleanup := newConnWithVfs(t, "test.db", "test1")
+	defer cleanup()
 
-	conn, err := bindings.Open("test.db", "test1")
-	require.NoError(t, err)
-
-	defer conn.Close()
-
-	err = conn.Exec("PRAGMA synchronous=OFF")
+	err := conn.Exec("PRAGMA synchronous=OFF")
 	require.NoError(t, err)
 
 	err = conn.Exec("CREATE TABLE test (n INT)")
@@ -88,10 +88,8 @@ func TestNewVfs_WriteFile(t *testing.T) {
 
 	assert.Len(t, data1, 8192)
 
-	vfs2, err := bindings.NewVfs("test2")
-	require.NoError(t, err)
-
-	defer vfs2.Close()
+	vfs2, cleanup := newVfsWithName(t, "test2")
+	defer cleanup()
 
 	err = vfs2.WriteFile("test.db", data1)
 	require.NoError(t, err)
@@ -115,7 +113,6 @@ func newVfsWithName(t *testing.T, name string) (*bindings.Vfs, func()) {
 
 	cleanup := func() {
 		require.NoError(t, vfs.Close())
-		bindings.AssertNoMemoryLeaks(t)
 	}
 
 	return vfs, cleanup

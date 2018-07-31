@@ -129,6 +129,13 @@ func NewWalReplication(name string, methods WalReplicationMethods) (*WalReplicat
 	return (*WalReplication)(unsafe.Pointer(replication)), nil
 }
 
+// Name returns the registration name of the Wal replication.
+func (r *WalReplication) Name() string {
+	replication := (*C.sqlite3_wal_replication)(unsafe.Pointer(r))
+
+	return C.GoString(replication.zName)
+}
+
 // Close unregisters and destroys this WAL replication instance.
 func (r *WalReplication) Close() error {
 	replication := (*C.sqlite3_wal_replication)(unsafe.Pointer(r))
@@ -137,6 +144,9 @@ func (r *WalReplication) Close() error {
 	if rc != 0 {
 		return codeToError(rc)
 	}
+
+	handle := (C.uintptr_t)(uintptr(replication.pAppData))
+	delete(walReplicationMethodsIndex, handle)
 
 	C.sqlite3__wal_replication_destroy(replication)
 
@@ -385,7 +395,8 @@ func walReplicationEnd(handle C.uintptr_t, db *C.sqlite3) C.int {
 	return C.int(methods.End((*Conn)(unsafe.Pointer(db))))
 }
 
-// Map uintptr to WalReplicationMethods instances to avoid passing Go pointers to C.
+// Map uintptr to WalReplicationMethods instances to avoid passing Go pointers
+// to C.
 //
 // We do not protect this map with a lock since typically just one long-lived
 // WalReplication instance should be registered (except for unit tests).

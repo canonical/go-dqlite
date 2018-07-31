@@ -3,6 +3,9 @@ package bindings_test
 import (
 	"database/sql/driver"
 	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
@@ -11,6 +14,8 @@ import (
 )
 
 func TestOpen_OpenError(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	conn, err := bindings.Open("test.db", "foo")
 	assert.Nil(t, conn)
 	assert.EqualError(t, err, "no such vfs: foo")
@@ -20,19 +25,21 @@ func TestOpen_OpenError(t *testing.T) {
 
 	assert.Equal(t, 1, sqliteErr.Code)
 	assert.Equal(t, "no such vfs: foo", sqliteErr.Message)
-
-	bindings.AssertNoMemoryLeaks(t)
 }
 
 func TestConn_Filename(t *testing.T) {
-	conn, cleanup := newConn(t)
+	defer bindings.AssertNoMemoryLeaks(t)
+
+	conn, cleanup := newConnVolatile(t)
 	defer cleanup()
 
 	assert.Equal(t, "test.db", conn.Filename())
 }
 
 func TestConn_Exec_Error(t *testing.T) {
-	conn, cleanup := newConn(t)
+	defer bindings.AssertNoMemoryLeaks(t)
+
+	conn, cleanup := newConnUnix(t)
 	defer cleanup()
 
 	err := conn.Exec("INVALID sql")
@@ -40,7 +47,9 @@ func TestConn_Exec_Error(t *testing.T) {
 }
 
 func TestConn_Exec(t *testing.T) {
-	conn, cleanup := newConn(t)
+	defer bindings.AssertNoMemoryLeaks(t)
+
+	conn, cleanup := newConnUnix(t)
 	defer cleanup()
 
 	err := conn.Exec("CREATE TABLE foo (n INT)")
@@ -48,7 +57,9 @@ func TestConn_Exec(t *testing.T) {
 }
 
 func TestConn_Query_Error(t *testing.T) {
-	conn, cleanup := newConn(t)
+	defer bindings.AssertNoMemoryLeaks(t)
+
+	conn, cleanup := newConnUnix(t)
 	defer cleanup()
 
 	_, err := conn.Query("SELECT * FROM foo")
@@ -56,7 +67,9 @@ func TestConn_Query_Error(t *testing.T) {
 }
 
 func TestConn_Query(t *testing.T) {
-	conn, cleanup := newConn(t)
+	defer bindings.AssertNoMemoryLeaks(t)
+
+	conn, cleanup := newConnUnix(t)
 	defer cleanup()
 
 	err := conn.Exec("CREATE TABLE foo (n INT)")
@@ -83,6 +96,8 @@ func TestConn_Query(t *testing.T) {
 }
 
 func TestConn_CloseError(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	vfs, cleanup := newVfs(t)
 	defer cleanup()
 
@@ -108,18 +123,66 @@ func TestConn_CloseError(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func newConn(t *testing.T) (*bindings.Conn, func()) {
-	vfs, vfsCleanup := newVfs(t)
+// Create a new connection using dqlite's volatile VFS and setting WAL mode.
+func newConnVolatileWal(t *testing.T) (*bindings.Conn, func()) {
+	conn, cleanup := newConnVolatile(t)
 
-	conn, err := bindings.Open("test.db", vfs.Name())
+	err := conn.Exec("PRAGMA synchronous=OFF")
 	require.NoError(t, err)
 
-	err = conn.Exec("PRAGMA synchronous=OFF")
+	err = conn.Exec("PRAGMA journal_mode=wal")
+	require.NoError(t, err)
+
+	flag, err := conn.ConfigNoCkptOnClose(true)
+	require.NoError(t, err)
+
+	assert.True(t, flag)
+
+	return conn, cleanup
+}
+
+// Create a new connection using dqlite's volatile VFS.
+func newConnVolatile(t *testing.T) (*bindings.Conn, func()) {
+	t.Helper()
+
+	vfs, vfsCleanup := newVfs(t)
+
+	conn, connCleanup := newConnWithVfs(t, "test.db", vfs.Name())
+
+	cleanup := func() {
+		connCleanup()
+		vfsCleanup()
+	}
+
+	return conn, cleanup
+}
+
+// Create a new connection using the unix VFS.
+func newConnUnix(t *testing.T) (*bindings.Conn, func()) {
+	t.Helper()
+
+	dir, err := ioutil.TempDir("", "go-dqlite-bindings-")
+	require.NoError(t, err)
+
+	name := filepath.Join(dir, "test.db")
+	conn, connCleanup := newConnWithVfs(t, name, "unix")
+
+	cleanup := func() {
+		connCleanup()
+		require.NoError(t, os.RemoveAll(dir))
+	}
+
+	return conn, cleanup
+}
+
+func newConnWithVfs(t *testing.T, name string, vfs string) (*bindings.Conn, func()) {
+	t.Helper()
+
+	conn, err := bindings.Open(name, vfs)
 	require.NoError(t, err)
 
 	cleanup := func() {
 		require.NoError(t, conn.Close())
-		vfsCleanup()
 	}
 
 	return conn, cleanup

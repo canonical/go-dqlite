@@ -9,13 +9,14 @@ package bindings
 
 */
 import "C"
+
 import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"unsafe"
 
-	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/pkg/errors"
 )
 
@@ -64,19 +65,10 @@ func Init() error {
 }
 
 // NewServer creates a new Server instance.
-func NewServer(cluster Cluster) (*Server, error) {
+func NewServer(cluster *Cluster) (*Server, error) {
 	var server *C.dqlite_server
 
-	clusterHandle := clusterRegister(cluster)
-
-	clusterTrampoline := clusterAlloc()
-	if clusterTrampoline == nil {
-		err := codeToError(C.SQLITE_NOMEM)
-		return nil, errors.Wrap(err, "failed to allocate cluster object")
-	}
-	clusterInit(clusterTrampoline, clusterHandle)
-
-	rc := C.dqlite_server_create(clusterTrampoline, &server)
+	rc := C.dqlite_server_create((*C.dqlite_cluster)(unsafe.Pointer(cluster)), &server)
 	if rc != 0 {
 		err := codeToError(rc)
 		return nil, errors.Wrap(err, "failed to create server object")
@@ -87,27 +79,18 @@ func NewServer(cluster Cluster) (*Server, error) {
 
 // Close the server releasing all used resources.
 func (s *Server) Close() {
-	server := (*C.dqlite_server)(unsafe.Pointer(s))
-
-	cluster := C.dqlite_server_cluster(server)
-	handle := clusterHandle(cluster)
-
-	clusterUnregister(handle)
-	clusterFree(cluster)
-
-	if logger := C.dqlite_server_logger(server); logger != nil {
-		loggerUnregister(uintptr(logger.ctx))
-		C.sqlite3_free(unsafe.Pointer(logger))
+	for _, conn := range serverConns[s] {
+		conn.Close()
 	}
+
+	server := (*C.dqlite_server)(unsafe.Pointer(s))
 
 	C.dqlite_server_destroy(server)
 }
 
-// SetLogFunc sets the server logging function.
-func (s *Server) SetLogFunc(f logging.Func) {
+// SetLogger sets the server logger.
+func (s *Server) SetLogger(logger *Logger) {
 	server := (*C.dqlite_server)(unsafe.Pointer(s))
-
-	logger := newLogger(f)
 
 	rc := C.dqlite_server_config(server, C.DQLITE_CONFIG_LOGGER, unsafe.Pointer(logger))
 	if rc != 0 {
@@ -176,6 +159,8 @@ func (s *Server) Handle(conn net.Conn) error {
 		return err
 	}
 
+	//conn.Close()
+
 	fd := file.Fd()
 
 	var errmsg *C.char
@@ -189,7 +174,15 @@ func (s *Server) Handle(conn net.Conn) error {
 		return fmt.Errorf(C.GoString(errmsg))
 	}
 
-	// TODO: this is a hack to prevent the GC from closing the file.
+	// This is a hack to prevent the GC from closing the file.
+	serverConnsMu.Lock()
+	defer serverConnsMu.Unlock()
+
+	files, ok := serverConns[s]
+	if !ok {
+		files = make([]*os.File, 0)
+		serverConns[s] = files
+	}
 	files = append(files, file)
 
 	return nil
@@ -201,7 +194,8 @@ type fileConn interface {
 	File() (*os.File, error)
 }
 
-var files = []*os.File{}
+var serverConnsMu sync.Mutex
+var serverConns = map[*Server][]*os.File{}
 
 // Stop the server.
 func (s *Server) Stop() error {

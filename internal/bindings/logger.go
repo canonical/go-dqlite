@@ -37,8 +37,8 @@ static void dqliteLoggerLogf(void *ctx, int level, const char *format, ...) {
 }
 
 // Constructor.
-static dqlite_logger *dqliteLoggerAlloc(uintptr_t handle) {
-  dqlite_logger *logger = malloc(sizeof *logger);
+static dqlite_logger *dqlite__logger_create(uintptr_t handle) {
+  dqlite_logger *logger = sqlite3_malloc(sizeof *logger);
 
   if (logger == NULL) {
     return NULL;
@@ -52,8 +52,13 @@ static dqlite_logger *dqliteLoggerAlloc(uintptr_t handle) {
 */
 import "C"
 import (
+	"unsafe"
+
 	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 )
+
+// Logger is a Go wrapper around the associated dqlite's C type.
+type Logger C.dqlite_logger
 
 // Logging levels.
 const (
@@ -63,9 +68,43 @@ const (
 	LogError = C.DQLITE_LOG_ERROR
 )
 
+// NewLogger creates a new Logger object set with the given log function.
+func NewLogger(f logging.Func) *Logger {
+	// Register the logger implementation and pass its handle to
+	// dqliteLoggerInit.
+	handle := loggerFuncsSerial
+
+	loggerFuncsIndex[handle] = f
+	loggerFuncsSerial++
+
+	logger := C.dqlite__logger_create(C.uintptr_t(handle))
+	if logger == nil {
+		panic("out of memory")
+	}
+
+	return (*Logger)(unsafe.Pointer(logger))
+}
+
+// Close releases all memory associated with the logger object.
+func (l *Logger) Close() {
+	logger := (*C.dqlite_logger)(unsafe.Pointer(l))
+	handle := (C.uintptr_t)(uintptr(logger.ctx))
+
+	delete(loggerFuncsIndex, handle)
+
+	C.sqlite3_free(unsafe.Pointer(logger))
+}
+
+// Map uintptr to logging.Func instances to avoid passing Go pointers to C.
+//
+// We do not protect this map with a lock since typically just one long-lived
+// Logger instance should be registered (except for unit tests).
+var loggerFuncsSerial C.uintptr_t = 100
+var loggerFuncsIndex = map[C.uintptr_t]logging.Func{}
+
 //export dqliteLoggerLogfCb
 func dqliteLoggerLogfCb(handle C.uintptr_t, level C.int, msg *C.char) {
-	f := loggerHandles[uintptr(handle)]
+	f := loggerFuncsIndex[handle]
 
 	message := C.GoString(msg)
 	switch level {
@@ -78,37 +117,4 @@ func dqliteLoggerLogfCb(handle C.uintptr_t, level C.int, msg *C.char) {
 	case LogError:
 		f(logging.Error, message)
 	}
-}
-
-func newLogger(f logging.Func) *C.dqlite_logger {
-	// Register the logger implementation and pass its handle to
-	// dqliteLoggerInit.
-	handle := loggerRegister(f)
-
-	l := C.dqliteLoggerAlloc(C.uintptr_t(handle))
-	if l == nil {
-		panic("out of memory")
-	}
-
-	return l
-}
-
-// Map uintptr to logging.Func instances to avoid passing Go pointers to C.
-//
-// We do not protect this map with a lock since typically just one long-lived
-// Logger instance should be registered (except for unit tests).
-var loggerHandlesSerial uintptr = 100
-var loggerHandles = map[uintptr]logging.Func{}
-
-func loggerRegister(f logging.Func) uintptr {
-	handle := loggerHandlesSerial
-
-	loggerHandles[handle] = f
-	loggerHandlesSerial++
-
-	return handle
-}
-
-func loggerUnregister(handle uintptr) {
-	delete(loggerHandles, handle)
 }
