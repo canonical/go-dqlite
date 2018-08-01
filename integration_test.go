@@ -165,6 +165,131 @@ func TestIntegration_NotLeader(t *testing.T) {
 	require.Equal(t, driver.ErrBadConn, err)
 }
 
+func TestIntegration_LargeQuery_WithTimestamps(t *testing.T) {
+	db, _, cleanup := newDB(t)
+	defer cleanup()
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	_, err = tx.Exec("CREATE TABLE test (name TEXT, id INTEGER, address TEXT, heartbeat DATETIME)")
+	require.NoError(t, err)
+
+	stmt, err := tx.Prepare("INSERT INTO test(name, id, address, heartbeat) VALUES(?,?,?,?)")
+	require.NoError(t, err)
+
+	for _, row := range testIntegrationLargeQueryWithTimestampsData {
+		_, err = stmt.Exec(row.Name, row.ID, row.Address, row.Heartbeat)
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, stmt.Close())
+
+	require.NoError(t, tx.Commit())
+
+	tx, err = db.Begin()
+	require.NoError(t, err)
+
+	rows, err := tx.Query("SELECT name, id, address, heartbeat FROM test")
+	require.NoError(t, err)
+
+	columns, err := rows.Columns()
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"name", "id", "address", "heartbeat"}, columns)
+
+	for i := 0; rows.Next(); i++ {
+		var name string
+		var id int64
+		var address string
+		var heartbeat time.Time
+
+		require.NoError(t, rows.Scan(&name, &id, &address, &heartbeat))
+
+		fmt.Println("ROW", i, name, id, address, heartbeat)
+
+		// assert.Equal(t, int64(i), n)
+	}
+
+	require.NoError(t, rows.Err())
+	require.NoError(t, rows.Close())
+
+	require.NoError(t, tx.Rollback())
+
+	require.NoError(t, db.Close())
+}
+
+var testIntegrationLargeQueryWithTimestampsData = []struct {
+	Name      string
+	ID        int64
+	Address   string
+	Heartbeat string
+}{
+	{"alpine-34-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-34-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-34-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-35-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-35-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-36-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-36-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-37-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-37-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-38-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-38-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-edge-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"alpine-edge-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"archlinux-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"archlinux-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"centos-6-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"centos-6-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"centos-7-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"centos-7-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-10-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-10-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-7-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-7-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-8-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-8-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-9-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-9-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-sid-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"debian-sid-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"fedora-26-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"fedora-26-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"fedora-27-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"fedora-27-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"fedora-28-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"fedora-28-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"gentoo-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"gentoo-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"opensuse-150-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"opensuse-150-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"opensuse-423-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"opensuse-423-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"oracle-6-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"oracle-6-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"oracle-7-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"oracle-7-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"plamo-5x-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"plamo-5x-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"plamo-6x-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"plamo-6x-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"sabayon-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"sabayon-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-core-16-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-core-16-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1404-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1404-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1604-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1604-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1710-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1710-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1804-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1804-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1810-unpriv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+	{"ubuntu-1810-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
+}
+
 func newDB(t *testing.T) (*sql.DB, *rafttest.Control, func()) {
 	n := 3
 
