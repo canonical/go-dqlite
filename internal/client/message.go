@@ -157,7 +157,7 @@ func (m *Message) PutNamedValues(values NamedValues) {
 		case nil:
 			m.PutInt64(0)
 		case time.Time:
-			timestamp := v.Format(iso8601)
+			timestamp := v.Format(iso8601Formats[0])
 			m.PutString(timestamp)
 		default:
 			panic("unsupported value type")
@@ -437,14 +437,21 @@ func (r *Rows) Next(dest []driver.Value) error {
 			dest[i] = timestamp
 		case bindings.ISO8601:
 			value := r.message.GetString()
-			if !strings.Contains(value, "+") {
-				value += "+00:00"
+			var t time.Time
+			var timeVal time.Time
+			var err error
+			value = strings.TrimSuffix(value, "Z")
+			for _, format := range iso8601Formats {
+				if timeVal, err = time.ParseInLocation(format, value, time.UTC); err == nil {
+					t = timeVal
+					break
+				}
 			}
-			timestamp, err := time.Parse(iso8601, value)
 			if err != nil {
 				return err
 			}
-			dest[i] = timestamp
+			t = t.In(time.Local)
+			dest[i] = t
 		default:
 			//panic("unknown data type")
 		}
@@ -464,4 +471,16 @@ const (
 	messageMaxConsecutiveEmptyReads = 100
 )
 
-const iso8601 = "2006-01-02 15:04:05+00:00"
+var iso8601Formats = []string{
+	// By default, store timestamps with whatever timezone they come with.
+	// When parsed, they will be returned with the same timezone.
+	"2006-01-02 15:04:05.999999999-07:00",
+	"2006-01-02T15:04:05.999999999-07:00",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02T15:04:05.999999999",
+	"2006-01-02 15:04:05",
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04",
+	"2006-01-02T15:04",
+	"2006-01-02",
+}
