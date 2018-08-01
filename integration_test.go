@@ -205,10 +205,6 @@ func TestIntegration_LargeQuery_WithTimestamps(t *testing.T) {
 		var heartbeat time.Time
 
 		require.NoError(t, rows.Scan(&name, &id, &address, &heartbeat))
-
-		fmt.Println("ROW", i, name, id, address, heartbeat)
-
-		// assert.Equal(t, int64(i), n)
 	}
 
 	require.NoError(t, rows.Err())
