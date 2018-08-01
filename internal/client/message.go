@@ -243,6 +243,29 @@ func (m *Message) GetString() string {
 
 	index := bytes.IndexByte(b.Bytes[b.Offset:], 0)
 	if index == -1 {
+		// Check if the string overflows in the dynamic buffer.
+		if b == &m.body1 && m.body2.Bytes != nil {
+			// Assert that this is the first read of the dynamic buffer.
+			if m.body2.Offset != 0 {
+				panic("static buffer read after dynamic buffer one")
+			}
+			index = bytes.IndexByte(m.body2.Bytes[0:], 0)
+			if index != -1 {
+				// We found the trailing part of the string.
+				data := b.Bytes[b.Offset:]
+				data = append(data, m.body2.Bytes[0:index]...)
+
+				if trailing := index % messageWordSize; trailing != 0 {
+					// Account for padding, moving index to the next word boundary.
+					index += messageWordSize - trailing
+				}
+
+				m.body1.Offset = len(m.body1.Bytes)
+				m.body2.Advance(index)
+
+				return string(data)
+			}
+		}
 		panic("no string found")
 	}
 	s := string(b.Bytes[b.Offset : b.Offset+index])
