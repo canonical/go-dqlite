@@ -19,15 +19,16 @@ import (
 
 // Successful connection.
 func TestConnector_Connect_Success(t *testing.T) {
-	listener := newListener(t)
+	defer bindings.AssertNoMemoryLeaks(t)
 
-	cluster := newTestCluster()
-	cluster.leader = listener.Addr().String()
+	methods := &testClusterMethods{}
 
-	cleanup := newServer(t, 0, listener, cluster)
+	address, cleanup := newServer(t, 0, methods)
 	defer cleanup()
 
-	store := newStore(t, []string{cluster.leader})
+	methods.leader = address
+
+	store := newStore(t, []string{address})
 
 	connector := newConnector(t, store)
 
@@ -69,32 +70,31 @@ func TestConnector_Connect_Error_AfterCancel(t *testing.T) {
 // If an election is in progress, the connector will retry until a leader gets
 // elected.
 func TestConnector_Connect_ElectionInProgress(t *testing.T) {
-	listener1 := newListener(t)
-	listener2 := newListener(t)
-	listener3 := newListener(t)
+	defer bindings.AssertNoMemoryLeaks(t)
 
-	cluster1 := newTestCluster()
-	cluster2 := newTestCluster()
-	cluster3 := newTestCluster()
+	methods1 := &testClusterMethods{}
+	methods2 := &testClusterMethods{}
+	methods3 := &testClusterMethods{}
 
-	defer newServer(t, 1, listener1, cluster2)()
-	defer newServer(t, 2, listener2, cluster2)()
-	defer newServer(t, 3, listener3, cluster3)()
+	address1, cleanup := newServer(t, 1, methods1)
+	defer cleanup()
 
-	store := newStore(t, []string{
-		listener1.Addr().String(),
-		listener2.Addr().String(),
-		listener3.Addr().String(),
-	})
+	address2, cleanup := newServer(t, 2, methods2)
+	defer cleanup()
+
+	address3, cleanup := newServer(t, 3, methods3)
+	defer cleanup()
+
+	store := newStore(t, []string{address1, address2, address3})
 
 	connector := newConnector(t, store)
 
 	go func() {
 		// Simulate server 1 winning the election after 10ms
 		time.Sleep(10 * time.Millisecond)
-		cluster1.leader = listener1.Addr().String()
-		cluster2.leader = listener1.Addr().String()
-		cluster3.leader = listener1.Addr().String()
+		methods1.leader = address1
+		methods2.leader = address1
+		methods3.leader = address1
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -109,28 +109,28 @@ func TestConnector_Connect_ElectionInProgress(t *testing.T) {
 // If a server reports that it knows about the leader, the hint will be taken
 // and an attempt will be made to connect to it.
 func TestConnector_Connect_ServerKnowsAboutLeader(t *testing.T) {
-	listener1 := newListener(t)
-	listener2 := newListener(t)
-	listener3 := newListener(t)
+	defer bindings.AssertNoMemoryLeaks(t)
 
-	cluster1 := newTestCluster()
-	cluster2 := newTestCluster()
-	cluster3 := newTestCluster()
+	methods1 := &testClusterMethods{}
+	methods2 := &testClusterMethods{}
+	methods3 := &testClusterMethods{}
 
-	defer newServer(t, 1, listener1, cluster2)()
-	defer newServer(t, 2, listener2, cluster2)()
-	defer newServer(t, 3, listener3, cluster3)()
+	address1, cleanup := newServer(t, 1, methods1)
+	defer cleanup()
+
+	address2, cleanup := newServer(t, 2, methods2)
+	defer cleanup()
+
+	address3, cleanup := newServer(t, 3, methods3)
+	defer cleanup()
 
 	// Server 1 will be contacted first, which will report that server 2 is
 	// the leader.
-	store := newStore(t, []string{
-		listener1.Addr().String(),
-		listener2.Addr().String(),
-		listener3.Addr().String(),
-	})
-	cluster1.leader = listener2.Addr().String()
-	cluster2.leader = listener2.Addr().String()
-	cluster3.leader = listener2.Addr().String()
+	store := newStore(t, []string{address1, address2, address3})
+
+	methods1.leader = address2
+	methods2.leader = address2
+	methods3.leader = address2
 
 	connector := newConnector(t, store)
 
@@ -147,39 +147,36 @@ func TestConnector_Connect_ServerKnowsAboutLeader(t *testing.T) {
 // and an attempt will be made to connect to it. If that leader has died, the
 // next target will be tried.
 func TestConnector_Connect_ServerKnowsAboutDeadLeader(t *testing.T) {
-	listener1 := newListener(t)
-	listener2 := newListener(t)
-	listener3 := newListener(t)
+	defer bindings.AssertNoMemoryLeaks(t)
 
-	cluster1 := newTestCluster()
-	cluster2 := newTestCluster()
-	cluster3 := newTestCluster()
+	methods1 := &testClusterMethods{}
+	methods2 := &testClusterMethods{}
+	methods3 := &testClusterMethods{}
 
-	defer newServer(t, 1, listener1, cluster2)()
-	defer newServer(t, 3, listener3, cluster3)()
+	address1, cleanup := newServer(t, 1, methods1)
+	defer cleanup()
+
+	address2, cleanup := newServer(t, 2, methods2)
 
 	// Simulate server 2 crashing.
-	require.NoError(t, listener2.Close())
+	cleanup()
+
+	address3, cleanup := newServer(t, 3, methods3)
+	defer cleanup()
 
 	// Server 1 will be contacted first, which will report that server 2 is
 	// the leader. However server 2 has crashed, and after a bit server 1
 	// gets elected.
-	store := newStore(t, []string{
-		listener1.Addr().String(),
-		listener2.Addr().String(),
-		listener3.Addr().String(),
-	})
-	cluster1.leader = listener2.Addr().String()
-	cluster2.leader = listener2.Addr().String()
-	cluster3.leader = listener2.Addr().String()
+	store := newStore(t, []string{address1, address2, address3})
+	methods1.leader = address2
+	methods3.leader = address2
 
 	go func() {
 		// Simulate server 1 becoming the new leader after server 2
 		// crashed.
 		time.Sleep(10 * time.Millisecond)
-		cluster1.leader = listener1.Addr().String()
-		cluster2.leader = listener1.Addr().String()
-		cluster3.leader = listener1.Addr().String()
+		methods1.leader = address1
+		methods3.leader = address1
 	}()
 
 	connector := newConnector(t, store)
@@ -197,31 +194,28 @@ func TestConnector_Connect_ServerKnowsAboutDeadLeader(t *testing.T) {
 // and an attempt will be made to connect to it. If that leader is not actually
 // the leader the next target will be tried.
 func TestConnector_Connect_ServerKnowsAboutStaleLeader(t *testing.T) {
-	listener1 := newListener(t)
-	listener2 := newListener(t)
-	listener3 := newListener(t)
+	defer bindings.AssertNoMemoryLeaks(t)
 
-	cluster1 := newTestCluster()
-	cluster2 := newTestCluster()
-	cluster3 := newTestCluster()
+	methods1 := &testClusterMethods{}
+	methods2 := &testClusterMethods{}
+	methods3 := &testClusterMethods{}
 
-	defer newServer(t, 1, listener1, cluster2)()
-	defer newServer(t, 3, listener3, cluster3)()
+	address1, cleanup := newServer(t, 1, methods1)
+	defer cleanup()
 
-	// Simulate server 2 crashing.
-	require.NoError(t, listener2.Close())
+	address2, cleanup := newServer(t, 2, methods2)
+	defer cleanup()
+
+	address3, cleanup := newServer(t, 3, methods3)
+	defer cleanup()
 
 	// Server 1 will be contacted first, which will report that server 2 is
 	// the leader. However server 2 thinks that 3 is the leader, and server
 	// 3 is actually the leader.
-	store := newStore(t, []string{
-		listener1.Addr().String(),
-		listener2.Addr().String(),
-		listener3.Addr().String(),
-	})
-	cluster1.leader = listener2.Addr().String()
-	cluster2.leader = listener3.Addr().String()
-	cluster3.leader = listener3.Addr().String()
+	store := newStore(t, []string{address1, address2, address3})
+	methods1.leader = address2
+	methods2.leader = address3
+	methods3.leader = address3
 
 	connector := newConnector(t, store)
 
@@ -238,17 +232,14 @@ func newConnector(t *testing.T, store client.ServerStore) *client.Connector {
 	t.Helper()
 
 	config := client.Config{
-		Dial:           client.TCPDial,
+		Dial:           client.UnixDial,
 		AttemptTimeout: 100 * time.Millisecond,
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
 		},
 	}
 
-	log := func(l logging.Level, format string, a ...interface{}) {
-		format = fmt.Sprintf("%s: %s", l.String(), format)
-		t.Logf(format, a...)
-	}
+	log := logging.Test(t)
 
 	connector := client.NewConnector(0, store, config, log)
 
@@ -271,22 +262,24 @@ func newStore(t *testing.T, addresses []string) client.ServerStore {
 	return store
 }
 
-func newServer(t *testing.T, index int, listener net.Listener, cluster bindings.Cluster) func() {
+func newServer(t *testing.T, index int, methods bindings.ClusterMethods) (string, func()) {
 	t.Helper()
 
-	name := fmt.Sprintf("test-%d", index)
-	vfs, err := bindings.NewVfs(name)
-	require.NoError(t, err)
+	listener := newListener(t)
 
-	methods := &testWalReplicationMethods{}
-	replication, err := bindings.NewWalReplication(name, methods)
-	require.NoError(t, err)
+	vfs := newVfs(t, index)
+	replication := newWalReplication(t, index)
+
+	cluster := newCluster(t, methods)
 
 	server, err := bindings.NewServer(cluster)
 	require.NoError(t, err)
 
-	server.SetVfs(name)
-	server.SetWalReplication(name)
+	logger := bindings.NewLogger(logging.Test(t))
+
+	server.SetLogger(logger)
+	server.SetVfs(vfs.Name())
+	server.SetWalReplication(replication.Name())
 
 	runCh := make(chan error)
 	go func() {
@@ -296,7 +289,7 @@ func newServer(t *testing.T, index int, listener net.Listener, cluster bindings.
 
 	require.True(t, server.Ready())
 
-	acceptCh := make(chan error, 1)
+	acceptCh := make(chan error)
 	go func() {
 		for {
 			conn, err := listener.Accept()
@@ -317,18 +310,12 @@ func newServer(t *testing.T, index int, listener net.Listener, cluster bindings.
 		}
 	}()
 
+	address := listener.Addr().String()
+
 	cleanup := func() {
 		require.NoError(t, server.Stop())
 
 		require.NoError(t, listener.Close())
-
-		// Wait for the accept goroutine to exit.
-		select {
-		case err := <-acceptCh:
-			assert.NoError(t, err)
-		case <-time.After(time.Second):
-			t.Fatal("accept goroutine did not stop within a second")
-		}
 
 		// Wait for the run goroutine to exit.
 		select {
@@ -338,37 +325,75 @@ func newServer(t *testing.T, index int, listener net.Listener, cluster bindings.
 			t.Fatal("server did not stop within a second")
 		}
 
+		// Wait for the accept goroutine to exit.
+		select {
+		case err := <-acceptCh:
+			assert.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("accept goroutine did not stop within a second")
+		}
+
 		server.Close()
+		logger.Close()
+		cluster.Close()
 
 		require.NoError(t, replication.Close())
 		require.NoError(t, vfs.Close())
 	}
 
-	return cleanup
+	return address, cleanup
+}
+
+func newVfs(t *testing.T, index int) *bindings.Vfs {
+	t.Helper()
+
+	name := fmt.Sprintf("test-%d", index)
+
+	vfs, err := bindings.NewVfs(name)
+	require.NoError(t, err)
+
+	return vfs
+}
+
+func newWalReplication(t *testing.T, index int) *bindings.WalReplication {
+	t.Helper()
+
+	name := fmt.Sprintf("test-%d", index)
+
+	methods := &testWalReplicationMethods{}
+	replication, err := bindings.NewWalReplication(name, methods)
+	require.NoError(t, err)
+
+	return replication
 }
 
 func newListener(t *testing.T) net.Listener {
 	t.Helper()
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("unix", "")
 	require.NoError(t, err)
 
 	return listener
 }
 
-type testCluster struct {
+func newCluster(t *testing.T, methods bindings.ClusterMethods) *bindings.Cluster {
+	t.Helper()
+
+	cluster, err := bindings.NewCluster(methods)
+	require.NoError(t, err)
+
+	return cluster
+}
+
+type testClusterMethods struct {
 	leader string
 }
 
-func newTestCluster() *testCluster {
-	return &testCluster{}
-}
-
-func (c *testCluster) Leader() string {
+func (c *testClusterMethods) Leader() string {
 	return c.leader
 }
 
-func (c *testCluster) Servers() ([]bindings.ServerInfo, error) {
+func (c *testClusterMethods) Servers() ([]bindings.ServerInfo, error) {
 	servers := []bindings.ServerInfo{
 		{ID: 1, Address: "1.2.3.4:666"},
 		{ID: 2, Address: "5.6.7.8:666"},
@@ -377,21 +402,21 @@ func (c *testCluster) Servers() ([]bindings.ServerInfo, error) {
 	return servers, nil
 }
 
-func (c *testCluster) Register(*bindings.Conn) {
+func (c *testClusterMethods) Register(*bindings.Conn) {
 }
 
-func (c *testCluster) Unregister(*bindings.Conn) {
+func (c *testClusterMethods) Unregister(*bindings.Conn) {
 }
 
-func (c *testCluster) Barrier() error {
+func (c *testClusterMethods) Barrier() error {
 	return nil
 }
 
-func (c *testCluster) Recover(token uint64) error {
+func (c *testClusterMethods) Recover(token uint64) error {
 	return nil
 }
 
-func (c *testCluster) Checkpoint(*bindings.Conn) error {
+func (c *testClusterMethods) Checkpoint(*bindings.Conn) error {
 	return nil
 }
 

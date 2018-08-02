@@ -23,7 +23,7 @@ type Connector struct {
 	protocol []byte       // Protocol version
 }
 
-// NewConnector creates a new connector that can be used by a dqlite driver to
+// NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
 func NewConnector(id uint64, store ServerStore, config Config, log logging.Func) *Connector {
 	connector := &Connector{

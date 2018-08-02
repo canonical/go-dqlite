@@ -5,15 +5,22 @@ import (
 	"database/sql/driver"
 	"encoding/binary"
 	"io"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 )
 
+// NamedValues is a type alias of a slice of driver.NamedValue. It's used by
+// schema.sh to generate encoding logic for statement parameters.
 type NamedValues = []driver.NamedValue
+
+// Servers is a type alias of a slice of bindings.ServerInfo. It's used by
+// schema.sh to generate decoding logic for the heartbeat response.
 type Servers []bindings.ServerInfo
 
+// Message holds data about a single request or response.
 type Message struct {
 	words  uint32
 	mtype  uint8
@@ -24,6 +31,9 @@ type Message struct {
 	body2  buffer // Dynamically allocated body data
 }
 
+// Init initializes the message using the given size of the statically
+// allocated buffer (i.e. a buffer which is re-used across requests or
+// responses encoded or decoded using this message object).
 func (m *Message) Init(staticSize int) {
 	if (staticSize % messageWordSize) != 0 {
 		panic("static size is not aligned to word boundary")
@@ -33,13 +43,47 @@ func (m *Message) Init(staticSize int) {
 	m.Reset()
 }
 
+// Reset the state of the message so it can be used to encode or decode again.
 func (m *Message) Reset() {
+	m.words = 0
+	m.mtype = 0
+	m.flags = 0
+	m.extra = 0
+	for i := 0; i < messageHeaderSize; i++ {
+		m.header[i] = 0
+	}
 	m.body1.Offset = 0
 	m.body2.Bytes = nil
 	m.body2.Offset = 0
 }
 
-func (m *Message) PutString(v string) {
+// Append a byte slice to the message.
+func (m *Message) putBlob(v []byte) {
+	size := len(v)
+	pad := 0
+	if (size % messageWordSize) != 0 {
+		// Account for padding
+		pad = messageWordSize - (size % messageWordSize)
+		size += pad
+	}
+
+	b := m.bufferForPut(size)
+	defer b.Advance(size)
+
+	// Copy the bytes into the buffer.
+	offset := b.Offset
+	copy(b.Bytes[offset:], v)
+	offset += len(v)
+
+	// Add padding
+	for i := 0; i < pad; i++ {
+		b.Bytes[offset] = 0
+		offset++
+	}
+}
+
+// Append a string to the message.
+func (m *Message) putString(v string) {
 	size := len(v) + 1
 	pad := 0
 	if (size % messageWordSize) != 0 {
@@ -67,48 +111,62 @@ func (m *Message) PutString(v string) {
 	}
 }
 
-func (m *Message) PutUint8(v uint8) {
+// Append a byte to the message.
+func (m *Message) putUint8(v uint8) {
 	b := m.bufferForPut(1)
 	defer b.Advance(1)
 
 	b.Bytes[b.Offset] = v
 }
 
-func (m *Message) PutUint16(v uint16) {
+// Append a 2-byte word to the message.
+func (m *Message) putUint16(v uint16) {
 	b := m.bufferForPut(2)
 	defer b.Advance(2)
 
 	binary.LittleEndian.PutUint16(b.Bytes[b.Offset:], v)
 }
 
-func (m *Message) PutUint32(v uint32) {
+// Append a 4-byte word to the message.
+func (m *Message) putUint32(v uint32) {
 	b := m.bufferForPut(4)
 	defer b.Advance(4)
 
 	binary.LittleEndian.PutUint32(b.Bytes[b.Offset:], v)
 }
 
-func (m *Message) PutUint64(v uint64) {
+// Append an 8-byte word to the message.
+func (m *Message) putUint64(v uint64) {
 	b := m.bufferForPut(8)
 	defer b.Advance(8)
 
 	binary.LittleEndian.PutUint64(b.Bytes[b.Offset:], v)
 }
 
-func (m *Message) PutInt64(v int64) {
+// Append a signed 8-byte word to the message.
+func (m *Message) putInt64(v int64) {
 	b := m.bufferForPut(8)
 	defer b.Advance(8)
 
 	binary.LittleEndian.PutUint64(b.Bytes[b.Offset:], uint64(v))
 }
 
-func (m *Message) PutNamedValues(values NamedValues) {
+// Append a floating point number to the message.
+func (m *Message) putFloat64(v float64) {
+	b := m.bufferForPut(8)
+	defer b.Advance(8)
+
+	binary.LittleEndian.PutUint64(b.Bytes[b.Offset:], math.Float64bits(v))
+}
+
+// Encode the given driver values as binding parameters.
+func (m *Message) putNamedValues(values NamedValues) {
 	n := uint8(len(values)) // N of params
 	if n == 0 {
 		return
 	}
 
-	m.PutUint8(n)
+	m.putUint8(n)
 
 	for i := range values {
 		if values[i].Ordinal != i+1 {
@@ -117,19 +175,19 @@ func (m *Message) PutNamedValues(values NamedValues) {
 
 		switch values[i].Value.(type) {
 		case int64:
-			m.PutUint8(bindings.Integer)
+			m.putUint8(bindings.Integer)
 		case float64:
-			m.PutUint8(bindings.Float)
+			m.putUint8(bindings.Float)
 		case bool:
-			m.PutUint8(bindings.Integer)
+			m.putUint8(bindings.Boolean)
 		case []byte:
-			m.PutUint8(bindings.Blob)
+			m.putUint8(bindings.Blob)
 		case string:
-			m.PutUint8(bindings.Text)
+			m.putUint8(bindings.Text)
 		case nil:
-			m.PutUint8(bindings.Null)
+			m.putUint8(bindings.Null)
 		case time.Time:
-			m.PutUint8(bindings.ISO8601)
+			m.putUint8(bindings.ISO8601)
 		default:
 			panic("unsupported value type")
 		}
@@ -145,20 +203,24 @@ func (m *Message) PutNamedValues(values NamedValues) {
 	for i := range values {
 		switch v := values[i].Value.(type) {
 		case int64:
-			m.PutInt64(v)
+			m.putInt64(v)
 		case float64:
-			panic("todo")
+			m.putFloat64(v)
 		case bool:
-			panic("todo")
+			if v {
+				m.putUint64(1)
+			} else {
+				m.putUint64(0)
+			}
 		case []byte:
-			panic("todo")
+			m.putBlob(v)
 		case string:
-			m.PutString(v)
+			m.putString(v)
 		case nil:
-			m.PutInt64(0)
+			m.putInt64(0)
 		case time.Time:
 			timestamp := v.Format(iso8601Formats[0])
-			m.PutString(timestamp)
+			m.putString(timestamp)
 		default:
 			panic("unsupported value type")
 		}
@@ -166,7 +228,9 @@ func (m *Message) PutNamedValues(values NamedValues) {
 
 }
 
-func (m *Message) PutHeader(mtype uint8) {
+// Finalize the message by setting the message type and the number
+// of words in the body (calculated from the body size).
+func (m *Message) putHeader(mtype uint8) {
 	if m.body1.Offset <= 0 {
 		panic("static offset is not positive")
 	}
@@ -182,7 +246,7 @@ func (m *Message) PutHeader(mtype uint8) {
 	m.words = uint32(m.body1.Offset) / messageWordSize
 
 	if m.body2.Bytes == nil {
-		m.flushHeader()
+		m.finalize()
 		return
 	}
 
@@ -196,10 +260,10 @@ func (m *Message) PutHeader(mtype uint8) {
 
 	m.words += uint32(m.body2.Offset) / messageWordSize
 
-	m.flushHeader()
+	m.finalize()
 }
 
-func (m *Message) flushHeader() {
+func (m *Message) finalize() {
 	if m.words == 0 {
 		panic("empty message body")
 	}
@@ -234,11 +298,13 @@ func (m *Message) bufferForPut(size int) *buffer {
 	return &m.body1
 }
 
-func (m *Message) GetHeader() (uint8, uint8) {
+// Return the message type and its flags.
+func (m *Message) getHeader() (uint8, uint8) {
 	return m.mtype, m.flags
 }
 
-func (m *Message) GetString() string {
+// Read a string from the message body.
+func (m *Message) getString() string {
 	b := m.bufferForGet()
 
 	index := bytes.IndexByte(b.Bytes[b.Offset:], 0)
@@ -282,42 +348,56 @@ func (m *Message) GetString() string {
 	return s
 }
 
-func (m *Message) GetUint8() uint8 {
+// Read a byte from the message body.
+func (m *Message) getUint8() uint8 {
 	b := m.bufferForGet()
 	defer b.Advance(1)
 
 	return b.Bytes[b.Offset]
 }
 
-func (m *Message) GetUint16() uint16 {
+// Read a 2-byte word from the message body.
+func (m *Message) getUint16() uint16 {
 	b := m.bufferForGet()
 	defer b.Advance(2)
 
 	return binary.LittleEndian.Uint16(b.Bytes[b.Offset:])
 }
 
-func (m *Message) GetUint32() uint32 {
+// Read a 4-byte word from the message body.
+func (m *Message) getUint32() uint32 {
 	b := m.bufferForGet()
 	defer b.Advance(4)
 
 	return binary.LittleEndian.Uint32(b.Bytes[b.Offset:])
 }
 
-func (m *Message) GetUint64() uint64 {
+// Read reads an 8-byte word from the message body.
+func (m *Message) getUint64() uint64 {
 	b := m.bufferForGet()
 	defer b.Advance(8)
 
 	return binary.LittleEndian.Uint64(b.Bytes[b.Offset:])
 }
 
-func (m *Message) GetInt64() int64 {
+// Read a signed 8-byte word from the message body.
+func (m *Message) getInt64() int64 {
 	b := m.bufferForGet()
 	defer b.Advance(8)
 
 	return int64(binary.LittleEndian.Uint64(b.Bytes[b.Offset:]))
 }
 
-func (m *Message) GetServers() (servers Servers) {
+// Read a floating point number from the message body.
+func (m *Message) getFloat64() float64 {
+	b := m.bufferForGet()
+	defer b.Advance(8)
+
+	return math.Float64frombits(binary.LittleEndian.Uint64(b.Bytes[b.Offset:]))
+}
+
+// Decode a list of server objects from the message body.
+func (m *Message) getServers() (servers Servers) {
 	defer func() {
 		err := recover()
 		if err != errMessageEOF {
@@ -328,27 +408,29 @@ func (m *Message) GetServers() (servers Servers) {
 
 	for {
 		server := bindings.ServerInfo{
-			ID:      m.GetUint64(),
-			Address: m.GetString(),
+			ID:      m.getUint64(),
+			Address: m.getString(),
 		}
 		servers = append(servers, server)
 		m.bufferForGet()
 	}
 }
 
-func (m *Message) GetResult() Result {
+// Decode a statement result object from the message body.
+func (m *Message) getResult() Result {
 	return Result{
-		LastInsertID: m.GetUint64(),
-		RowsAffected: m.GetUint64(),
+		LastInsertID: m.getUint64(),
+		RowsAffected: m.getUint64(),
 	}
 }
 
-func (m *Message) GetRows() Rows {
+// Decode a query result set object from the message body.
+func (m *Message) getRows() Rows {
 	// Read the column count and column names.
-	columns := make([]string, m.GetUint64())
+	columns := make([]string, m.getUint64())
 
 	for i := range columns {
-		columns[i] = m.GetString()
+		columns[i] = m.getString()
 	}
 
 	rows := Rows{
@@ -371,16 +453,19 @@ func (m *Message) bufferForGet() *buffer {
 	return &m.body1
 }
 
+// Result holds the result of a statement.
 type Result struct {
 	LastInsertID uint64
 	RowsAffected uint64
 }
 
+// Rows holds a result set encoded in a message body.
 type Rows struct {
 	Columns []string
 	message *Message
 }
 
+// Next returns the next row in the result set.
 func (r *Rows) Next(dest []driver.Value) error {
 	types := make([]uint8, len(r.Columns))
 
@@ -395,7 +480,7 @@ func (r *Rows) Next(dest []driver.Value) error {
 	headerSize := (headerBits + padBits) / messageWordBits * messageWordSize
 
 	for i := 0; i < headerSize; i++ {
-		slot := r.message.GetUint8()
+		slot := r.message.getUint8()
 
 		if slot == 0xff {
 			// Rows EOF marker
@@ -422,21 +507,21 @@ func (r *Rows) Next(dest []driver.Value) error {
 	for i := range types {
 		switch types[i] {
 		case bindings.Integer:
-			dest[i] = r.message.GetInt64()
+			dest[i] = r.message.getInt64()
 		case bindings.Float:
-			panic("todo")
+			dest[i] = r.message.getFloat64()
 		case bindings.Blob:
 			panic("todo")
 		case bindings.Text:
-			dest[i] = r.message.GetString()
+			dest[i] = r.message.getString()
 		case bindings.Null:
-			r.message.GetUint64()
+			r.message.getUint64()
 			dest[i] = nil
 		case bindings.UnixTime:
-			timestamp := time.Unix(r.message.GetInt64(), 0)
+			timestamp := time.Unix(r.message.getInt64(), 0)
 			dest[i] = timestamp
 		case bindings.ISO8601:
-			value := r.message.GetString()
+			value := r.message.getString()
 			var t time.Time
 			var timeVal time.Time
 			var err error
@@ -452,14 +537,17 @@ func (r *Rows) Next(dest []driver.Value) error {
 			}
 			t = t.In(time.Local)
 			dest[i] = t
+		case bindings.Boolean:
+			dest[i] = r.message.getInt64() != 0
 		default:
-			//panic("unknown data type")
+			panic("unknown data type")
 		}
 	}
 
 	return nil
 }
 
+// Close the result set and reset the underlying message.
 func (r *Rows) Close() {
 	r.message.Reset()
 }
