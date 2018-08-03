@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/CanonicalLtd/go-dqlite/internal/logging"
@@ -56,7 +57,8 @@ func TestServer_Leader(t *testing.T) {
 	conn := newClient(t, listener)
 
 	// Make a Leader request
-	makeClientRequest(t, conn, bindings.RequestLeader)
+	buf := makeClientRequest(t, conn, bindings.RequestLeader)
+	assert.Equal(t, uint8(2), buf[0])
 
 	require.NoError(t, conn.Close())
 }
@@ -221,7 +223,7 @@ func runServer(t *testing.T, server *bindings.Server, listener net.Listener) fun
 }
 
 // Perform a client request.
-func makeClientRequest(t *testing.T, conn net.Conn, kind byte) {
+func makeClientRequest(t *testing.T, conn net.Conn, kind byte) []byte {
 	t.Helper()
 
 	// Number of words
@@ -238,7 +240,10 @@ func makeClientRequest(t *testing.T, conn net.Conn, kind byte) {
 	require.Equal(t, 8, n)
 
 	// Read the response
+	conn.SetDeadline(time.Now().Add(250 * time.Millisecond))
 	buf := make([]byte, 64)
 	_, err = conn.Read(buf)
 	require.NoError(t, err)
+
+	return buf
 }
