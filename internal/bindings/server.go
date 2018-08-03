@@ -2,6 +2,9 @@ package bindings
 
 /*
 #include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
 
 #include <dqlite.h>
 #include <sqlite3.h>
@@ -14,7 +17,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync"
 	"unsafe"
 
 	"github.com/pkg/errors"
@@ -79,10 +81,6 @@ func NewServer(cluster *Cluster) (*Server, error) {
 
 // Close the server releasing all used resources.
 func (s *Server) Close() {
-	for _, conn := range serverConns[s] {
-		conn.Close()
-	}
-
 	server := (*C.dqlite_server)(unsafe.Pointer(s))
 
 	C.dqlite_server_destroy(server)
@@ -158,32 +156,30 @@ func (s *Server) Handle(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
-	//conn.Close()
+	fd1 := C.int(file.Fd())
 
-	fd := file.Fd()
+	// Duplicate the file descriptor, in order to prevent Go's finalizer to
+	// close it.
+	fd2 := C.dup(fd1)
+	if fd2 < 0 {
+		return fmt.Errorf("failed to dup socket fd")
+	}
+
+	conn.Close()
 
 	var errmsg *C.char
 
-	rc := C.dqlite_server_handle(server, C.int(fd), &errmsg)
+	rc := C.dqlite_server_handle(server, fd2, &errmsg)
 	if rc != 0 {
+		C.close(fd2)
 		defer C.sqlite3_free(unsafe.Pointer(errmsg))
 		if rc == C.DQLITE_STOPPED {
 			return ErrServerStopped
 		}
 		return fmt.Errorf(C.GoString(errmsg))
 	}
-
-	// This is a hack to prevent the GC from closing the file.
-	serverConnsMu.Lock()
-	defer serverConnsMu.Unlock()
-
-	files, ok := serverConns[s]
-	if !ok {
-		files = make([]*os.File, 0)
-		serverConns[s] = files
-	}
-	files = append(files, file)
 
 	return nil
 }
@@ -193,9 +189,6 @@ func (s *Server) Handle(conn net.Conn) error {
 type fileConn interface {
 	File() (*os.File, error)
 }
-
-var serverConnsMu sync.Mutex
-var serverConns = map[*Server][]*os.File{}
 
 // Stop the server.
 func (s *Server) Stop() error {
