@@ -23,6 +23,8 @@ type Server struct {
 	runCh       chan error       // Receives the low-level C server return code
 	acceptCh    chan error       // Receives connection handling errors
 	replication *bindings.WalReplication
+	logger      *bindings.Logger
+	cluster     *bindings.Cluster
 }
 
 // ServerOption can be used to tweak server parameters.
@@ -50,24 +52,24 @@ func NewServer(raft *raft.Raft, registry *Registry, listener net.Listener, optio
 		option(o)
 	}
 
-	methods := replication.NewMethods(registry.registry, raft)
-
-	replication, err := bindings.NewWalReplication(registry.name, methods)
+	replication, err := newWalReplication(registry, raft)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to register WAL replication")
+		return nil, err
 	}
 
-	cluster := &cluster{
-		raft:     raft,
-		registry: registry.registry,
-		provider: o.AddressProvider,
+	cluster, err := newCluster(registry, raft, o.AddressProvider)
+	if err != nil {
+		return nil, err
 	}
 
 	server, err := bindings.NewServer(cluster)
 	if err != nil {
 		return nil, err
 	}
-	server.SetLogFunc(o.Log)
+
+	logger := bindings.NewLogger(o.Log)
+
+	server.SetLogger(logger)
 	server.SetVfs(registry.name)
 	server.SetWalReplication(registry.name)
 
@@ -78,6 +80,8 @@ func NewServer(raft *raft.Raft, registry *Registry, listener net.Listener, optio
 		listener:    listener,
 		runCh:       make(chan error),
 		acceptCh:    make(chan error, 1),
+		logger:      logger,
+		cluster:     cluster,
 		replication: replication,
 	}
 
@@ -90,6 +94,27 @@ func NewServer(raft *raft.Raft, registry *Registry, listener net.Listener, optio
 	go s.acceptLoop()
 
 	return s, nil
+}
+
+func newWalReplication(registry *Registry, raft *raft.Raft) (*bindings.WalReplication, error) {
+	methods := replication.NewMethods(registry.registry, raft)
+
+	replication, err := bindings.NewWalReplication(registry.name, methods)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to register WAL replication")
+	}
+
+	return replication, nil
+}
+
+func newCluster(registry *Registry, raft *raft.Raft, provider raft.ServerAddressProvider) (*bindings.Cluster, error) {
+	methods := &cluster{
+		raft:     raft,
+		registry: registry.registry,
+		provider: provider,
+	}
+
+	return bindings.NewCluster(methods)
 }
 
 // Hold configuration options for a dqlite server.
@@ -191,6 +216,8 @@ func (s *Server) Close() error {
 
 	s.server.Close()
 
+	s.logger.Close()
+	s.cluster.Close()
 	s.replication.Close()
 	s.registry.Close()
 

@@ -693,7 +693,7 @@ func (f *FSM) openFollower(filename string) error {
 		return errors.Wrap(err, "failed to set WAL mode")
 	}
 
-	err = conn.ConfigNoCkptOnClose(false)
+	_, err = conn.ConfigNoCkptOnClose(true)
 	if err != nil {
 		return errors.Wrap(err, "failed to disable checkpoints on close")
 	}

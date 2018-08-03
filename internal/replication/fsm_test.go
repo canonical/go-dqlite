@@ -340,7 +340,7 @@ func TestFSM_Snapshot(t *testing.T) {
 	require.NoError(t, err)
 	err = conn.Exec("PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
 	require.NoError(t, err)
-	err = conn.ConfigNoCkptOnClose(true)
+	_, err = conn.ConfigNoCkptOnClose(true)
 	require.NoError(t, err)
 	err = conn.Exec("CREATE TABLE foo (n INT); INSERT INTO foo VALUES(1)")
 	require.NoError(t, err)
@@ -493,7 +493,7 @@ func newLeaderConn(t *testing.T, vfs string, replication string) (*bindings.Conn
 	err = conn.Exec("PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
 	require.NoError(t, err)
 
-	err = conn.ConfigNoCkptOnClose(true)
+	_, err = conn.ConfigNoCkptOnClose(true)
 	require.NoError(t, err)
 
 	err = conn.WalReplicationLeader(replication)

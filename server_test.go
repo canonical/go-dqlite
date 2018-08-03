@@ -115,7 +115,7 @@ func newServer(t *testing.T, listener net.Listener) (*dqlite.Server, func()) {
 		return transport
 	}))
 
-	log := testingLogFunc(t)
+	log := logging.Test(t)
 
 	server, err := dqlite.NewServer(
 		r, registry, listener, dqlite.WithServerLogFunc(log))
