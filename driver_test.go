@@ -16,7 +16,6 @@ package dqlite_test
 
 import (
 	"database/sql/driver"
-	"fmt"
 	"io"
 	"testing"
 
@@ -207,19 +206,12 @@ func newDriver(t *testing.T) (*dqlite.Driver, func()) {
 
 	store := newStore(t, address)
 
-	log := testingLogFunc(t)
+	log := logging.Test(t)
+
 	driver, err := dqlite.NewDriver(store, dqlite.WithLogFunc(log))
 	require.NoError(t, err)
 
 	return driver, cleanup
-}
-
-func testingLogFunc(t *testing.T) dqlite.LogFunc {
-	return func(l logging.Level, format string, a ...interface{}) {
-		format = fmt.Sprintf("%s: %s", l.String(), format)
-		t.Logf(format, a...)
-	}
-
 }
 
 /*

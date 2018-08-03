@@ -19,6 +19,8 @@ func TestNewWalReplication(t *testing.T) {
 	replication, err := bindings.NewWalReplication("test", methods)
 	require.NoError(t, err)
 
+	assert.Equal(t, "test", replication.Name())
+
 	err = replication.Close()
 	require.NoError(t, err)
 }
@@ -41,11 +43,10 @@ func TestNewWalReplication_AlreadyRegistered(t *testing.T) {
 }
 
 func TestConn_WalReplicationLeader_Trampolines(t *testing.T) {
-	conn, cleanup := newConn(t)
-	defer cleanup()
+	defer bindings.AssertNoMemoryLeaks(t)
 
-	err := conn.Exec("PRAGMA journal_mode=wal")
-	require.NoError(t, err)
+	conn, cleanup := newConnVolatileWal(t)
+	defer cleanup()
 
 	methods := &countWalReplication{}
 
@@ -66,27 +67,21 @@ func TestConn_WalReplicationLeader_Trampolines(t *testing.T) {
 }
 
 func TestConn_WalReplicationFollower_Frames(t *testing.T) {
-	vfs1, err := bindings.NewVfs("test1")
-	require.NoError(t, err)
+	defer bindings.AssertNoMemoryLeaks(t)
 
-	defer vfs1.Close()
+	vfs1, cleanup := newVfsWithName(t, "test1")
+	defer cleanup()
 
-	vfs2, err := bindings.NewVfs("test2")
-	require.NoError(t, err)
+	vfs2, cleanup := newVfsWithName(t, "test2")
+	defer cleanup()
 
-	defer vfs2.Close()
+	leader, cleanup := newConnWithVfs(t, "test.db", vfs1.Name())
+	defer cleanup()
 
-	leader, err := bindings.Open("test.db", vfs1.Name())
-	require.NoError(t, err)
+	follower, cleanup := newConnWithVfs(t, "test.db", vfs2.Name())
+	defer cleanup()
 
-	defer leader.Close()
-
-	follower, err := bindings.Open("test.db", vfs2.Name())
-	require.NoError(t, err)
-
-	defer follower.Close()
-
-	err = leader.Exec("PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
+	err := leader.Exec("PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
 	require.NoError(t, err)
 
 	err = follower.Exec("PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
@@ -108,6 +103,62 @@ func TestConn_WalReplicationFollower_Frames(t *testing.T) {
 	require.NoError(t, err)
 
 	err = leader.Exec("CREATE TABLE foo (n INT)")
+	require.NoError(t, err)
+}
+
+func TestConn_WalReplicationFollower_Undo(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
+	vfs1, cleanup := newVfsWithName(t, "test1")
+	defer cleanup()
+
+	vfs2, cleanup := newVfsWithName(t, "test2")
+	defer cleanup()
+
+	leader, cleanup := newConnWithVfs(t, "test.db", vfs1.Name())
+	defer cleanup()
+
+	follower, cleanup := newConnWithVfs(t, "test.db", vfs2.Name())
+	defer cleanup()
+
+	err := leader.Exec("PRAGMA page_size=512; PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
+	require.NoError(t, err)
+
+	// Lower the cache size.
+	err = leader.Exec("PRAGMA cache_size = 1")
+	require.NoError(t, err)
+
+	err = follower.Exec("PRAGMA page_size=512; PRAGMA synchronous=OFF; PRAGMA journal_mode=wal")
+	require.NoError(t, err)
+
+	methods := &directWalReplication{
+		follower: follower,
+	}
+
+	replication, err := bindings.NewWalReplication("test", methods)
+	require.NoError(t, err)
+
+	defer replication.Close()
+
+	err = leader.WalReplicationLeader("test")
+	require.NoError(t, err)
+
+	err = follower.WalReplicationFollower()
+	require.NoError(t, err)
+
+	err = leader.Exec("CREATE TABLE foo (n INT)")
+	require.NoError(t, err)
+
+	// Insert a lot of rows to trigger a page cache flush to the WAL.
+	err = leader.Exec("BEGIN")
+	require.NoError(t, err)
+
+	for i := 0; i < 256; i++ {
+		err = leader.Exec("INSERT INTO foo(n) VALUES(1)")
+		require.NoError(t, err)
+	}
+
+	err = leader.Exec("ROLLBACK")
 	require.NoError(t, err)
 }
 

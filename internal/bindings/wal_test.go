@@ -9,16 +9,12 @@ import (
 )
 
 func TestConn_WalCheckpoint(t *testing.T) {
-	conn, cleanup := newConn(t)
+	defer bindings.AssertNoMemoryLeaks(t)
+
+	conn, cleanup := newConnVolatileWal(t)
 	defer cleanup()
 
-	err := conn.Exec("PRAGMA synchronous=OFF")
-	require.NoError(t, err)
-
-	err = conn.Exec("PRAGMA journal_mode=wal")
-	require.NoError(t, err)
-
-	err = conn.Exec("CREATE TABLE foo (n INT)")
+	err := conn.Exec("CREATE TABLE foo (n INT)")
 	require.NoError(t, err)
 
 	err = conn.Exec("INSERT INTO foo(n) VALUES(1)")

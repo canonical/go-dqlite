@@ -19,4 +19,5 @@ const (
 const (
 	UnixTime = C.DQLITE_UNIXTIME
 	ISO8601  = C.DQLITE_ISO8601
+	Boolean  = C.DQLITE_BOOLEAN
 )

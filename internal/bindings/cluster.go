@@ -7,155 +7,72 @@ package bindings
 #include <dqlite.h>
 
 // Go land callbacks for dqlite_cluster methods.
-char *clusterLeaderCb(int handle);
-int clusterServersCb(int handle, dqlite_server_info **servers);
-void clusterRegisterCb(int handle, sqlite3 *db);
-void clusterUnregisterCb(int handle, sqlite3 *db);
-int clusterBarrierCb(int handle);
-int clusterRecoverCb(int handle, uint64_t txToken);
-int clusterCheckpointCb(int handle, sqlite3 *db);
-
-// Custom state used as context for dqlite_cluster trampoline objects.
-typedef struct dqlite__cluster_state {
-  int    handle;               // Entry of the Go clusterHandles map
-  char  *leader;               // Hold the last string returned by xLeader.
-  dqlite_server_info *servers; // Hold the last array returned by xServers.
-} dqlite__cluster_state;
-
-// Allocate a trampoline dqlite_cluster object whose methods forward calls to
-// Go functions.
-static dqlite_cluster *dqlite__cluster_alloc() {
-  dqlite_cluster *c;
-  struct dqlite__cluster_state *state;
-
-  c = sqlite3_malloc(sizeof *c);
-  if (c == NULL) {
-    return NULL;
-  }
-
-  state = sqlite3_malloc(sizeof *state);
-  if (state == NULL) {
-    sqlite3_free(c);
-    return NULL;
-  }
-
-  c->ctx = state;
-
-  return c;
-}
+char *clusterLeaderCb(uintptr_t handle);
+int clusterServersCb(uintptr_t handle, dqlite_server_info **servers);
+void clusterRegisterCb(uintptr_t handle, sqlite3 *db);
+void clusterUnregisterCb(uintptr_t handle, sqlite3 *db);
+int clusterBarrierCb(uintptr_t handle);
+int clusterRecoverCb(uintptr_t handle, uint64_t txToken);
+int clusterCheckpointCb(uintptr_t handle, sqlite3 *db);
 
 // Implementation of xLeader.
 static const char* dqlite__cluster_leader(void *ctx) {
-  struct dqlite__cluster_state *state;
-  char *leader;
-
   assert(ctx != NULL);
 
-  state = ctx;
-
-  // Free the previous value.
-  if (state->leader != NULL) {
-    free(state->leader);
-  }
-
-  // Save the C string allocated by Go because we'll want to
-  // free it when this cluster instance gets destroyed.
-  state->leader = clusterLeaderCb(state->handle);
-
-  return (const char*)state->leader;
+  return clusterLeaderCb((uintptr_t)ctx);
 }
 
 // Implementation of xServers.
 static int dqlite__cluster_servers(void *ctx, dqlite_server_info *servers[]) {
-  struct dqlite__cluster_state *state;
-  int err;
-
   assert(ctx != NULL);
 
-  state= ctx;
-
-  // Free the previous value.
-  if (state->servers != NULL) {
-    free(state->servers);
-  }
-
-  // Save the C string array allocated by Go because we'll want to
-  // free it when this cluster instance gets destroyed.
-  err = clusterServersCb(state->handle, &state->servers);
-
-  *servers = state->servers;
-
-  return err;
+  return clusterServersCb((uintptr_t)ctx, servers);
 }
 
 // Implementation of xRegister.
 static void dqlite__cluster_register(void *ctx, sqlite3 *db) {
-  struct dqlite__cluster_state *state;
-
   assert(ctx != NULL);
 
-  state = ctx;
-
-  clusterRegisterCb(state->handle, db);
+  clusterRegisterCb((uintptr_t)ctx, db);
 }
 
 // Implementation of xUnregister.
 static void dqlite__cluster_unregister(void *ctx, sqlite3 *db) {
-  struct dqlite__cluster_state *state;
-
   assert(ctx != NULL);
 
-  state = ctx;
-
-  clusterUnregisterCb(state->handle, db);
+  clusterUnregisterCb((uintptr_t)ctx, db);
 }
 
 // Implementation of xBarrier.
 static int dqlite__cluster_barrier(void *ctx) {
-  struct dqlite__cluster_state *state;
-
   assert(ctx != NULL);
 
-  state = ctx;
-
-  return clusterBarrierCb(state->handle);
+  return clusterBarrierCb((uintptr_t)ctx);
 }
 
 // Implementation of of xRecover.
 static int dqlite__cluster_recover(void *ctx, uint64_t tx_token) {
-  struct dqlite__cluster_state *state;
-
   assert(ctx != NULL);
 
-  state = ctx;
-
-  return clusterRecoverCb(state->handle, tx_token);
+  return clusterRecoverCb((uintptr_t)ctx, tx_token);
 }
 
 // Implementation of of xCheckpoint.
 static int dqlite__cluster_checkpoint(void *ctx, sqlite3 *db) {
-  struct dqlite__cluster_state *state;
-
   assert(ctx != NULL);
 
-  state = ctx;
-
-  return clusterCheckpointCb(state->handle, db);
+  return clusterCheckpointCb((uintptr_t)ctx, db);
 }
 
-// Initializer.
-static void dqlite__cluster_init(dqlite_cluster *c, int handle)
+// Constructor.
+static dqlite_cluster *dqlite__cluster_create(uintptr_t handle)
 {
-  struct dqlite__cluster_state *state;
+  dqlite_cluster *c = sqlite3_malloc(sizeof *c);
+  if (c == NULL) {
+    return NULL;
+  }
 
-  assert(c != NULL);
-
-  state = c->ctx;
-
-  state->handle = handle;
-  state->leader = NULL;
-  state->servers = NULL;
-
+  c->ctx = (void*)handle;
   c->xLeader = dqlite__cluster_leader;
   c->xServers = dqlite__cluster_servers;
   c->xRegister = dqlite__cluster_register;
@@ -163,34 +80,41 @@ static void dqlite__cluster_init(dqlite_cluster *c, int handle)
   c->xBarrier = dqlite__cluster_barrier;
   c->xRecover = dqlite__cluster_recover;
   c->xCheckpoint = dqlite__cluster_checkpoint;
+
+  return c;
 }
-
-// Destructor.
-static void dqlite__cluster_free(dqlite_cluster *c)
-{
-  struct dqlite__cluster_state *state;
-
-  assert(c != NULL);
-
-  state = c->ctx;
-
-  if (state->leader != NULL) {
-    free(state->leader);
-  }
-
-  if (state->servers != NULL) {
-    free(state->servers);
-  }
-
-  sqlite3_free(c->ctx);
-  sqlite3_free(c);
-}
-
 */
 import "C"
 import (
 	"unsafe"
 )
+
+// Cluster is a Go wrapper around the associated dqlite's C type.
+type Cluster C.dqlite_cluster
+
+// NewCluster creates a new Cluster object set with the given method hooks..
+func NewCluster(methods ClusterMethods) (*Cluster, error) {
+	handle := clusterMethodsSerial
+	clusterMethodsIndex[handle] = methods
+	clusterMethodsSerial++
+
+	cluster := C.dqlite__cluster_create(handle)
+	if cluster == nil {
+		return nil, codeToError(C.SQLITE_NOMEM)
+	}
+
+	return (*Cluster)(unsafe.Pointer(cluster)), nil
+}
+
+// Close releases all memory associated with the cluster object.
+func (c *Cluster) Close() {
+	cluster := (*C.dqlite_cluster)(unsafe.Pointer(c))
+
+	handle := (C.uintptr_t)(uintptr(cluster.ctx))
+	delete(clusterMethodsIndex, handle)
+
+	C.sqlite3_free(unsafe.Pointer(cluster))
+}
 
 // ServerInfo is the Go equivalent of dqlite_server_info.
 type ServerInfo struct {
@@ -198,8 +122,9 @@ type ServerInfo struct {
 	Address string
 }
 
-// Cluster implements the interface required by dqlite_cluster.
-type Cluster interface {
+// ClusterMethods implements the interface required by the various hooks
+// dqlite_cluster.
+type ClusterMethods interface {
 	// Return the address of the current cluster leader, if any. If not
 	// empty, the address string must a be valid network IP or hostname,
 	// that clients can use to connect to a dqlite service.
@@ -226,59 +151,24 @@ type Cluster interface {
 	Checkpoint(*Conn) error
 }
 
-// Map C.int to Cluster instances to avoid passing Go pointers to C.
+// Map uintptr to Cluster instances to avoid passing Go pointers to C.
 //
 // We do not protect this map with a lock since typically just one long-lived
 // Cluster instance should be registered (except for unit tests).
-var clusterHandlesSerial C.int
-var clusterHandles = map[C.int]Cluster{}
-
-func clusterRegister(cluster Cluster) C.int {
-	handle := clusterHandlesSerial
-
-	clusterHandles[handle] = cluster
-	clusterHandlesSerial++
-
-	return handle
-}
-
-func clusterUnregister(handle C.int) {
-	delete(clusterHandles, handle)
-}
-
-// Create a new dqlite_cluster C object for forwarding calls to a given Go
-// implementation.
-func clusterAlloc() *C.dqlite_cluster {
-	return C.dqlite__cluster_alloc()
-}
-
-// Initialize a dqlite_cluster, making forward methods to the Go Cluster
-// implementation associated with the given handle.
-func clusterInit(c *C.dqlite_cluster, handle C.int) {
-	C.dqlite__cluster_init(c, handle)
-}
-
-// Returns the handle associated with the given dqlite_cluster object.
-func clusterHandle(c *C.dqlite_cluster) C.int {
-	state := (*C.dqlite__cluster_state)(c.ctx)
-	return state.handle
-}
-
-// Release resources associated with the given C cluster object.
-func clusterFree(cluster *C.dqlite_cluster) {
-	C.dqlite__cluster_free(cluster)
-}
+var clusterMethodsSerial C.uintptr_t = 100
+var clusterMethodsIndex = map[C.uintptr_t]ClusterMethods{}
 
 //export clusterLeaderCb
-func clusterLeaderCb(handle C.int) *C.char {
-	cluster := clusterHandles[handle]
+func clusterLeaderCb(handle C.uintptr_t) *C.char {
+	cluster := clusterMethodsIndex[handle]
 
+	// It's responsibility of calling code to free() this string.
 	return C.CString(cluster.Leader())
 }
 
 //export clusterServersCb
-func clusterServersCb(handle C.int, out **C.dqlite_server_info) C.int {
-	cluster := clusterHandles[handle]
+func clusterServersCb(handle C.uintptr_t, out **C.dqlite_server_info) C.int {
+	cluster := clusterMethodsIndex[handle]
 
 	servers, err := cluster.Servers()
 	if err != nil {
@@ -288,6 +178,7 @@ func clusterServersCb(handle C.int, out **C.dqlite_server_info) C.int {
 
 	n := C.size_t(len(servers)) + 1
 
+	// It's responsibility of calling code to free() this array of servers.
 	size := unsafe.Sizeof(C.dqlite_server_info{})
 	*out = (*C.dqlite_server_info)(C.malloc(n * C.size_t(size)))
 
@@ -311,22 +202,20 @@ func clusterServersCb(handle C.int, out **C.dqlite_server_info) C.int {
 }
 
 //export clusterRegisterCb
-func clusterRegisterCb(handle C.int, db *C.sqlite3) {
-	cluster := clusterHandles[handle]
-
+func clusterRegisterCb(handle C.uintptr_t, db *C.sqlite3) {
+	cluster := clusterMethodsIndex[handle]
 	cluster.Register((*Conn)(unsafe.Pointer(db)))
 }
 
 //export clusterUnregisterCb
-func clusterUnregisterCb(handle C.int, db *C.sqlite3) {
-	cluster := clusterHandles[handle]
-
+func clusterUnregisterCb(handle C.uintptr_t, db *C.sqlite3) {
+	cluster := clusterMethodsIndex[handle]
 	cluster.Unregister((*Conn)(unsafe.Pointer(db)))
 }
 
 //export clusterBarrierCb
-func clusterBarrierCb(handle C.int) C.int {
-	cluster := clusterHandles[handle]
+func clusterBarrierCb(handle C.uintptr_t) C.int {
+	cluster := clusterMethodsIndex[handle]
 
 	if err := cluster.Barrier(); err != nil {
 		return C.int(ErrorCode(err))
@@ -336,8 +225,8 @@ func clusterBarrierCb(handle C.int) C.int {
 }
 
 //export clusterRecoverCb
-func clusterRecoverCb(handle C.int, txToken C.uint64_t) C.int {
-	cluster := clusterHandles[handle]
+func clusterRecoverCb(handle C.uintptr_t, txToken C.uint64_t) C.int {
+	cluster := clusterMethodsIndex[handle]
 
 	err := cluster.Recover(uint64(txToken))
 	if err != nil {
@@ -348,8 +237,8 @@ func clusterRecoverCb(handle C.int, txToken C.uint64_t) C.int {
 }
 
 //export clusterCheckpointCb
-func clusterCheckpointCb(handle C.int, db *C.sqlite3) C.int {
-	cluster := clusterHandles[handle]
+func clusterCheckpointCb(handle C.uintptr_t, db *C.sqlite3) C.int {
+	cluster := clusterMethodsIndex[handle]
 
 	err := cluster.Checkpoint((*Conn)(unsafe.Pointer(db)))
 	if err != nil {

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/CanonicalLtd/go-dqlite"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/CanonicalLtd/raft-test"
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
@@ -303,7 +304,7 @@ func newDB(t *testing.T) (*sql.DB, *rafttest.Control, func()) {
 
 	require.NoError(t, store.Set(context.Background(), servers))
 
-	log := testingLogFunc(t)
+	log := logging.Test(t)
 	driver, err := dqlite.NewDriver(store, dqlite.WithLogFunc(log))
 	require.NoError(t, err)
 
@@ -347,7 +348,7 @@ func newServers(t *testing.T, listeners []net.Listener) (*rafttest.Control, func
 		i, err := strconv.Atoi(string(id))
 		require.NoError(t, err)
 
-		log := testingLogFunc(t)
+		log := logging.Test(t)
 
 		server, err := dqlite.NewServer(
 			r, registries[i], listeners[i],

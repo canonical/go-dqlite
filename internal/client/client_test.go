@@ -12,21 +12,16 @@ import (
 )
 
 func TestClient_Heartbeat(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	c, cleanup := newClient(t)
 	defer cleanup()
 
-	request := client.Message{}
-	request.Init(512)
-	response := client.Message{}
-	response.Init(512)
+	request, response := newMessagePair(512, 512)
 
 	client.EncodeHeartbeat(&request, uint64(time.Now().Unix()))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
-	defer cancel()
-
-	err := c.Call(ctx, &request, &response)
-	require.NoError(t, err)
+	makeClientCall(t, c, &request, &response)
 
 	servers, err := client.DecodeServers(&response)
 	require.NoError(t, err)
@@ -38,23 +33,19 @@ func TestClient_Heartbeat(t *testing.T) {
 		servers)
 }
 
-func TestClient_LargeMessage(t *testing.T) {
+// Test sending a request that needs to be written into the dynamic buffer.
+func TestClient_RequestWithDynamicBuffer(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
 	c, cleanup := newClient(t)
 	defer cleanup()
 
-	request := client.Message{}
-	request.Init(64)
-	response := client.Message{}
-	response.Init(64)
+	request, response := newMessagePair(64, 64)
 
 	flags := uint64(bindings.OpenReadWrite | bindings.OpenCreate)
 	client.EncodeOpen(&request, "test.db", flags, "test-0")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
-	defer cancel()
-
-	err := c.Call(ctx, &request, &response)
-	require.NoError(t, err)
+	makeClientCall(t, c, &request, &response)
 
 	id, err := client.DecodeDb(&response)
 	require.NoError(t, err)
@@ -70,27 +61,40 @@ CREATE TABLE baz (n INT);
 `
 	client.EncodeExecSQL(&request, uint64(id), sql, nil)
 
-	err = c.Call(ctx, &request, &response)
+	makeClientCall(t, c, &request, &response)
+}
+
+func TestClient_Prepare(t *testing.T) {
+	defer bindings.AssertNoMemoryLeaks(t)
+
+	c, cleanup := newClient(t)
+	defer cleanup()
+
+	request, response := newMessagePair(64, 64)
+
+	flags := uint64(bindings.OpenReadWrite | bindings.OpenCreate)
+	client.EncodeOpen(&request, "test.db", flags, "test-0")
+
+	makeClientCall(t, c, &request, &response)
+
+	db, err := client.DecodeDb(&response)
 	require.NoError(t, err)
+
+	request.Reset()
+	response.Reset()
+
+	client.EncodePrepare(&request, uint64(db), "CREATE TABLE test (n INT)")
+
+	makeClientCall(t, c, &request, &response)
+
+	_, stmt, params, err := client.DecodeStmt(&response)
+	require.NoError(t, err)
+
+	assert.Equal(t, uint32(0), stmt)
+	assert.Equal(t, uint64(0), params)
 }
 
 /*
-func TestClient_Prepare(t *testing.T) {
-	client, cleanup := newClient(t)
-	defer cleanup()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
-	defer cancel()
-
-	db, err := client.Open(ctx, "test.db", "volatile")
-	require.NoError(t, err)
-
-	stmt, err := client.Prepare(ctx, db.ID, "CREATE TABLE test (n INT)")
-	require.NoError(t, err)
-
-	assert.Equal(t, stmt.ID, uint32(0))
-}
-
 func TestClient_Exec(t *testing.T) {
 	client, cleanup := newClient(t)
 	defer cleanup()
@@ -154,14 +158,13 @@ func TestClient_Query(t *testing.T) {
 func newClient(t *testing.T) (*client.Client, func()) {
 	t.Helper()
 
-	listener := newListener(t)
+	methods := &testClusterMethods{}
 
-	cluster := newTestCluster()
-	cluster.leader = listener.Addr().String()
+	address, serverCleanup := newServer(t, 0, methods)
 
-	serverCleanup := newServer(t, 0, listener, cluster)
+	methods.leader = address
 
-	store := newStore(t, []string{cluster.leader})
+	store := newStore(t, []string{address})
 
 	connector := newConnector(t, store)
 
@@ -178,4 +181,24 @@ func newClient(t *testing.T) (*client.Client, func()) {
 	}
 
 	return client, cleanup
+}
+
+// Perform a client call.
+func makeClientCall(t *testing.T, c *client.Client, request, response *client.Message) {
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	err := c.Call(ctx, request, response)
+	require.NoError(t, err)
+}
+
+// Return a new message pair to be used as request and response.
+func newMessagePair(size1, size2 int) (client.Message, client.Message) {
+	message1 := client.Message{}
+	message1.Init(size1)
+
+	message2 := client.Message{}
+	message2.Init(size2)
+
+	return message1, message2
 }

@@ -19,7 +19,7 @@ import (
 
 // ConfigNoCkptOnClose switches on or off the automatic WAL checkpoint when a
 // connection is closed.
-func (c *Conn) ConfigNoCkptOnClose(flag bool) error {
+func (c *Conn) ConfigNoCkptOnClose(flag bool) (bool, error) {
 	db := (*C.sqlite3)(unsafe.Pointer(c))
 
 	var in C.int
@@ -32,8 +32,8 @@ func (c *Conn) ConfigNoCkptOnClose(flag bool) error {
 	rc := C.sqlite3__db_config_no_ckpt_on_close(db, in, &out)
 	if rc != C.SQLITE_OK {
 		err := lastError(db)
-		return errors.Wrap(err, "failed to config checkpoint on close")
+		return false, errors.Wrap(err, "failed to config checkpoint on close")
 	}
 
-	return nil
+	return out == 1, nil
 }

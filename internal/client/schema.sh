@@ -72,13 +72,13 @@ EOF
 	fi
 
 	cat >> request.go <<EOF
-	request.Put${type^}(${name})
+	request.put${type^}(${name})
 EOF
     done
 
     cat >> request.go <<EOF
 
-	request.PutHeader(bindings.Request${cmd})
+	request.putHeader(bindings.Request${cmd})
 }
 EOF
 
@@ -108,12 +108,12 @@ if [ "$entity" = "--response" ]; then
 
 // Decode${cmd} decodes a $cmd response.
 func Decode${cmd}(response *Message) (${returns}err error) {
-	mtype, _ := response.GetHeader()
+	mtype, _ := response.getHeader()
 
 	if mtype == bindings.ResponseFailure {
 		e := ErrRequest{}
-		e.Code = response.GetUint64()
-		e.Description = response.GetString()
+		e.Code = response.getUint64()
+		e.Description = response.getString()
                 err = e
                 return
 	}
@@ -137,7 +137,7 @@ EOF
 	fi
 
 	cat >> response.go <<EOF
-	${assign}response.Get${type^}()
+	${assign}response.get${type^}()
 EOF
     done
 
