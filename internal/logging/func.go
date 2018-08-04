@@ -15,3 +15,12 @@ func Test(t *testing.T) Func {
 		t.Logf(format, a...)
 	}
 }
+
+// Stdout returns a logging function that prints log messages on standard
+// output.
+func Stdout() Func {
+	return func(l Level, format string, a ...interface{}) {
+		format = fmt.Sprintf("%s: %s\n", l.String(), format)
+		fmt.Printf(format, a...)
+	}
+}
