@@ -522,6 +522,10 @@ func (r *Rows) Next(dest []driver.Value) error {
 			dest[i] = timestamp
 		case bindings.ISO8601:
 			value := r.message.getString()
+			if value == "" {
+				dest[i] = time.Time{}
+				break
+			}
 			var t time.Time
 			var timeVal time.Time
 			var err error

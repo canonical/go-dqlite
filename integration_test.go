@@ -319,6 +319,36 @@ func newDB(t *testing.T) (*sql.DB, *rafttest.Control, func()) {
 	return db, control, cleanup
 }
 
+func TestIntegration_EmptyTimestamp(t *testing.T) {
+	db, _, cleanup := newDB(t)
+	defer cleanup()
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	_, err = tx.Exec("CREATE TABLE test (d DATETIME)")
+	require.NoError(t, err)
+
+	_, err = tx.Exec("INSERT INTO test(d) VALUES('')")
+
+	rows, err := tx.Query("SELECT d FROM test")
+	require.NoError(t, err)
+
+	for rows.Next() {
+		var d time.Time
+
+		require.NoError(t, rows.Scan(&d))
+		assert.Equal(t, time.Time{}, d)
+	}
+
+	require.NoError(t, rows.Err())
+	require.NoError(t, rows.Close())
+
+	require.NoError(t, tx.Rollback())
+
+	require.NoError(t, db.Close())
+}
+
 func newServers(t *testing.T, listeners []net.Listener) (*rafttest.Control, func()) {
 	t.Helper()
 
