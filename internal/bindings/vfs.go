@@ -83,6 +83,10 @@ func (v *Vfs) ReadFile(filename string) ([]byte, error) {
 // WriteFile write the content of the given filename, overriding it if it
 // exists.
 func (v *Vfs) WriteFile(filename string, bytes []byte) error {
+	if len(bytes) == 0 {
+		return nil
+	}
+
 	vfs := (*C.sqlite3_vfs)(unsafe.Pointer(v))
 
 	cfilename := C.CString(filename)
