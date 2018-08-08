@@ -321,6 +321,8 @@ func (m *Message) getString() string {
 				data := b.Bytes[b.Offset:]
 				data = append(data, m.body2.Bytes[0:index]...)
 
+				index++
+
 				if trailing := index % messageWordSize; trailing != 0 {
 					// Account for padding, moving index to the next word boundary.
 					index += messageWordSize - trailing
