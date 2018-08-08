@@ -287,6 +287,101 @@ var testIntegrationLargeQueryWithTimestampsData = []struct {
 	{"ubuntu-1810-priv", 1, "0.0.0.0", "2018-08-01 04:53:10"},
 }
 
+func TestIntegration_LargeQuery_WithLongStrings(t *testing.T) {
+	db, _, cleanup := newDB(t)
+	defer cleanup()
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	_, err = tx.Exec("CREATE TABLE containers_config (id INTEGER, container_id INTEGER, key TEXT, value TEXT)")
+	require.NoError(t, err)
+
+	_, err = tx.Exec(testIntegrationLargeQueryWithLongStringsData)
+	require.NoError(t, err)
+
+	require.NoError(t, tx.Commit())
+
+	tx, err = db.Begin()
+	require.NoError(t, err)
+
+	rows, err := tx.Query("SELECT container_id, key, value FROM containers_config")
+	require.NoError(t, err)
+
+	columns, err := rows.Columns()
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"container_id", "key", "value"}, columns)
+
+	for i := 0; rows.Next(); i++ {
+		var id int64
+		var key string
+		var value string
+
+		require.NoError(t, rows.Scan(&id, &key, &value))
+	}
+
+	require.NoError(t, rows.Err())
+	require.NoError(t, rows.Close())
+
+	require.NoError(t, tx.Rollback())
+
+	require.NoError(t, db.Close())
+}
+
+var testIntegrationLargeQueryWithLongStringsData = `
+INSERT INTO containers_config VALUES(463,1,'image.description','Busybox x86_64');
+INSERT INTO containers_config VALUES(464,1,'volatile.apply_template','create');
+INSERT INTO containers_config VALUES(465,1,'volatile.idmap.next','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(466,1,'volatile.base_image','d5c70f9097d133ba56c424733cd5a30e1e8519a7b850b24e95fec47e10c6e5fa');
+INSERT INTO containers_config VALUES(467,1,'volatile.eth0.hwaddr','00:16:3e:ac:4b:17');
+INSERT INTO containers_config VALUES(468,1,'volatile.idmap.base','0');
+INSERT INTO containers_config VALUES(469,1,'volatile.last_state.idmap','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(470,1,'image.architecture','x86_64');
+INSERT INTO containers_config VALUES(471,1,'image.name','busybox-x86_64');
+INSERT INTO containers_config VALUES(472,1,'image.os','Busybox');
+INSERT INTO containers_config VALUES(473,2,'image.description','Busybox x86_64');
+INSERT INTO containers_config VALUES(474,2,'image.os','Busybox');
+INSERT INTO containers_config VALUES(475,2,'volatile.apply_template','create');
+INSERT INTO containers_config VALUES(476,2,'volatile.base_image','d5c70f9097d133ba56c424733cd5a30e1e8519a7b850b24e95fec47e10c6e5fa');
+INSERT INTO containers_config VALUES(477,2,'volatile.eth0.hwaddr','00:16:3e:64:43:68');
+INSERT INTO containers_config VALUES(478,2,'volatile.idmap.base','0');
+INSERT INTO containers_config VALUES(479,2,'volatile.idmap.next','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(480,2,'image.architecture','x86_64');
+INSERT INTO containers_config VALUES(481,2,'volatile.last_state.idmap','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(482,2,'image.name','busybox-x86_64');
+INSERT INTO containers_config VALUES(483,3,'volatile.idmap.next','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(484,3,'volatile.last_state.idmap','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(485,3,'image.architecture','x86_64');
+INSERT INTO containers_config VALUES(486,3,'image.description','Busybox x86_64');
+INSERT INTO containers_config VALUES(487,3,'image.name','busybox-x86_64');
+INSERT INTO containers_config VALUES(488,3,'volatile.base_image','d5c70f9097d133ba56c424733cd5a30e1e8519a7b850b24e95fec47e10c6e5fa');
+INSERT INTO containers_config VALUES(489,3,'image.os','Busybox');
+INSERT INTO containers_config VALUES(490,3,'volatile.eth0.hwaddr','00:16:3e:2b:cd:e6');
+INSERT INTO containers_config VALUES(491,3,'volatile.idmap.base','0');
+INSERT INTO containers_config VALUES(492,3,'volatile.last_state.power','RUNNING');
+INSERT INTO containers_config VALUES(493,4,'image.architecture','x86_64');
+INSERT INTO containers_config VALUES(494,4,'image.description','Busybox x86_64');
+INSERT INTO containers_config VALUES(495,4,'volatile.base_image','d5c70f9097d133ba56c424733cd5a30e1e8519a7b850b24e95fec47e10c6e5fa');
+INSERT INTO containers_config VALUES(496,4,'volatile.idmap.base','0');
+INSERT INTO containers_config VALUES(497,4,'volatile.last_state.idmap','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(498,4,'volatile.last_state.power','RUNNING');
+INSERT INTO containers_config VALUES(499,4,'image.name','busybox-x86_64');
+INSERT INTO containers_config VALUES(500,4,'image.os','Busybox');
+INSERT INTO containers_config VALUES(501,4,'volatile.eth0.hwaddr','00:16:3e:f7:28:13');
+INSERT INTO containers_config VALUES(502,4,'volatile.idmap.next','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(533,5,'image.description','Busybox x86_64');
+INSERT INTO containers_config VALUES(534,5,'volatile.idmap.base','0');
+INSERT INTO containers_config VALUES(535,5,'volatile.apply_template','create');
+INSERT INTO containers_config VALUES(536,5,'volatile.last_state.idmap','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(537,5,'image.os','Busybox');
+INSERT INTO containers_config VALUES(538,5,'image.architecture','x86_64');
+INSERT INTO containers_config VALUES(539,5,'image.name','busybox-x86_64');
+INSERT INTO containers_config VALUES(540,5,'volatile.base_image','d5c70f9097d133ba56c424733cd5a30e1e8519a7b850b24e95fec47e10c6e5fa');
+INSERT INTO containers_config VALUES(541,5,'volatile.idmap.next','[{"Isuid":true,"Isgid":false,"Hostid":100000,"Nsid":0,"Maprange":1000000000},{"Isuid":false,"Isgid":true,"Hostid":100000,"Nsid":0,"Maprange":1000000000}]');
+INSERT INTO containers_config VALUES(542,5,'volatile.eth0.hwaddr','00:16:3e:f0:99:38');
+`
+
 func newDB(t *testing.T) (*sql.DB, *rafttest.Control, func()) {
 	n := 3
 

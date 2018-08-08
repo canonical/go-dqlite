@@ -214,6 +214,7 @@ func TestMessage_getString(t *testing.T) {
 	}{
 		{"hello", 8},
 		{"hello!!", 8},
+		{"hello!!!", 16},
 		{"hello world", 16},
 	}
 
@@ -249,4 +250,26 @@ func TestMessage_getString_Overflow(t *testing.T) {
 
 	s := message.getString()
 	assert.Equal(t, "123456789", s)
+
+	assert.Equal(t, 8, message.body1.Offset)
+	assert.Equal(t, 8, message.body2.Offset)
+}
+
+// The overflowing string ends exactly at word boundary.
+func TestMessage_getString_Overflow_WordBoundary(t *testing.T) {
+	message := Message{}
+	message.Init(8)
+
+	message.putBlob([]byte("abcdefgh"))
+	message.putBlob([]byte("ilmnopqr"))
+	message.putBlob([]byte{0, 0, 0, 0, 0, 0, 0})
+	message.putHeader(0)
+
+	message.Rewind()
+
+	s := message.getString()
+	assert.Equal(t, "abcdefghilmnopqr", s)
+
+	assert.Equal(t, 8, message.body1.Offset)
+	assert.Equal(t, 16, message.body2.Offset)
 }
