@@ -22,3 +22,7 @@ type ErrRequest struct {
 func (e ErrRequest) Error() string {
 	return fmt.Sprintf("%s (%d)", e.Description, e.Code)
 }
+
+// ErrRowsPart is returned when the first batch of a multi-response result
+// batch is done.
+var ErrRowsPart = fmt.Errorf("not all rows were returned in this response")

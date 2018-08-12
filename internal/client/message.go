@@ -484,6 +484,11 @@ func (r *Rows) Next(dest []driver.Value) error {
 	for i := 0; i < headerSize; i++ {
 		slot := r.message.getUint8()
 
+		if slot == 0xee {
+			// More rows are available.
+			return ErrRowsPart
+		}
+
 		if slot == 0xff {
 			// Rows EOF marker
 			return io.EOF

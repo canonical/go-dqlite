@@ -114,7 +114,7 @@ func TestIntegration_LargeQuery(t *testing.T) {
 	stmt, err := tx.Prepare("INSERT INTO test(n) VALUES(?)")
 	require.NoError(t, err)
 
-	for i := 0; i < 255; i++ {
+	for i := 0; i < 512; i++ {
 		_, err = stmt.Exec(int64(i))
 		require.NoError(t, err)
 	}
@@ -134,16 +134,20 @@ func TestIntegration_LargeQuery(t *testing.T) {
 
 	assert.Equal(t, []string{"n"}, columns)
 
+	count := 0
 	for i := 0; rows.Next(); i++ {
 		var n int64
 
 		require.NoError(t, rows.Scan(&n))
 
 		assert.Equal(t, int64(i), n)
+		count++
 	}
 
 	require.NoError(t, rows.Err())
 	require.NoError(t, rows.Close())
+
+	assert.Equal(t, count, 512)
 
 	require.NoError(t, tx.Rollback())
 

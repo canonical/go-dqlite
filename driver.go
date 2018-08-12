@@ -300,7 +300,7 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 		return nil, driverError(err)
 	}
 
-	return &Rows{rows: rows}, nil
+	return &Rows{ctx: ctx, response: &c.response, client: c.client, rows: rows}, nil
 }
 
 // Exec is an optional interface that may be implemented by a Conn.
@@ -461,7 +461,7 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 		return nil, driverError(err)
 	}
 
-	return &Rows{rows: rows}, nil
+	return &Rows{ctx: ctx, response: s.response, client: s.client, rows: rows}, nil
 }
 
 // Query executes a query that may return rows, such as a
@@ -489,7 +489,10 @@ func (r *Result) RowsAffected() (int64, error) {
 
 // Rows is an iterator over an executed query's results.
 type Rows struct {
-	rows client.Rows
+	ctx      context.Context
+	client   *client.Client
+	response *client.Message
+	rows     client.Rows
 }
 
 // Columns returns the names of the columns. The number of
@@ -512,7 +515,20 @@ func (r *Rows) Close() error {
 //
 // Next should return io.EOF when there are no more rows.
 func (r *Rows) Next(dest []driver.Value) error {
-	return r.rows.Next(dest)
+	err := r.rows.Next(dest)
+	if err != nil && err == client.ErrRowsPart {
+		r.rows.Close()
+		if err := r.client.More(r.ctx, r.response); err != nil {
+			return driverError(err)
+		}
+		rows, err := client.DecodeRows(r.response)
+		if err != nil {
+			return driverError(err)
+		}
+		r.rows = rows
+		return r.rows.Next(dest)
+	}
+	return err
 }
 
 // ColumnTypeScanType implements RowsColumnTypeScanType.
