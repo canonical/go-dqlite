@@ -63,6 +63,11 @@ func (c *Client) Call(ctx context.Context, request, response *Message) error {
 	return nil
 }
 
+// More is used when a request maps to multiple responses.
+func (c *Client) More(ctx context.Context, response *Message) error {
+	return c.recv(response)
+}
+
 // Close the client connection.
 func (c *Client) Close() error {
 	c.log(bindings.LogInfo, "closing client")
