@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
 	"github.com/CanonicalLtd/go-dqlite/internal/registry"
 	"github.com/CanonicalLtd/go-dqlite/internal/replication"
@@ -1679,6 +1680,8 @@ func rollback() stageStep {
 func newCluster(t *testing.T, opts ...clusterOption) (clusterConns, *rafttest.Control, func()) {
 	t.Helper()
 
+	logger := bindings.NewLogger(logging.Test(t))
+
 	// Registries and FSMs
 	cleanups := []func(){}
 	registries := make([]*registry.Registry, 3)
@@ -1688,7 +1691,7 @@ func newCluster(t *testing.T, opts ...clusterOption) (clusterConns, *rafttest.Co
 		dir, cleanup := newDir(t)
 		cleanups = append(cleanups, cleanup)
 
-		vfs, err := bindings.NewVfs(fmt.Sprintf("test-%d", i))
+		vfs, err := bindings.NewVfs(fmt.Sprintf("test-%d", i), logger)
 		require.NoError(t, err)
 		cleanups = append(cleanups, func() {
 			require.NoError(t, vfs.Close())
@@ -1788,6 +1791,8 @@ func newCluster(t *testing.T, opts ...clusterOption) (clusterConns, *rafttest.Co
 		for i := range cleanups {
 			cleanups[i]()
 		}
+
+		logger.Close()
 	}
 
 	return conns, control, cleanup

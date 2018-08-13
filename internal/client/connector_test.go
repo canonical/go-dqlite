@@ -267,15 +267,15 @@ func newServer(t *testing.T, index int, methods bindings.ClusterMethods) (string
 
 	listener := newListener(t)
 
-	vfs := newVfs(t, index)
+	logger := bindings.NewLogger(logging.Test(t))
+
+	vfs := newVfs(t, index, logger)
 	replication := newWalReplication(t, index)
 
 	cluster := newCluster(t, methods)
 
 	server, err := bindings.NewServer(cluster)
 	require.NoError(t, err)
-
-	logger := bindings.NewLogger(logging.Test(t))
 
 	server.SetLogger(logger)
 	server.SetVfs(vfs.Name())
@@ -344,12 +344,12 @@ func newServer(t *testing.T, index int, methods bindings.ClusterMethods) (string
 	return address, cleanup
 }
 
-func newVfs(t *testing.T, index int) *bindings.Vfs {
+func newVfs(t *testing.T, index int, logger *bindings.Logger) *bindings.Vfs {
 	t.Helper()
 
 	name := fmt.Sprintf("test-%d", index)
 
-	vfs, err := bindings.NewVfs(name)
+	vfs, err := bindings.NewVfs(name, logger)
 	require.NoError(t, err)
 
 	return vfs

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +15,10 @@ func TestNewVfs_AlreadyRegistered(t *testing.T) {
 	vfs, cleanup := newVfsWithName(t, "foo")
 	defer cleanup()
 
-	vfs, err := bindings.NewVfs("foo")
+	logger := bindings.NewLogger(logging.Test(t))
+	defer logger.Close()
+
+	vfs, err := bindings.NewVfs("foo", logger)
 	assert.Nil(t, vfs)
 
 	assert.EqualError(t, err, "vfs name already registered")
@@ -108,11 +112,14 @@ func newVfs(t *testing.T) (*bindings.Vfs, func()) {
 func newVfsWithName(t *testing.T, name string) (*bindings.Vfs, func()) {
 	t.Helper()
 
-	vfs, err := bindings.NewVfs(name)
+	logger := bindings.NewLogger(logging.Test(t))
+
+	vfs, err := bindings.NewVfs(name, logger)
 	require.NoError(t, err)
 
 	cleanup := func() {
 		require.NoError(t, vfs.Close())
+		logger.Close()
 	}
 
 	return vfs, cleanup

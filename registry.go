@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/CanonicalLtd/go-dqlite/internal/registry"
 )
 
@@ -11,6 +12,7 @@ import (
 type Registry struct {
 	name     string
 	vfs      *bindings.Vfs
+	logger   *bindings.Logger
 	registry *registry.Registry
 }
 
@@ -19,8 +21,16 @@ type Registry struct {
 //
 // The ID parameter is a string identifying the local node.
 func NewRegistry(id string) *Registry {
+	return NewRegistryWithLogger(id, logging.Stdout())
+}
+
+// NewRegistryWithLogger returns a registry configured with the given logger.
+func NewRegistryWithLogger(id string, log LogFunc) *Registry {
 	name := fmt.Sprintf("dqlite-%s", id)
-	vfs, err := bindings.NewVfs(name)
+
+	logger := bindings.NewLogger(log)
+
+	vfs, err := bindings.NewVfs(name, logger)
 	if err != nil {
 		panic("failed to register VFS")
 	}
@@ -29,10 +39,12 @@ func NewRegistry(id string) *Registry {
 		name:     name,
 		vfs:      vfs,
 		registry: registry.New(vfs),
+		logger:   logger,
 	}
 }
 
 // Close the registry.
 func (r *Registry) Close() {
 	r.vfs.Close()
+	r.logger.Close()
 }

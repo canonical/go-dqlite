@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/CanonicalLtd/go-dqlite/internal/registry"
 	"github.com/CanonicalLtd/go-dqlite/internal/replication"
 	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
@@ -109,7 +110,9 @@ var errZero = sqlite3.ErrNo(0) // Convenience for assertions
 func newMethods(t *testing.T) (*replication.Methods, *bindings.Conn, func()) {
 	t.Helper()
 
-	vfs, err := bindings.NewVfs("test")
+	logger := bindings.NewLogger(logging.Test(t))
+
+	vfs, err := bindings.NewVfs("test", logger)
 	require.NoError(t, err)
 
 	registry := registry.New(vfs)
@@ -135,6 +138,7 @@ func newMethods(t *testing.T) (*replication.Methods, *bindings.Conn, func()) {
 		raftCleanup()
 		require.NoError(t, vfs.Close())
 		require.NoError(t, r.Close())
+		logger.Close()
 	}
 
 	// Don't actually run the SQLite replication APIs, since the tests

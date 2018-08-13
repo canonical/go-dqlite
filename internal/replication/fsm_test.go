@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/CanonicalLtd/go-dqlite/internal/protocol"
 	"github.com/CanonicalLtd/go-dqlite/internal/registry"
 	"github.com/CanonicalLtd/go-dqlite/internal/replication"
@@ -427,7 +428,9 @@ func newFSM(t *testing.T) (*replication.FSM, func()) {
 	r, err := bindings.NewWalReplication("test", methods)
 	require.NoError(t, err)
 
-	vfs, err := bindings.NewVfs("test")
+	logger := bindings.NewLogger(logging.Test(t))
+
+	vfs, err := bindings.NewVfs("test", logger)
 	require.NoError(t, err)
 
 	registry := registry.New(vfs)
@@ -438,6 +441,7 @@ func newFSM(t *testing.T) (*replication.FSM, func()) {
 	cleanup := func() {
 		require.NoError(t, vfs.Close())
 		require.NoError(t, r.Close())
+		logger.Close()
 	}
 
 	// We need to disable replication mode checks, because leader

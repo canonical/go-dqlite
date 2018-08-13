@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,8 +19,10 @@ func TestStatusMallocCount(t *testing.T) {
 	assert.Equal(t, 0, current)
 	assert.Equal(t, 0, highest)
 
+	logger := bindings.NewLogger(logging.Test(t))
+
 	// Create a volatile VFS to perform some allocations.
-	vfs, err := bindings.NewVfs("test")
+	vfs, err := bindings.NewVfs("test", logger)
 	require.NoError(t, err)
 
 	current, highest, err = bindings.StatusMallocCount(false)
@@ -29,6 +32,7 @@ func TestStatusMallocCount(t *testing.T) {
 	assert.NotEqual(t, 0, highest)
 
 	vfs.Close()
+	logger.Close()
 
 	current, highest, err = bindings.StatusMallocCount(true)
 	require.NoError(t, err)
@@ -53,8 +57,10 @@ func TestStatusMemoryUsed(t *testing.T) {
 	assert.Equal(t, 0, current)
 	assert.Equal(t, 0, highest)
 
+	logger := bindings.NewLogger(logging.Test(t))
+
 	// Create a volatile VFS to perform some allocations.
-	vfs, err := bindings.NewVfs("test")
+	vfs, err := bindings.NewVfs("test", logger)
 	require.NoError(t, err)
 
 	current, highest, err = bindings.StatusMemoryUsed(false)
@@ -64,6 +70,7 @@ func TestStatusMemoryUsed(t *testing.T) {
 	assert.NotEqual(t, 0, highest)
 
 	vfs.Close()
+	logger.Close()
 
 	current, highest, err = bindings.StatusMemoryUsed(true)
 	require.NoError(t, err)

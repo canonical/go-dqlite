@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/CanonicalLtd/go-dqlite/internal/transaction"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -275,7 +276,9 @@ func newVfs(t *testing.T) (*bindings.Vfs, string) {
 
 	name := fmt.Sprintf("test-%d", serial)
 
-	vfs, err := bindings.NewVfs(name)
+	logger := bindings.NewLogger(logging.Test(t))
+
+	vfs, err := bindings.NewVfs(name, logger)
 	require.NoError(t, err)
 
 	serial++
