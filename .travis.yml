@@ -17,7 +17,7 @@ before_install:
   - go get github.com/golang/lint/golint
   - go get github.com/tsenart/deadcode
   - mkdir -p $GOPATH/src/github.com/hashicorp/raft
-  - raft_fork=https://github.com/freeekanayaka/raft.git
+  - raft_fork=https://github.com/freeekanayaka/go-raft.git
   - git clone -b assorted-fixes $raft_fork $GOPATH/src/github.com/hashicorp/raft
 
 script:

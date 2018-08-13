@@ -7,12 +7,16 @@ import (
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/CanonicalLtd/go-dqlite/internal/connection"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSnapshot(t *testing.T) {
-	vfs, err := bindings.NewVfs("test")
+	logger := bindings.NewLogger(logging.Test(t))
+	defer logger.Close()
+
+	vfs, err := bindings.NewVfs("test", logger)
 	require.NoError(t, err)
 
 	defer vfs.Close()

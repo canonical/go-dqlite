@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/CanonicalLtd/go-dqlite/internal/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,9 @@ func TestRegistry_Dump(t *testing.T) {
 func newRegistry(t *testing.T) (*registry.Registry, func()) {
 	t.Helper()
 
-	vfs, err := bindings.NewVfs("test")
+	logger := bindings.NewLogger(logging.Test(t))
+
+	vfs, err := bindings.NewVfs("test", logger)
 	require.NoError(t, err)
 
 	registry := registry.New(vfs)
@@ -36,6 +39,7 @@ func newRegistry(t *testing.T) (*registry.Registry, func()) {
 	cleanup := func() {
 		registry.ConnSerialReset()
 		vfs.Close()
+		logger.Close()
 	}
 
 	return registry, cleanup

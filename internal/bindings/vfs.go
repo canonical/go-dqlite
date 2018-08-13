@@ -15,7 +15,7 @@ import (
 type Vfs C.sqlite3_vfs
 
 // NewVfs registers an in-memory VFS instance under the given name.
-func NewVfs(name string) (*Vfs, error) {
+func NewVfs(name string, logger *Logger) (*Vfs, error) {
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
 
@@ -24,7 +24,9 @@ func NewVfs(name string) (*Vfs, error) {
 		return nil, err
 	}
 
-	vfs := C.dqlite_vfs_create(cname)
+	clogger := (*C.dqlite_logger)(unsafe.Pointer(logger))
+
+	vfs := C.dqlite_vfs_create(cname, clogger)
 	if vfs == nil {
 		return nil, codeToError(C.SQLITE_NOMEM)
 	}
