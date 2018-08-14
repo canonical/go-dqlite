@@ -1403,7 +1403,6 @@ func TestIntegration_Snapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	// XXX TODO: the Barrier() call below hangs.
-	return
 
 	// The follower will now have to restore the snapshot.
 	control.Barrier()
@@ -1770,9 +1769,13 @@ func newCluster(t *testing.T, opts ...clusterOption) (clusterConns, *rafttest.Co
 	}
 
 	cleanup := func() {
-		for i := range conns {
-			conns[i][0].Close()
-			conns[i][1].Close()
+		for id := range conns {
+			i, _ := strconv.Atoi(string(id))
+			registry := registries[i]
+			registry.ConnLeaderDel(conns[id][0])
+			registry.ConnLeaderDel(conns[id][1])
+			conns[id][0].Close()
+			conns[id][1].Close()
 			//require.NoError(t, conns[i][0].Close())
 			//require.NoError(t, conns[i][1].Close())
 		}
