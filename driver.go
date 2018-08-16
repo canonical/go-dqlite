@@ -17,6 +17,7 @@ package dqlite
 import (
 	"context"
 	"database/sql/driver"
+	"io"
 	"net"
 	"reflect"
 	"time"
@@ -300,7 +301,7 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 		return nil, driverError(err)
 	}
 
-	return &Rows{ctx: ctx, response: &c.response, client: c.client, rows: rows}, nil
+	return &Rows{ctx: ctx, request: &c.request, response: &c.response, client: c.client, rows: rows}, nil
 }
 
 // Exec is an optional interface that may be implemented by a Conn.
@@ -461,7 +462,7 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 		return nil, driverError(err)
 	}
 
-	return &Rows{ctx: ctx, response: s.response, client: s.client, rows: rows}, nil
+	return &Rows{ctx: ctx, request: s.request, response: s.response, client: s.client, rows: rows}, nil
 }
 
 // Query executes a query that may return rows, such as a
@@ -491,8 +492,10 @@ func (r *Result) RowsAffected() (int64, error) {
 type Rows struct {
 	ctx      context.Context
 	client   *client.Client
+	request  *client.Message
 	response *client.Message
 	rows     client.Rows
+	consumed bool
 }
 
 // Columns returns the names of the columns. The number of
@@ -506,6 +509,21 @@ func (r *Rows) Columns() []string {
 // Close closes the rows iterator.
 func (r *Rows) Close() error {
 	r.rows.Close()
+
+	// If we consumed the whole result set, there's nothing to do as
+	// there's no pending response from the server.
+	if r.consumed {
+		return nil
+	}
+
+	r.rows.Close()
+
+	// Let's issue an interrupt request and wait until we get an empty
+	// response, signalling that the query was interrupted.
+	if err := r.client.Interrupt(r.ctx, r.request, r.response); err != nil {
+		return driverError(err)
+	}
+
 	return nil
 }
 
@@ -516,7 +534,8 @@ func (r *Rows) Close() error {
 // Next should return io.EOF when there are no more rows.
 func (r *Rows) Next(dest []driver.Value) error {
 	err := r.rows.Next(dest)
-	if err != nil && err == client.ErrRowsPart {
+
+	if err == client.ErrRowsPart {
 		r.rows.Close()
 		if err := r.client.More(r.ctx, r.response); err != nil {
 			return driverError(err)
@@ -528,6 +547,11 @@ func (r *Rows) Next(dest []driver.Value) error {
 		r.rows = rows
 		return r.rows.Next(dest)
 	}
+
+	if err == io.EOF {
+		r.consumed = true
+	}
+
 	return err
 }
 

@@ -448,6 +448,50 @@ func TestIntegration_EmptyTimestamp(t *testing.T) {
 	require.NoError(t, db.Close())
 }
 
+func TestIntegration_QueryInterrupt(t *testing.T) {
+	db, _, cleanup := newDB(t)
+	defer cleanup()
+
+	_, err := db.Exec("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	stmt, err := tx.Prepare("INSERT INTO test(n) VALUES(?)")
+	require.NoError(t, err)
+
+	for i := 0; i < 512; i++ {
+		_, err = stmt.Exec(int64(i))
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, stmt.Close())
+
+	require.NoError(t, tx.Commit())
+
+	tx, err = db.Begin()
+	require.NoError(t, err)
+
+	// This query will yield a multi-response result set, which needs to be
+	// cancelled because Rows.Next() will be called only for one row.
+	row := tx.QueryRow("SELECT n FROM test")
+
+	var n int64
+	err = row.Scan(&n)
+	require.NoError(t, err)
+
+	require.NoError(t, tx.Rollback())
+
+	tx, err = db.Begin()
+	require.NoError(t, err)
+
+	_, err = tx.Exec("INSERT INTO test(n) VALUES(1)")
+	require.NoError(t, err)
+
+	require.NoError(t, tx.Rollback())
+}
+
 func newServers(t *testing.T, listeners []net.Listener) (*rafttest.Control, func()) {
 	t.Helper()
 

@@ -68,6 +68,46 @@ func (c *Client) More(ctx context.Context, response *Message) error {
 	return c.recv(response)
 }
 
+// Interrupt sends an interrupt request and awaits for the server's empty
+// response.
+func (c *Client) Interrupt(ctx context.Context, request *Message, response *Message) error {
+	// We need to take a lock since the dqlite server currently does not
+	// support concurrent requests.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Honor the ctx deadline, if present, or use a default.
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(2 * time.Second)
+	}
+	c.conn.SetDeadline(deadline)
+
+	defer request.Reset()
+
+	EncodeInterrupt(request, 0)
+
+	if err := c.send(request); err != nil {
+		return errors.Wrap(err, "failed to send interrupt request")
+	}
+
+	for {
+		if err := c.recv(response); err != nil {
+			response.Reset()
+			return errors.Wrap(err, "failed to receive response")
+		}
+
+		mtype, _ := response.getHeader()
+		response.Reset()
+
+		if mtype == bindings.ResponseEmpty {
+			break
+		}
+	}
+
+	return nil
+}
+
 // Close the client connection.
 func (c *Client) Close() error {
 	c.log(bindings.LogInfo, "closing client")
