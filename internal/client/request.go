@@ -89,3 +89,10 @@ func EncodeQuerySQL(request *Message, db uint64, sql string, values NamedValues)
 
 	request.putHeader(bindings.RequestQuerySQL)
 }
+
+// EncodeInterrupt encodes a Interrupt request.
+func EncodeInterrupt(request *Message, db uint64) {
+	request.putUint64(db)
+
+	request.putHeader(bindings.RequestInterrupt)
+}

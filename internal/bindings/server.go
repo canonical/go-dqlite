@@ -37,6 +37,7 @@ const (
 	RequestFinalize  = C.DQLITE_REQUEST_FINALIZE
 	RequestExecSQL   = C.DQLITE_REQUEST_EXEC_SQL
 	RequestQuerySQL  = C.DQLITE_REQUEST_QUERY_SQL
+	RequestInterrupt = C.DQLITE_REQUEST_INTERRUPT
 )
 
 // Response types.
