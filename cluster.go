@@ -78,6 +78,7 @@ func (c *cluster) Barrier() error {
 	c.registry.Lock()
 	index := c.registry.Index()
 	c.registry.Unlock()
+
 	if index == c.raft.LastIndex() {
 		return nil
 	}
@@ -91,6 +92,9 @@ func (c *cluster) Barrier() error {
 		// TODO: add an out-of-sync error to SQLite?
 		return errors.Wrap(err, "FSM out of sync")
 	}
+	c.registry.Lock()
+	c.registry.IndexUpdate(c.raft.LastIndex())
+	c.registry.Unlock()
 
 	return nil
 }
