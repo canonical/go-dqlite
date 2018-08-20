@@ -510,9 +510,6 @@ func (r *Rows) Columns() []string {
 func (r *Rows) Close() error {
 	r.rows.Close()
 
-	// FIXME: handling of batched queries seems bugg.
-	r.consumed = true
-
 	// If we consumed the whole result set, there's nothing to do as
 	// there's no pending response from the server.
 	if r.consumed {

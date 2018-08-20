@@ -448,7 +448,7 @@ func TestIntegration_EmptyTimestamp(t *testing.T) {
 	require.NoError(t, db.Close())
 }
 
-func DISABLED_TestIntegration_QueryInterrupt(t *testing.T) {
+func TestIntegration_QueryInterrupt(t *testing.T) {
 	db, _, cleanup := newDB(t)
 	defer cleanup()
 
