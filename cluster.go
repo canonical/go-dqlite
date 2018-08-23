@@ -63,10 +63,14 @@ func (c *cluster) Servers() ([]bindings.ServerInfo, error) {
 
 func (c *cluster) Register(conn *bindings.Conn) {
 	filename := conn.Filename()
+	c.registry.Lock()
+	defer c.registry.Unlock()
 	c.registry.ConnLeaderAdd(filename, conn)
 }
 
 func (c *cluster) Unregister(conn *bindings.Conn) {
+	c.registry.Lock()
+	defer c.registry.Unlock()
 	c.registry.ConnLeaderDel(conn)
 }
 
