@@ -81,7 +81,7 @@ func (c *Connector) Connect(ctx context.Context) (*Client, error) {
 	}
 
 	if ctx.Err() != nil {
-		return nil, errNoAvailableLeader
+		return nil, ErrNoAvailableLeader
 	}
 
 	return client, nil
@@ -143,7 +143,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 		return conn, nil
 	}
 
-	return nil, errNoAvailableLeader
+	return nil, ErrNoAvailableLeader
 }
 
 // Connect to the given dqlite server and check if it's the leader.

@@ -220,6 +220,10 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	return conn, nil
 }
 
+// ErrNoAvailableLeader is returned as root cause of Open() if there's no
+// leader available in the cluster.
+var ErrNoAvailableLeader = client.ErrNoAvailableLeader
+
 // Conn implements the sql.Conn interface.
 type Conn struct {
 	log      LogFunc
