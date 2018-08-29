@@ -4,8 +4,9 @@ import (
 	"fmt"
 )
 
+// Client errors.
 var (
-	errNoAvailableLeader = fmt.Errorf("no available dqlite leader server found")
+	ErrNoAvailableLeader = fmt.Errorf("no available dqlite leader server found")
 	errStop              = fmt.Errorf("connector was stopped")
 	errStaleLeader       = fmt.Errorf("server has lost leadership")
 	errNotClustered      = fmt.Errorf("server is not clustered")
