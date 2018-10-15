@@ -48,8 +48,9 @@ func (c *Client) Call(ctx context.Context, request, response *Message) error {
 	// Honor the ctx deadline, if present, or use a default.
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		deadline = time.Now().Add(time.Second)
+		deadline = time.Now().Add(10 * time.Second)
 	}
+
 	c.conn.SetDeadline(deadline)
 
 	if err := c.send(request); err != nil {
