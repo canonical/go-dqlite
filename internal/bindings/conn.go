@@ -88,7 +88,7 @@ func (c *Conn) Query(query string) (*Rows, error) {
 	sql := C.CString(query)
 	defer C.free(unsafe.Pointer(sql))
 
-	rc := C.sqlite3_prepare(db, sql, -1, &stmt, &tail)
+	rc := C.sqlite3_prepare(db, sql, C.int(-1), &stmt, &tail)
 	if rc != C.SQLITE_OK {
 		return nil, lastError(db)
 	}
