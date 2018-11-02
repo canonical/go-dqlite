@@ -37,6 +37,7 @@ type Driver struct {
 	store             ServerStore     // Holds addresses of dqlite servers
 	context           context.Context // Global cancellation context
 	connectionTimeout time.Duration   // Max time to wait for a new connection
+	contextTimeout    time.Duration   // Default client context timeout.
 	clientConfig      client.Config   // Configuration for dqlite client instances
 }
 
@@ -69,6 +70,16 @@ func WithDialFunc(dial DialFunc) DriverOption {
 func WithConnectionTimeout(timeout time.Duration) DriverOption {
 	return func(options *driverOptions) {
 		options.ConnectionTimeout = timeout
+	}
+}
+
+// WithContextTimeout sets the default client context timeout when no context
+// deadline is provided.
+//
+// If not used, the default is 5 seconds.
+func WithContextTimeout(timeout time.Duration) DriverOption {
+	return func(options *driverOptions) {
+		options.ContextTimeout = timeout
 	}
 }
 
@@ -113,6 +124,7 @@ func NewDriver(store ServerStore, options ...DriverOption) (*Driver, error) {
 		store:             store,
 		context:           o.Context,
 		connectionTimeout: o.ConnectionTimeout,
+		contextTimeout:    o.ContextTimeout,
 	}
 
 	driver.clientConfig.Dial = o.Dial
@@ -132,6 +144,7 @@ type driverOptions struct {
 	Log                     LogFunc
 	Dial                    client.DialFunc
 	ConnectionTimeout       time.Duration
+	ContextTimeout          time.Duration
 	ConnectionBackoffFactor time.Duration
 	ConnectionBackoffCap    time.Duration
 	Context                 context.Context
@@ -143,6 +156,7 @@ func defaultDriverOptions() *driverOptions {
 		Log:                     defaultLogFunc(),
 		Dial:                    client.TCPDial,
 		ConnectionTimeout:       15 * time.Second,
+		ContextTimeout:          5 * time.Second,
 		ConnectionBackoffFactor: 50 * time.Millisecond,
 		ConnectionBackoffCap:    time.Second,
 		Context:                 context.Background(),
@@ -190,13 +204,15 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	connector := client.NewConnector(0, d.store, d.clientConfig, d.log)
 
 	conn := &Conn{
-		log: d.log,
+		log:            d.log,
+		contextTimeout: d.contextTimeout,
 	}
 
 	conn.client, err = connector.Connect(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create dqlite connection")
 	}
+	conn.client.SetContextTimeout(d.contextTimeout)
 
 	conn.request.Init(4096)
 	conn.response.Init(4096)
@@ -226,11 +242,12 @@ var ErrNoAvailableLeader = client.ErrNoAvailableLeader
 
 // Conn implements the sql.Conn interface.
 type Conn struct {
-	log      LogFunc
-	client   *client.Client
-	request  client.Message
-	response client.Message
-	id       uint32 // Database ID.
+	log            LogFunc
+	client         *client.Client
+	request        client.Message
+	response       client.Message
+	id             uint32 // Database ID.
+	contextTimeout time.Duration
 }
 
 // PrepareContext returns a prepared statement, bound to this connection.
@@ -361,8 +378,7 @@ type Tx struct {
 
 // Commit the transaction.
 func (tx *Tx) Commit() error {
-	// TODO: make the timeout configurable.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), tx.conn.contextTimeout)
 	defer cancel()
 
 	if _, err := tx.conn.ExecContext(ctx, "COMMIT", nil); err != nil {
@@ -374,8 +390,7 @@ func (tx *Tx) Commit() error {
 
 // Rollback the transaction.
 func (tx *Tx) Rollback() error {
-	// TODO: make the timeout configurable.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), tx.conn.contextTimeout)
 	defer cancel()
 
 	if _, err := tx.conn.ExecContext(ctx, "ROLLBACK", nil); err != nil {
