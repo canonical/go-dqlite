@@ -20,6 +20,7 @@ type Client struct {
 	store            ServerStore   // Update this store upon heartbeats.
 	conn             net.Conn      // Underlying network connection.
 	heartbeatTimeout time.Duration // Heartbeat timeout reported at registration.
+	contextTimeout   time.Duration // Default context timeout.
 	closeCh          chan struct{} // Stops the heartbeat when the connection gets closed
 	mu               sync.Mutex    // Serialize requests
 }
@@ -27,14 +28,21 @@ type Client struct {
 func newClient(conn net.Conn, address string, store ServerStore, log logging.Func) *Client {
 	//logger.With(zap.String("target", address)
 	client := &Client{
-		conn:    conn,
-		address: address,
-		store:   store,
-		log:     log,
-		closeCh: make(chan struct{}),
+		conn:           conn,
+		address:        address,
+		store:          store,
+		log:            log,
+		closeCh:        make(chan struct{}),
+		contextTimeout: 5 * time.Second,
 	}
 
 	return client
+}
+
+// SetContextTimeout sets the default context timeout when no deadline is
+// provided.
+func (c *Client) SetContextTimeout(timeout time.Duration) {
+	c.contextTimeout = timeout
 }
 
 // Call invokes a dqlite RPC, sending a request message and receiving a
@@ -48,7 +56,7 @@ func (c *Client) Call(ctx context.Context, request, response *Message) error {
 	// Honor the ctx deadline, if present, or use a default.
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		deadline = time.Now().Add(10 * time.Second)
+		deadline = time.Now().Add(c.contextTimeout)
 	}
 
 	c.conn.SetDeadline(deadline)
