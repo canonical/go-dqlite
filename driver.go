@@ -236,6 +236,12 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	return conn, nil
 }
 
+// SetContextTimeout sets the default client timeout when no context deadline
+// is provided.
+func (d *Driver) SetContextTimeout(timeout time.Duration) {
+	d.contextTimeout = timeout
+}
+
 // ErrNoAvailableLeader is returned as root cause of Open() if there's no
 // leader available in the cluster.
 var ErrNoAvailableLeader = client.ErrNoAvailableLeader
