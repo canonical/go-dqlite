@@ -13,9 +13,8 @@ extern int vasprintf(char **strp, const char *fmt, va_list ap);
 void dqliteLoggerLogfCb(uintptr_t handle, int level, char *msg);
 
 // Implementation of xLogf.
-static void dqliteLoggerLogf(void *ctx, int level, const char *format, ...) {
+static void dqliteLoggerLogf(void *ctx, int level, const char *format, va_list args) {
   uintptr_t handle;
-  va_list args;
   char *msg;
   int err;
 
@@ -23,9 +22,7 @@ static void dqliteLoggerLogf(void *ctx, int level, const char *format, ...) {
 
   handle = (uintptr_t)ctx;
 
-  va_start(args, format);
   err = vasprintf(&msg, format, args);
-  va_end(args);
   if (err < 0) {
     // Ignore errors
     return;
@@ -44,8 +41,8 @@ static dqlite_logger *dqlite__logger_create(uintptr_t handle) {
     return NULL;
   }
 
-  logger->ctx = (void*)handle;
-  logger->xLogf = dqliteLoggerLogf;
+  logger->data = (void*)handle;
+  logger->emit = dqliteLoggerLogf;
 
   return logger;
 }
@@ -88,7 +85,7 @@ func NewLogger(f logging.Func) *Logger {
 // Close releases all memory associated with the logger object.
 func (l *Logger) Close() {
 	logger := (*C.dqlite_logger)(unsafe.Pointer(l))
-	handle := (C.uintptr_t)(uintptr(logger.ctx))
+	handle := (C.uintptr_t)(uintptr(logger.data))
 
 	delete(loggerFuncsIndex, handle)
 
