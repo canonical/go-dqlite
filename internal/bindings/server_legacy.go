@@ -67,8 +67,8 @@ func Init() error {
 	return nil
 }
 
-// NewServer creates a new Server instance.
-func NewServer(cluster *Cluster) (*Server, error) {
+// NewServerLegacy creates a new Server instance.
+func NewServerLegacy(cluster *Cluster) (*Server, error) {
 	var server *C.dqlite_server
 
 	rc := C.dqlite_server_create((*C.dqlite_cluster)(unsafe.Pointer(cluster)), &server)

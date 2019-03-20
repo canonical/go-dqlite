@@ -62,7 +62,7 @@ func NewServer(raft *raft.Raft, registry *Registry, listener net.Listener, optio
 		return nil, err
 	}
 
-	server, err := bindings.NewServer(cluster)
+	server, err := bindings.NewServerLegacy(cluster)
 	if err != nil {
 		return nil, err
 	}

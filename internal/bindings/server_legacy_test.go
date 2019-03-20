@@ -18,7 +18,7 @@ func TestNewServer(t *testing.T) {
 	cluster, cleanup := newCluster(t)
 	defer cleanup()
 
-	server, err := bindings.NewServer(cluster)
+	server, err := bindings.NewServerLegacy(cluster)
 	require.NoError(t, err)
 
 	server.Close()
@@ -128,7 +128,7 @@ func newServer(t *testing.T) (*bindings.Server, func()) {
 
 	cluster, clusterCleanup := newCluster(t)
 
-	server, err := bindings.NewServer(cluster)
+	server, err := bindings.NewServerLegacy(cluster)
 	require.NoError(t, err)
 
 	logger := bindings.NewLogger(logging.Test(t))

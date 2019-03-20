@@ -274,7 +274,7 @@ func newServer(t *testing.T, index int, methods bindings.ClusterMethods) (string
 
 	cluster := newCluster(t, methods)
 
-	server, err := bindings.NewServer(cluster)
+	server, err := bindings.NewServerLegacy(cluster)
 	require.NoError(t, err)
 
 	server.SetLogger(logger)
