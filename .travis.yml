@@ -30,5 +30,4 @@ script:
   - $GOPATH/bin/goveralls -coverprofile overalls.coverprofile -service=travis-ci
 
 go:
-  - "1.10"
-  - "master"
+  - "1.11"
