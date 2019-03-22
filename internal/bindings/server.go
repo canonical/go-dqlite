@@ -5,11 +5,25 @@ package bindings
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include <dqlite.h>
 #include <sqlite3.h>
 
+int dup_cloexec(int oldfd) {
+	int newfd = -1;
 
+	newfd = dup(oldfd);
+	if (newfd < 0) {
+		return -1;
+	}
+
+	if (fcntl(newfd, F_SETFD, FD_CLOEXEC) < 0) {
+		return -1;
+	}
+
+	return newfd;
+}
 */
 import "C"
 
@@ -163,7 +177,7 @@ func (s *Server) Handle(conn net.Conn) error {
 
 	// Duplicate the file descriptor, in order to prevent Go's finalizer to
 	// close it.
-	fd2 := C.dup(fd1)
+	fd2 := C.dup_cloexec(fd1)
 	if fd2 < 0 {
 		return fmt.Errorf("failed to dup socket fd")
 	}
