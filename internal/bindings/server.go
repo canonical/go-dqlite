@@ -3,8 +3,6 @@ package bindings
 /*
 #include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
-#include <errno.h>
 #include <fcntl.h>
 
 #include <dqlite.h>
@@ -32,8 +30,6 @@ import (
 	"net"
 	"os"
 	"unsafe"
-
-	"github.com/pkg/errors"
 )
 
 // ProtocolVersion is the latest dqlite server protocol version.
@@ -68,27 +64,32 @@ const (
 )
 
 // Server is a Go wrapper arround dqlite_server.
-type Server C.dqlite_server
+type Server C.dqlite
 
 // Init initializes dqlite global state.
 func Init() error {
-	var errmsg *C.char
-
-	rc := C.dqlite_init(&errmsg)
+	rc := C.dqlite_initialize()
 	if rc != 0 {
-		return fmt.Errorf("%s (%d)", C.GoString(errmsg), rc)
+		return fmt.Errorf("%d", rc)
 	}
 	return nil
 }
 
 // NewServer creates a new Server instance.
-func NewServer(cluster *Cluster) (*Server, error) {
-	var server *C.dqlite_server
+func NewServer(id uint, address string, dir string) (*Server, error) {
+	var server *C.dqlite
 
-	rc := C.dqlite_server_create((*C.dqlite_cluster)(unsafe.Pointer(cluster)), &server)
+	cid := C.unsigned(id)
+
+	caddress := C.CString(address)
+	defer C.free(unsafe.Pointer(caddress))
+
+	cdir := C.CString(dir)
+	defer C.free(unsafe.Pointer(cdir))
+
+	rc := C.dqlite_create(cid, caddress, cdir, &server)
 	if rc != 0 {
-		err := codeToError(rc)
-		return nil, errors.Wrap(err, "failed to create server object")
+		return nil, fmt.Errorf("failed to create server object")
 	}
 
 	return (*Server)(unsafe.Pointer(server)), nil
@@ -96,61 +97,31 @@ func NewServer(cluster *Cluster) (*Server, error) {
 
 // Close the server releasing all used resources.
 func (s *Server) Close() {
-	server := (*C.dqlite_server)(unsafe.Pointer(s))
+	server := (*C.dqlite)(unsafe.Pointer(s))
 
-	C.dqlite_server_destroy(server)
+	C.dqlite_destroy(server)
 }
 
 // SetLogger sets the server logger.
-func (s *Server) SetLogger(logger *Logger) {
-	server := (*C.dqlite_server)(unsafe.Pointer(s))
+// func (s *Server) SetLogger(logger *Logger) {
+// 	server := (*C.dqlite)(unsafe.Pointer(s))
 
-	rc := C.dqlite_server_config(server, C.DQLITE_CONFIG_LOGGER, unsafe.Pointer(logger))
-	if rc != 0 {
-		// Setting the logger should never fail.
-		panic("failed to set logger")
-	}
-}
-
-// SetVfs sets the name of the VFS to use for new connections.
-func (s *Server) SetVfs(name string) {
-	server := (*C.dqlite_server)(unsafe.Pointer(s))
-
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
-
-	rc := C.dqlite_server_config(server, C.DQLITE_CONFIG_VFS, unsafe.Pointer(cname))
-	if rc != 0 {
-		// Setting the logger should never fail.
-		panic("failed to set vfs")
-	}
-}
-
-// SetWalReplication sets the name of the WAL replication to use for new connections.
-func (s *Server) SetWalReplication(name string) {
-	server := (*C.dqlite_server)(unsafe.Pointer(s))
-
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
-
-	rc := C.dqlite_server_config(server, C.DQLITE_CONFIG_WAL_REPLICATION, unsafe.Pointer(cname))
-	if rc != 0 {
-		// Setting the logger should never fail.
-		panic("failed to set WAL replication")
-	}
-}
+// 	rc := C.dqlite_server_config(server, C.DQLITE_CONFIG_LOGGER, unsafe.Pointer(logger))
+// 	if rc != 0 {
+// 		// Setting the logger should never fail.
+// 		panic("failed to set logger")
+// 	}
+// }
 
 // Run the server.
 //
 // After this method is called it's possible to invoke Handle().
 func (s *Server) Run() error {
-	server := (*C.dqlite_server)(unsafe.Pointer(s))
+	server := (*C.dqlite)(unsafe.Pointer(s))
 
-	var errmsg *C.char
-
-	rc := C.dqlite_server_run(server)
+	rc := C.dqlite_run(server)
 	if rc != 0 {
-		return fmt.Errorf(C.GoString(errmsg))
+		return fmt.Errorf("run failed with %d", rc)
 	}
 
 	return nil
@@ -158,14 +129,14 @@ func (s *Server) Run() error {
 
 // Ready waits for the server to be ready to handle connections.
 func (s *Server) Ready() bool {
-	server := (*C.dqlite_server)(unsafe.Pointer(s))
-
-	return C.dqlite_server_ready(server) == 1
+	server := (*C.dqlite)(unsafe.Pointer(s))
+	var cfalse C.bool
+	return C.dqlite_ready(server) != cfalse
 }
 
 // Handle a new connection.
 func (s *Server) Handle(conn net.Conn) error {
-	server := (*C.dqlite_server)(unsafe.Pointer(s))
+	server := (*C.dqlite)(unsafe.Pointer(s))
 
 	file, err := conn.(fileConn).File()
 	if err != nil {
@@ -184,16 +155,13 @@ func (s *Server) Handle(conn net.Conn) error {
 
 	conn.Close()
 
-	var errmsg *C.char
-
-	rc := C.dqlite_server_handle(server, fd2, &errmsg)
+	rc := C.dqlite_handle(server, fd2)
 	if rc != 0 {
 		C.close(fd2)
-		defer C.sqlite3_free(unsafe.Pointer(errmsg))
 		if rc == C.DQLITE_STOPPED {
 			return ErrServerStopped
 		}
-		return fmt.Errorf(C.GoString(errmsg))
+		return fmt.Errorf("hadle failed with %d", rc)
 	}
 
 	return nil
@@ -207,13 +175,11 @@ type fileConn interface {
 
 // Stop the server.
 func (s *Server) Stop() error {
-	server := (*C.dqlite_server)(unsafe.Pointer(s))
+	server := (*C.dqlite)(unsafe.Pointer(s))
 
-	var errmsg *C.char
-
-	rc := C.dqlite_server_stop(server, &errmsg)
+	rc := C.dqlite_stop(server)
 	if rc != 0 {
-		return fmt.Errorf(C.GoString(errmsg))
+		return fmt.Errorf("stop failed with %d", rc)
 	}
 
 	return nil
