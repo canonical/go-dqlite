@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
-	"github.com/CanonicalLtd/go-dqlite/internal/replication"
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 )

@@ -28,7 +28,6 @@ import (
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/CanonicalLtd/go-dqlite/internal/client"
-	"github.com/CanonicalLtd/go-dqlite/internal/connection"
 )
 
 // Driver perform queries against a dqlite server.

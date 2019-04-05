@@ -95,6 +95,16 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 	return (*Server)(unsafe.Pointer(server)), nil
 }
 
+// Bootstrap the first server of a cluster.
+func (s *Server) Bootstrap() error {
+	server := (*C.dqlite)(unsafe.Pointer(s))
+	rv := C.dqlite_bootstrap(server)
+	if rv != 0 {
+		return fmt.Errorf("bootstrap failed with %d", rv)
+	}
+	return nil
+}
+
 // Close the server releasing all used resources.
 func (s *Server) Close() {
 	server := (*C.dqlite)(unsafe.Pointer(s))

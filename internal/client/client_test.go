@@ -5,45 +5,39 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/CanonicalLtd/go-dqlite/internal/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestClient_Heartbeat(t *testing.T) {
-	defer bindings.AssertNoMemoryLeaks(t)
+// func TestClient_Heartbeat(t *testing.T) {
+// 	c, cleanup := newClient(t)
+// 	defer cleanup()
 
-	c, cleanup := newClient(t)
-	defer cleanup()
+// 	request, response := newMessagePair(512, 512)
 
-	request, response := newMessagePair(512, 512)
+// 	client.EncodeHeartbeat(&request, uint64(time.Now().Unix()))
 
-	client.EncodeHeartbeat(&request, uint64(time.Now().Unix()))
+// 	makeClientCall(t, c, &request, &response)
 
-	makeClientCall(t, c, &request, &response)
+// 	servers, err := client.DecodeServers(&response)
+// 	require.NoError(t, err)
 
-	servers, err := client.DecodeServers(&response)
-	require.NoError(t, err)
-
-	assert.Len(t, servers, 2)
-	assert.Equal(t, client.Servers{
-		{ID: uint64(1), Address: "1.2.3.4:666"},
-		{ID: uint64(2), Address: "5.6.7.8:666"}},
-		servers)
-}
+// 	assert.Len(t, servers, 2)
+// 	assert.Equal(t, client.Servers{
+// 		{ID: uint64(1), Address: "1.2.3.4:666"},
+// 		{ID: uint64(2), Address: "5.6.7.8:666"}},
+// 		servers)
+// }
 
 // Test sending a request that needs to be written into the dynamic buffer.
 func TestClient_RequestWithDynamicBuffer(t *testing.T) {
-	defer bindings.AssertNoMemoryLeaks(t)
-
 	c, cleanup := newClient(t)
 	defer cleanup()
 
 	request, response := newMessagePair(64, 64)
 
-	flags := uint64(bindings.OpenReadWrite | bindings.OpenCreate)
-	client.EncodeOpen(&request, "test.db", flags, "test-0")
+	client.EncodeOpen(&request, "test.db", 0, "test-0")
 
 	makeClientCall(t, c, &request, &response)
 
@@ -65,15 +59,12 @@ CREATE TABLE baz (n INT);
 }
 
 func TestClient_Prepare(t *testing.T) {
-	defer bindings.AssertNoMemoryLeaks(t)
-
 	c, cleanup := newClient(t)
 	defer cleanup()
 
 	request, response := newMessagePair(64, 64)
 
-	flags := uint64(bindings.OpenReadWrite | bindings.OpenCreate)
-	client.EncodeOpen(&request, "test.db", flags, "test-0")
+	client.EncodeOpen(&request, "test.db", 0, "test-0")
 
 	makeClientCall(t, c, &request, &response)
 
@@ -158,11 +149,7 @@ func TestClient_Query(t *testing.T) {
 func newClient(t *testing.T) (*client.Client, func()) {
 	t.Helper()
 
-	methods := &testClusterMethods{}
-
-	address, serverCleanup := newServer(t, 0, methods)
-
-	methods.leader = address
+	address, serverCleanup := newServer(t, 0)
 
 	store := newStore(t, []string{address})
 
