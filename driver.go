@@ -190,12 +190,6 @@ func driverConnectionRetryStrategy(factor, cap time.Duration) strategy.Strategy 
 // If this node is not the leader, or the leader is unknown an ErrNotLeader
 // error is returned.
 func (d *Driver) Open(uri string) (driver.Conn, error) {
-	// Validate the given data source string.
-	filename, flags, err := connection.ParseURI(uri)
-	if err != nil {
-		return nil, errors.Wrapf(err, "invalid URI %s", uri)
-	}
-
 	ctx, cancel := context.WithTimeout(d.context, d.connectionTimeout)
 	defer cancel()
 
@@ -207,6 +201,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 		contextTimeout: d.contextTimeout,
 	}
 
+	var err error
 	conn.client, err = connector.Connect(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create dqlite connection")
@@ -219,7 +214,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	defer conn.request.Reset()
 	defer conn.response.Reset()
 
-	client.EncodeOpen(&conn.request, filename, flags, "volatile")
+	client.EncodeOpen(&conn.request, uri, 0, "volatile")
 
 	if err := conn.client.Call(ctx, &conn.request, &conn.response); err != nil {
 		conn.client.Close()
