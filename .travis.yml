@@ -19,7 +19,7 @@ before_install:
 
 script:
   - go get -t -tags libsqlite3 ./...
-  - go vet -t tags libsqlite3
+  - go vet -tags libsqlite3 ./...
   - golint
   - deadcode
   - project=github.com/CanonicalLtd/go-dqlite
