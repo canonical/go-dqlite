@@ -260,7 +260,11 @@ func newServer(t *testing.T, index int) (string, func()) {
 	server, err := bindings.NewServer(id, address, dir)
 	require.NoError(t, err)
 
-	err = server.Bootstrap()
+	servers := []bindings.ServerInfo{
+		{ID: uint64(id), Address: address},
+	}
+
+	err = server.Bootstrap(servers)
 	require.NoError(t, err)
 
 	runCh := make(chan error)

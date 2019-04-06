@@ -100,6 +100,15 @@ func newServer(t *testing.T, listener net.Listener) (*dqlite.Server, func()) {
 	server, err := dqlite.NewServer(1, dir, listener)
 	require.NoError(t, err)
 
+	servers := []dqlite.ServerInfo{
+		{ID: 1, Address: listener.Addr().String()},
+	}
+	err = server.Bootstrap(servers)
+	require.NoError(t, err)
+
+	err = server.Start()
+	require.NoError(t, err)
+
 	cleanup := func() {
 		require.NoError(t, server.Close())
 		dirCleanup()
