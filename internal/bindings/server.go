@@ -22,6 +22,20 @@ int dup_cloexec(int oldfd) {
 
 	return newfd;
 }
+
+int alloc_servers(int n, struct dqlite_server **servers) {
+        *servers = malloc(n * sizeof **servers);
+        if (servers == NULL) {
+                return -1;
+        }
+        return 0;
+}
+
+void set_server(struct dqlite_server *servers, int i, unsigned id, const char *address) {
+        servers[i].id = id;
+        servers[i].address = address;
+}
+
 */
 import "C"
 
@@ -96,9 +110,21 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 }
 
 // Bootstrap the first server of a cluster.
-func (s *Server) Bootstrap() error {
+func (s *Server) Bootstrap(servers []ServerInfo) error {
+	var cservers *C.dqlite_server
+	n := len(servers)
 	server := (*C.dqlite)(unsafe.Pointer(s))
-	rv := C.dqlite_bootstrap(server)
+	rv := C.alloc_servers(C.int(n), &cservers)
+	if rv != 0 {
+		return fmt.Errorf("out of memory")
+	}
+	for i := 0; i < n; i++ {
+		cid := C.unsigned(servers[i].ID)
+		caddress := C.CString(servers[i].Address)
+		defer C.free(unsafe.Pointer(caddress))
+		C.set_server(cservers, C.int(i), cid, caddress)
+	}
+	rv = C.dqlite_bootstrap(server, C.unsigned(n), cservers)
 	if rv != 0 {
 		return fmt.Errorf("bootstrap failed with %d", rv)
 	}

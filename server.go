@@ -16,6 +16,7 @@ type Server struct {
 	log      LogFunc          // Logger
 	server   *bindings.Server // Low-level C implementation
 	listener net.Listener     // Queue of new connections
+	running  bool             // Whether the server is running
 	runCh    chan error       // Receives the low-level C server return code
 	acceptCh chan error       // Receives connection handling errors
 }
@@ -52,12 +53,6 @@ func NewServer(id uint, dir string, listener net.Listener, options ...ServerOpti
 		return nil, err
 	}
 
-	// TODO: support proper membership
-	err = server.Bootstrap()
-	if err != nil {
-		return nil, err
-	}
-
 	s := &Server{
 		log:      o.Log,
 		server:   server,
@@ -66,15 +61,27 @@ func NewServer(id uint, dir string, listener net.Listener, options ...ServerOpti
 		acceptCh: make(chan error, 1),
 	}
 
+	return s, nil
+}
+
+// Bootstrap the server.
+func (s *Server) Bootstrap(servers []ServerInfo) error {
+	return s.server.Bootstrap(servers)
+}
+
+// Start serving requests.
+func (s *Server) Start() error {
 	go s.run()
 
 	if !s.server.Ready() {
-		return nil, fmt.Errorf("server failed to start")
+		return fmt.Errorf("server failed to start")
 	}
 
 	go s.acceptLoop()
 
-	return s, nil
+	s.running = true
+
+	return nil
 }
 
 // Hold configuration options for a dqlite server.
@@ -149,6 +156,10 @@ func (s *Server) Close() error {
 		return err
 	}
 
+	if !s.running {
+		goto out
+	}
+
 	// Wait for the acceptLoop goroutine to exit.
 	select {
 	case err := <-s.acceptCh:
@@ -174,6 +185,7 @@ func (s *Server) Close() error {
 		return fmt.Errorf("server did not stop within a second")
 	}
 
+out:
 	s.server.Close()
 
 	return nil
