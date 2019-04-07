@@ -141,6 +141,42 @@ func TestConn_QueryRow(t *testing.T) {
 	assert.NoError(t, conn.Close())
 }
 
+func TestConn_QueryBlob(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	execer := conn.(driver.Execer)
+
+	_, err = execer.Exec("CREATE TABLE test (data BLOB)", nil)
+	require.NoError(t, err)
+
+	values := []driver.Value{
+		[]byte{'a', 'b', 'c'},
+	}
+	_, err = execer.Exec("INSERT INTO test(data) VALUES(?)", values)
+	require.NoError(t, err)
+
+	queryer := conn.(driver.Queryer)
+
+	rows, err := queryer.Query("SELECT data FROM test", nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, rows.Columns(), []string{"data"})
+
+	values = make([]driver.Value, 1)
+	require.NoError(t, rows.Next(values))
+
+	assert.Equal(t, []byte{'a', 'b', 'c'}, values[0])
+
+	assert.NoError(t, conn.Close())
+}
+
 func TestStmt_Exec(t *testing.T) {
 	drv, cleanup := newDriver(t)
 	defer cleanup()

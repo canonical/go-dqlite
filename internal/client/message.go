@@ -61,6 +61,8 @@ func (m *Message) Reset() {
 // Append a byte slice to the message.
 func (m *Message) putBlob(v []byte) {
 	size := len(v)
+	m.putUint64(uint64(size))
+
 	pad := 0
 	if (size % messageWordSize) != 0 {
 		// Account for padding
@@ -351,6 +353,24 @@ func (m *Message) getString() string {
 	return s
 }
 
+func (m *Message) getBlob() []byte {
+	size := m.getUint64()
+	data := make([]byte, size)
+	for i := range data {
+		data[i] = m.getUint8()
+	}
+	pad := 0
+	if (size % messageWordSize) != 0 {
+		// Account for padding
+		pad = int(messageWordSize - (size % messageWordSize))
+	}
+	// Consume padding
+	for i := 0; i < pad; i++ {
+		m.getUint8()
+	}
+	return data
+}
+
 // Read a byte from the message body.
 func (m *Message) getUint8() uint8 {
 	b := m.bufferForGet()
@@ -534,7 +554,7 @@ func (r *Rows) Next(dest []driver.Value) error {
 		case bindings.Float:
 			dest[i] = r.message.getFloat64()
 		case bindings.Blob:
-			panic("todo")
+			dest[i] = r.message.getBlob()
 		case bindings.Text:
 			dest[i] = r.message.getString()
 		case bindings.Null:
