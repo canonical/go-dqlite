@@ -120,9 +120,10 @@ func newServers(t *testing.T, listeners []net.Listener, infos []dqlite.ServerInf
 	cleanups := make([]func(), 0)
 
 	for i, listener := range listeners {
-		id := uint(i + 1)
+		id := uint64(i + 1)
 		dir, dirCleanup := newDir(t)
-		server, err := dqlite.NewServer(id, dir, listener)
+		info := dqlite.ServerInfo{ID: id, Address: listener.Addr().String()}
+		server, err := dqlite.NewServer(info, dir)
 		require.NoError(t, err)
 
 		cleanups = append(cleanups, func() {
@@ -133,7 +134,7 @@ func newServers(t *testing.T, listeners []net.Listener, infos []dqlite.ServerInf
 		err = server.Bootstrap(infos)
 		require.NoError(t, err)
 
-		err = server.Start()
+		err = server.Start(listener)
 		require.NoError(t, err)
 
 		servers[i] = server

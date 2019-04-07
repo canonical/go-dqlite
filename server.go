@@ -16,7 +16,6 @@ type Server struct {
 	log      LogFunc          // Logger
 	server   *bindings.Server // Low-level C implementation
 	listener net.Listener     // Queue of new connections
-	running  bool             // Whether the server is running
 	runCh    chan error       // Receives the low-level C server return code
 	acceptCh chan error       // Receives connection handling errors
 }
@@ -39,16 +38,14 @@ func WithServerAddressProvider(provider raft.ServerAddressProvider) ServerOption
 }
 
 // NewServer creates a new Server instance.
-func NewServer(id uint, dir string, listener net.Listener, options ...ServerOption) (*Server, error) {
+func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, error) {
 	o := defaultServerOptions()
-
-	address := listener.Addr().String()
 
 	for _, option := range options {
 		option(o)
 	}
 
-	server, err := bindings.NewServer(id, address, dir)
+	server, err := bindings.NewServer(uint(info.ID), info.Address, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +53,6 @@ func NewServer(id uint, dir string, listener net.Listener, options ...ServerOpti
 	s := &Server{
 		log:      o.Log,
 		server:   server,
-		listener: listener,
 		runCh:    make(chan error),
 		acceptCh: make(chan error, 1),
 	}
@@ -70,16 +66,16 @@ func (s *Server) Bootstrap(servers []ServerInfo) error {
 }
 
 // Start serving requests.
-func (s *Server) Start() error {
+func (s *Server) Start(listener net.Listener) error {
 	go s.run()
+
+	s.listener = listener
 
 	if !s.server.Ready() {
 		return fmt.Errorf("server failed to start")
 	}
 
 	go s.acceptLoop()
-
-	s.running = true
 
 	return nil
 }
@@ -150,14 +146,14 @@ func (s *Server) acceptLoop() {
 
 // Close the server, releasing all resources it created.
 func (s *Server) Close() error {
+	if s.listener == nil {
+		goto out
+	}
+
 	// Close the listener, which will make the listener.Accept() call in
 	// acceptLoop() return an error.
 	if err := s.listener.Close(); err != nil {
 		return err
-	}
-
-	if !s.running {
-		goto out
 	}
 
 	// Wait for the acceptLoop goroutine to exit.
