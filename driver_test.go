@@ -19,7 +19,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/CanonicalLtd/go-dqlite"
+	dqlite "github.com/CanonicalLtd/go-dqlite"
 	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -103,6 +103,40 @@ func TestConn_Query(t *testing.T) {
 
 	_, err = queryer.Query("SELECT n FROM test", nil)
 	require.NoError(t, err)
+
+	assert.NoError(t, conn.Close())
+}
+
+func TestConn_QueryRow(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	execer := conn.(driver.Execer)
+
+	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	require.NoError(t, err)
+
+	_, err = execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+	require.NoError(t, err)
+
+	_, err = execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+	require.NoError(t, err)
+
+	queryer := conn.(driver.Queryer)
+
+	rows, err := queryer.Query("SELECT n FROM test", nil)
+	require.NoError(t, err)
+
+	values := make([]driver.Value, 1)
+	require.NoError(t, rows.Next(values))
+
+	require.NoError(t, rows.Close())
 
 	assert.NoError(t, conn.Close())
 }
