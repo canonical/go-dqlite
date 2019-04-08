@@ -23,13 +23,13 @@ func TestMessage_putBlob(t *testing.T) {
 		Blob   []byte
 		Offset int
 	}{
-		{[]byte{1, 2, 3, 4, 5}, 8},
-		{[]byte{1, 2, 3, 4, 5, 6, 7, 8}, 8},
-		{[]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 16},
+		{[]byte{1, 2, 3, 4, 5}, 16},
+		{[]byte{1, 2, 3, 4, 5, 6, 7, 8}, 16},
+		{[]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 24},
 	}
 
 	message := Message{}
-	message.Init(16)
+	message.Init(64)
 
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d", c.Offset), func(t *testing.T) {
@@ -37,7 +37,7 @@ func TestMessage_putBlob(t *testing.T) {
 
 			bytes, offset := message.Body1()
 
-			assert.Equal(t, bytes[:len(c.Blob)], c.Blob)
+			assert.Equal(t, bytes[8:len(c.Blob)+8], c.Blob)
 			assert.Equal(t, offset, c.Offset)
 
 			message.Reset()
@@ -164,7 +164,7 @@ func TestMessage_putNamedValues(t *testing.T) {
 
 	bytes, offset := message.Body1()
 
-	assert.Equal(t, 88, offset)
+	assert.Equal(t, 96, offset)
 	assert.Equal(t, bytes[0], byte(7))
 	assert.Equal(t, bytes[1], byte(bindings.Integer))
 	assert.Equal(t, bytes[2], byte(bindings.Float))
@@ -238,21 +238,34 @@ func TestMessage_getString(t *testing.T) {
 	}
 }
 
-func TestMessage_getString_Overflow(t *testing.T) {
-	message := Message{}
-	message.Init(8)
+func TestMessage_getBlob(t *testing.T) {
+	cases := []struct {
+		Blob   []byte
+		Offset int
+	}{
+		{[]byte{1, 2, 3, 4, 5}, 16},
+		{[]byte{1, 2, 3, 4, 5, 6, 7, 8}, 16},
+		{[]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 24},
+	}
 
-	message.putBlob([]byte("12345678"))
-	message.putBlob([]byte{'9', 0, 0, 0, 0, 0, 0, 0})
-	message.putHeader(0)
+	for _, c := range cases {
+		t.Run(fmt.Sprintf("%d", c.Offset), func(t *testing.T) {
+			message := Message{}
+			message.Init(64)
 
-	message.Rewind()
+			message.putBlob(c.Blob)
+			message.putHeader(0)
 
-	s := message.getString()
-	assert.Equal(t, "123456789", s)
+			message.Rewind()
 
-	assert.Equal(t, 8, message.body1.Offset)
-	assert.Equal(t, 8, message.body2.Offset)
+			bytes := message.getBlob()
+
+			_, offset := message.Body1()
+
+			assert.Equal(t, bytes, c.Blob)
+			assert.Equal(t, offset, c.Offset)
+		})
+	}
 }
 
 // The overflowing string ends exactly at word boundary.
@@ -260,16 +273,19 @@ func TestMessage_getString_Overflow_WordBoundary(t *testing.T) {
 	message := Message{}
 	message.Init(8)
 
-	message.putBlob([]byte("abcdefgh"))
-	message.putBlob([]byte("ilmnopqr"))
-	message.putBlob([]byte{0, 0, 0, 0, 0, 0, 0})
+	message.putBlob([]byte{
+		'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
+		'i', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+		0, 0, 0, 0, 0, 0, 0,
+	})
 	message.putHeader(0)
 
 	message.Rewind()
+	message.getUint64()
 
 	s := message.getString()
 	assert.Equal(t, "abcdefghilmnopqr", s)
 
 	assert.Equal(t, 8, message.body1.Offset)
-	assert.Equal(t, 16, message.body2.Offset)
+	assert.Equal(t, 24, message.body2.Offset)
 }

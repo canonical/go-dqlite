@@ -527,7 +527,7 @@ func (r *Rows) Columns() []string {
 
 // Close closes the rows iterator.
 func (r *Rows) Close() error {
-	r.rows.Close()
+	err := r.rows.Close()
 
 	// If we consumed the whole result set, there's nothing to do as
 	// there's no pending response from the server.
@@ -535,7 +535,10 @@ func (r *Rows) Close() error {
 		return nil
 	}
 
-	r.rows.Close()
+	// If there is was a single-response result set, we're done.
+	if err == io.EOF {
+		return nil
+	}
 
 	// Let's issue an interrupt request and wait until we get an empty
 	// response, signalling that the query was interrupted.
