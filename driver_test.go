@@ -266,6 +266,53 @@ func TestStmt_Query(t *testing.T) {
 	assert.NoError(t, conn.Close())
 }
 
+func TestConn_QueryParams(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	execer := conn.(driver.Execer)
+
+	_, err = execer.Exec("CREATE TABLE test (n INT, t TEXT)", nil)
+	require.NoError(t, err)
+
+	_, err = execer.Exec(`
+INSERT INTO test (n,t) VALUES (1,'a');
+INSERT INTO test (n,t) VALUES (2,'a');
+INSERT INTO test (n,t) VALUES (2,'b');
+INSERT INTO test (n,t) VALUES (3,'b');
+`,
+		nil)
+	require.NoError(t, err)
+
+	values := []driver.Value{
+		int64(1),
+		"a",
+	}
+
+	queryer := conn.(driver.Queryer)
+
+	rows, err := queryer.Query("SELECT n, t FROM test WHERE n > ? AND t = ?", values)
+	require.NoError(t, err)
+
+	assert.Equal(t, rows.Columns()[0], "n")
+
+	values = make([]driver.Value, 2)
+	require.NoError(t, rows.Next(values))
+
+	assert.Equal(t, int64(2), values[0])
+	assert.Equal(t, "a", values[1])
+
+	require.Equal(t, io.EOF, rows.Next(values))
+
+	assert.NoError(t, conn.Close())
+}
+
 func newDriver(t *testing.T) (*dqlite.Driver, func()) {
 	t.Helper()
 

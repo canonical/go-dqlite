@@ -618,7 +618,6 @@ func valuesToNamedValues(args []driver.Value) []driver.NamedValue {
 func driverError(err error) error {
 	switch err := errors.Cause(err).(type) {
 	case *net.OpError:
-		panic(err)
 		return driver.ErrBadConn
 	case client.ErrRequest:
 		switch err.Code {
