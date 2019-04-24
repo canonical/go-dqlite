@@ -132,6 +132,39 @@ func TestIntegration_LargeQuery(t *testing.T) {
 	require.NoError(t, db.Close())
 }
 
+func TestMembership(t *testing.T) {
+	n := 3
+	listeners := make([]net.Listener, n)
+	servers := make([]*dqlite.Server, n)
+	var leaderInfo dqlite.ServerInfo
+
+	for i := range listeners {
+		id := uint64(i + 1)
+		listener := newListener(t)
+		info := dqlite.ServerInfo{ID: id, Address: listener.Addr().String()}
+		dir, cleanup := newDir(t)
+		defer cleanup()
+		server, err := dqlite.NewServer(info, dir)
+		require.NoError(t, err)
+		listeners[i] = listener
+		servers[i] = server
+		if i == 0 {
+			err := server.Bootstrap([]dqlite.ServerInfo{info})
+			require.NoError(t, err)
+			leaderInfo = info
+		}
+		err = server.Start(listener)
+		require.NoError(t, err)
+		defer server.Close()
+	}
+
+	server := servers[1]
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := server.Join(ctx, leaderInfo)
+	require.NoError(t, err)
+}
+
 func newDB(t *testing.T) (*sql.DB, []*dqlite.Server, func()) {
 	n := 3
 

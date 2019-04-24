@@ -1,12 +1,16 @@
 package dqlite
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"runtime"
 	"time"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/CanonicalLtd/go-dqlite/internal/client"
+	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/strategy"
 	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 )
@@ -18,6 +22,8 @@ type Server struct {
 	listener net.Listener     // Queue of new connections
 	runCh    chan error       // Receives the low-level C server return code
 	acceptCh chan error       // Receives connection handling errors
+	id       uint64
+	address  string
 }
 
 // ServerOption can be used to tweak server parameters.
@@ -55,6 +61,8 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 		server:   server,
 		runCh:    make(chan error),
 		acceptCh: make(chan error, 1),
+		id:       info.ID,
+		address:  info.Address,
 	}
 
 	return s, nil
@@ -76,6 +84,37 @@ func (s *Server) Start(listener net.Listener) error {
 	}
 
 	go s.acceptLoop()
+
+	return nil
+}
+
+// Join a cluster.
+func (s *Server) Join(ctx context.Context, info ServerInfo) error {
+	store := NewInmemServerStore()
+	config := client.Config{
+		Dial:           client.TCPDial,
+		AttemptTimeout: 100 * time.Millisecond,
+		RetryStrategies: []strategy.Strategy{
+			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
+	}
+	store.Set(ctx, []ServerInfo{info})
+	connector := client.NewConnector(0, store, config, defaultLogFunc())
+	c, err := connector.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(4096)
+	response := client.Message{}
+	response.Init(4096)
+
+	client.EncodeJoin(&request, s.id, s.address)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return err
+	}
 
 	return nil
 }
