@@ -40,6 +40,15 @@ static void setServer(struct dqlite_server *servers, int i, unsigned id, const c
         servers[i].address = address;
 }
 
+// Get the attributes of the i'th server in the given array.
+static void getServer(struct dqlite_server *servers, int i, unsigned *id, const char **address) {
+        *id = servers[i].id;
+        *address = servers[i].address;
+}
+
+
+typedef struct dqlite_server dqlite_server;
+
 // C to Go trampoline for custom connect function.
 int connectWithDial(uintptr_t handle, dqlite_server *server, int *fd);
 
@@ -121,6 +130,9 @@ func (s *Server) Bootstrap(servers []ServerInfo) error {
 	}
 	rv = C.dqlite_bootstrap(server, C.unsigned(n), cservers)
 	if rv != 0 {
+		if rv == C.DQLITE_CANTBOOTSTRAP {
+			return ErrServerCantBootstrap
+		}
 		return fmt.Errorf("bootstrap failed with %d", rv)
 	}
 	return nil
@@ -165,8 +177,41 @@ func (s *Server) Run() error {
 // Ready waits for the server to be ready to handle connections.
 func (s *Server) Ready() bool {
 	server := (*C.dqlite)(unsafe.Pointer(s))
-	var cfalse C.bool
 	return C.dqlite_ready(server) != cfalse
+}
+
+// Leader returns information about the current leader, if any.
+func (s *Server) Leader() *ServerInfo {
+	server := (*C.dqlite)(unsafe.Pointer(s))
+	var info C.dqlite_server
+	if C.dqlite_leader(server, &info) != cfalse {
+		return &ServerInfo{
+			ID:      uint64(info.id),
+			Address: C.GoString(info.address),
+		}
+	}
+	return nil
+}
+
+// Cluster returns information about all servers in the cluster.
+func (s *Server) Cluster() ([]ServerInfo, error) {
+	server := (*C.dqlite)(unsafe.Pointer(s))
+	var servers *C.dqlite_server
+	var n C.unsigned
+	rv := C.dqlite_cluster(server, &servers, &n)
+	if rv != 0 {
+		return nil, fmt.Errorf("cluster failed with %d", rv)
+	}
+	defer C.sqlite3_free(unsafe.Pointer(servers))
+	infos := make([]ServerInfo, int(n))
+	for i := range infos {
+		var id C.unsigned
+		var address *C.char
+		C.getServer(servers, C.int(i), &id, &address)
+		infos[i].ID = uint64(id)
+		infos[i].Address = C.GoString(address)
+	}
+	return infos, nil
 }
 
 // Extract the underlying socket from a connection.
@@ -253,3 +298,10 @@ var connectIndex C.uintptr_t = 100
 
 // ErrServerStopped is returned by Server.Handle() is the server was stopped.
 var ErrServerStopped = fmt.Errorf("server was stopped")
+
+// ErrServerCantBootstrap is returned by Server.Bootstrap() if the server has
+// already a raft configuration.
+var ErrServerCantBootstrap = fmt.Errorf("server already bootstrapped")
+
+// To compare bool values.
+var cfalse C.bool

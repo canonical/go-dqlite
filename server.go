@@ -78,6 +78,16 @@ func (s *Server) Bootstrap(servers []ServerInfo) error {
 	return s.server.Bootstrap(servers)
 }
 
+// Cluster returns information about all servers in the cluster.
+func (s *Server) Cluster() ([]ServerInfo, error) {
+	return s.server.Cluster()
+}
+
+// Leader returns information about the current leader, if any.
+func (s *Server) Leader() *ServerInfo {
+	return s.server.Leader()
+}
+
 // Start serving requests.
 func (s *Server) Start(listener net.Listener) error {
 	go s.run()
@@ -237,3 +247,7 @@ func defaultServerOptions() *serverOptions {
 		Log: defaultLogFunc(),
 	}
 }
+
+// ErrServerCantBootstrap is returned by Server.Bootstrap() if the server has
+// already a raft configuration.
+var ErrServerCantBootstrap = bindings.ErrServerCantBootstrap
