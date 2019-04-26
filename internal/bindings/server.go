@@ -6,10 +6,11 @@ package bindings
 #include <fcntl.h>
 
 #include <dqlite.h>
+#include <raft.h>
 #include <sqlite3.h>
 
 // Duplicate a file descriptor and prevent it from being cloned into child processes.
-int dupCloexec(int oldfd) {
+static int dupCloexec(int oldfd) {
 	int newfd = -1;
 
 	newfd = dup(oldfd);
@@ -25,7 +26,7 @@ int dupCloexec(int oldfd) {
 }
 
 // Allocate an array of n dqlite_server structs.
-int allocServers(int n, struct dqlite_server **servers) {
+static int allocServers(int n, struct dqlite_server **servers) {
         *servers = malloc(n * sizeof **servers);
         if (servers == NULL) {
                 return -1;
@@ -34,16 +35,32 @@ int allocServers(int n, struct dqlite_server **servers) {
 }
 
 // Set the attributes of the i'th server in the given array.
-void setServer(struct dqlite_server *servers, int i, unsigned id, const char *address) {
+static void setServer(struct dqlite_server *servers, int i, unsigned id, const char *address) {
         servers[i].id = id;
         servers[i].address = address;
+}
+
+// C to Go trampoline for custom connect function.
+int connectWithDial(uintptr_t handle, dqlite_server *server, int *fd);
+
+// Wrapper to call the Go trampoline.
+static int connectTrampoline(void *data, const dqlite_server *server, int *fd) {
+        uintptr_t handle = (uintptr_t)(data);
+        return connectWithDial(handle, (dqlite_server *)server, fd);
+}
+
+// Configure a custom connect function.
+static void configConnect(dqlite *d, uintptr_t handle) {
+        dqlite_config(d, DQLITE_CONFIG_CONNECT, connectTrampoline, (void*)handle);
 }
 */
 import "C"
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
+	"time"
 	"unsafe"
 )
 
@@ -55,6 +72,9 @@ type ServerInfo struct {
 
 // Server is a Go wrapper arround dqlite_server.
 type Server C.dqlite
+
+// DialFunc is a function that can be used to establish a network connection.
+type DialFunc func(context.Context, string) (net.Conn, error)
 
 // Init initializes dqlite global state.
 func Init() error {
@@ -123,6 +143,15 @@ func (s *Server) Close() {
 // 	}
 // }
 
+// SetDialFunc configure a custom dial function.
+func (s *Server) SetDialFunc(dial DialFunc) {
+	server := (*C.dqlite)(unsafe.Pointer(s))
+	connectIndex++
+	// TODO: unregister when destroying the server.
+	connectRegistry[connectIndex] = dial
+	C.configConnect(server, connectIndex)
+}
+
 // Run the server.
 func (s *Server) Run() error {
 	server := (*C.dqlite)(unsafe.Pointer(s))
@@ -140,15 +169,12 @@ func (s *Server) Ready() bool {
 	return C.dqlite_ready(server) != cfalse
 }
 
-// Handle a new connection.
-func (s *Server) Handle(conn net.Conn) error {
-	server := (*C.dqlite)(unsafe.Pointer(s))
-
+// Extract the underlying socket from a connection.
+func connToSocket(conn net.Conn) (C.int, error) {
 	file, err := conn.(fileConn).File()
 	if err != nil {
-		return err
+		return C.int(-1), err
 	}
-	defer file.Close()
 
 	fd1 := C.int(file.Fd())
 
@@ -156,14 +182,26 @@ func (s *Server) Handle(conn net.Conn) error {
 	// close it.
 	fd2 := C.dupCloexec(fd1)
 	if fd2 < 0 {
-		return fmt.Errorf("failed to dup socket fd")
+		return C.int(-1), fmt.Errorf("failed to dup socket fd")
 	}
 
 	conn.Close()
 
-	rc := C.dqlite_handle(server, fd2)
+	return fd2, nil
+}
+
+// Handle a new connection.
+func (s *Server) Handle(conn net.Conn) error {
+	server := (*C.dqlite)(unsafe.Pointer(s))
+
+	fd, err := connToSocket(conn)
+	if err != nil {
+		return err
+	}
+
+	rc := C.dqlite_handle(server, fd)
 	if rc != 0 {
-		C.close(fd2)
+		C.close(fd)
 		if rc == C.DQLITE_STOPPED {
 			return ErrServerStopped
 		}
@@ -188,6 +226,30 @@ func (s *Server) Stop() error {
 	}
 	return nil
 }
+
+//export connectWithDial
+func connectWithDial(handle C.uintptr_t, server *C.dqlite_server, fd *C.int) C.int {
+	dial := connectRegistry[handle]
+	// TODO: make timeout customizable.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	id := uint64(server.id)
+	info := ServerInfo{ID: id}
+	conn, err := dial(ctx, info.Address)
+	if err != nil {
+		return C.RAFT_NOCONNECTION
+	}
+	socket, err := connToSocket(conn)
+	if err != nil {
+		return C.RAFT_NOCONNECTION
+	}
+	*fd = socket
+	return C.int(0)
+}
+
+// Use handles to avoid passing Go pointers to C.
+var connectRegistry = make(map[C.uintptr_t]DialFunc)
+var connectIndex C.uintptr_t = 100
 
 // ErrServerStopped is returned by Server.Handle() is the server was stopped.
 var ErrServerStopped = fmt.Errorf("server was stopped")

@@ -11,9 +11,11 @@ import (
 	"github.com/CanonicalLtd/go-dqlite/internal/client"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
-	"github.com/hashicorp/raft"
 	"github.com/pkg/errors"
 )
+
+// ServerInfo holds information about a single server.
+type ServerInfo = client.ServerInfo
 
 // Server implements the dqlite network protocol.
 type Server struct {
@@ -36,10 +38,10 @@ func WithServerLogFunc(log LogFunc) ServerOption {
 	}
 }
 
-// WithServerAddressProvider sets a custom resolver for server addresses.
-func WithServerAddressProvider(provider raft.ServerAddressProvider) ServerOption {
+// WithServerDialFunc sets a custom dial function for the server.
+func WithServerDialFunc(dial DialFunc) ServerOption {
 	return func(options *serverOptions) {
-		options.AddressProvider = provider
+		options.DialFunc = dial
 	}
 }
 
@@ -54,6 +56,9 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 	server, err := bindings.NewServer(uint(info.ID), info.Address, dir)
 	if err != nil {
 		return nil, err
+	}
+	if o.DialFunc != nil {
+		server.SetDialFunc(bindings.DialFunc(o.DialFunc))
 	}
 
 	s := &Server{
@@ -121,8 +126,8 @@ func (s *Server) Join(ctx context.Context, info ServerInfo) error {
 
 // Hold configuration options for a dqlite server.
 type serverOptions struct {
-	Log             LogFunc
-	AddressProvider raft.ServerAddressProvider
+	Log      LogFunc
+	DialFunc DialFunc
 }
 
 // Run the server.
@@ -229,7 +234,6 @@ out:
 // Create a serverOptions object with sane defaults.
 func defaultServerOptions() *serverOptions {
 	return &serverOptions{
-		Log:             defaultLogFunc(),
-		AddressProvider: nil,
+		Log: defaultLogFunc(),
 	}
 }

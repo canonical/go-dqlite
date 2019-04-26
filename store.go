@@ -11,9 +11,6 @@ import (
 	_ "github.com/mattn/go-sqlite3" // Go SQLite bindings
 )
 
-// ServerInfo holds information about a single server.
-type ServerInfo = client.ServerInfo
-
 // ServerStore is used by a dqlite client to get an initial list of candidate
 // dqlite server addresses that it can dial in order to find a leader dqlite
 // server to use.
