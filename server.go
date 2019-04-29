@@ -141,6 +141,38 @@ func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) err
 	return nil
 }
 
+// Leave a cluster.
+func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) error {
+	if dial == nil {
+		dial = client.TCPDial
+	}
+	config := client.Config{
+		Dial:           bindings.DialFunc(dial),
+		AttemptTimeout: 100 * time.Millisecond,
+		RetryStrategies: []strategy.Strategy{
+			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
+	}
+	connector := client.NewConnector(0, store, config, defaultLogFunc())
+	c, err := connector.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(4096)
+	response := client.Message{}
+	response.Init(4096)
+
+	client.EncodeRemove(&request, id)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Hold configuration options for a dqlite server.
 type serverOptions struct {
 	Log      LogFunc
