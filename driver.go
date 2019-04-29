@@ -54,12 +54,12 @@ func WithLogFunc(log LogFunc) DriverOption {
 }
 
 // DialFunc is a function that can be used to establish a network connection.
-type DialFunc client.DialFunc
+type DialFunc bindings.DialFunc
 
 // WithDialFunc sets a custom dial function.
 func WithDialFunc(dial DialFunc) DriverOption {
 	return func(options *driverOptions) {
-		options.Dial = client.DialFunc(dial)
+		options.Dial = bindings.DialFunc(dial)
 	}
 }
 
@@ -141,7 +141,7 @@ func NewDriver(store ServerStore, options ...DriverOption) (*Driver, error) {
 // Hold configuration options for a dqlite driver.
 type driverOptions struct {
 	Log                     LogFunc
-	Dial                    client.DialFunc
+	Dial                    bindings.DialFunc
 	ConnectionTimeout       time.Duration
 	ContextTimeout          time.Duration
 	ConnectionBackoffFactor time.Duration
@@ -155,7 +155,7 @@ func defaultDriverOptions() *driverOptions {
 		Log:                     defaultLogFunc(),
 		Dial:                    client.TCPDial,
 		ConnectionTimeout:       15 * time.Second,
-		ContextTimeout:          5 * time.Second,
+		ContextTimeout:          2 * time.Second,
 		ConnectionBackoffFactor: 50 * time.Millisecond,
 		ConnectionBackoffCap:    time.Second,
 		Context:                 context.Background(),

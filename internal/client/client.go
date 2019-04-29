@@ -23,6 +23,7 @@ type Client struct {
 	contextTimeout   time.Duration // Default context timeout.
 	closeCh          chan struct{} // Stops the heartbeat when the connection gets closed
 	mu               sync.Mutex    // Serialize requests
+	netErr           error         // A network error occurred
 }
 
 func newClient(conn net.Conn, address string, store ServerStore, log logging.Func) *Client {
@@ -47,11 +48,15 @@ func (c *Client) SetContextTimeout(timeout time.Duration) {
 
 // Call invokes a dqlite RPC, sending a request message and receiving a
 // response message.
-func (c *Client) Call(ctx context.Context, request, response *Message) error {
+func (c *Client) Call(ctx context.Context, request, response *Message) (err error) {
 	// We need to take a lock since the dqlite server currently does not
 	// support concurrent requests.
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.netErr != nil {
+		return c.netErr
+	}
 
 	// Honor the ctx deadline, if present, or use a default.
 	deadline, ok := ctx.Deadline()
@@ -61,15 +66,24 @@ func (c *Client) Call(ctx context.Context, request, response *Message) error {
 
 	c.conn.SetDeadline(deadline)
 
-	if err := c.send(request); err != nil {
-		return errors.Wrap(err, "failed to send request")
+	if err = c.send(request); err != nil {
+		err = errors.Wrap(err, "failed to send request")
+		goto err
 	}
 
-	if err := c.recv(response); err != nil {
-		return errors.Wrap(err, "failed to receive response")
+	if err = c.recv(response); err != nil {
+		err = errors.Wrap(err, "failed to receive response")
+		goto err
 	}
 
-	return nil
+	return
+
+err:
+	switch errors.Cause(err).(type) {
+	case *net.OpError:
+		c.netErr = err
+	}
+	return
 }
 
 // More is used when a request maps to multiple responses.
