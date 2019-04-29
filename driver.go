@@ -155,7 +155,7 @@ func defaultDriverOptions() *driverOptions {
 		Log:                     defaultLogFunc(),
 		Dial:                    client.TCPDial,
 		ConnectionTimeout:       15 * time.Second,
-		ContextTimeout:          5 * time.Second,
+		ContextTimeout:          2 * time.Second,
 		ConnectionBackoffFactor: 50 * time.Millisecond,
 		ConnectionBackoffCap:    time.Second,
 		Context:                 context.Background(),
