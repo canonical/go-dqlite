@@ -3,7 +3,9 @@ package dqlite
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -211,31 +213,31 @@ func (s *Server) acceptLoop() {
 }
 
 // Dump the files of a database to disk.
-// func (s *Server) Dump(name string, dir string) error {
-// 	// Dump the database file.
-// 	bytes, err := s.registry.vfs.ReadFile(name)
-// 	if err != nil {
-// 		return errors.Wrap(err, "failed to get database file content")
-// 	}
+func (s *Server) Dump(name string, dir string) error {
+	// Dump the database file.
+	bytes, err := s.server.Dump(name)
+	if err != nil {
+		return errors.Wrap(err, "failed to get database file content")
+	}
 
-// 	path := filepath.Join(dir, name)
-// 	if err := ioutil.WriteFile(path, bytes, 0600); err != nil {
-// 		return errors.Wrap(err, "failed to write database file")
-// 	}
+	path := filepath.Join(dir, name)
+	if err := ioutil.WriteFile(path, bytes, 0600); err != nil {
+		return errors.Wrap(err, "failed to write database file")
+	}
 
-// 	// Dump the WAL file.
-// 	bytes, err = s.registry.vfs.ReadFile(name + "-wal")
-// 	if err != nil {
-// 		return errors.Wrap(err, "failed to get WAL file content")
-// 	}
+	// Dump the WAL file.
+	bytes, err = s.server.Dump(name + "-wal")
+	if err != nil {
+		return errors.Wrap(err, "failed to get WAL file content")
+	}
 
-// 	path = filepath.Join(dir, name+"-wal")
-// 	if err := ioutil.WriteFile(path, bytes, 0600); err != nil {
-// 		return errors.Wrap(err, "failed to write WAL file")
-// 	}
+	path = filepath.Join(dir, name+"-wal")
+	if err := ioutil.WriteFile(path, bytes, 0600); err != nil {
+		return errors.Wrap(err, "failed to write WAL file")
+	}
 
-// 	return nil
-// }
+	return nil
+}
 
 // Close the server, releasing all resources it created.
 func (s *Server) Close() error {

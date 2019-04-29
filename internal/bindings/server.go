@@ -164,6 +164,22 @@ func (s *Server) SetDialFunc(dial DialFunc) {
 	C.configConnect(server, connectIndex)
 }
 
+// Dump a database file.
+func (s *Server) Dump(filename string) ([]byte, error) {
+	server := (*C.dqlite)(unsafe.Pointer(s))
+	cfilename := C.CString(filename)
+	defer C.free(unsafe.Pointer(cfilename))
+	var buf unsafe.Pointer
+	var bufLen C.size_t
+	rv := C.dqlite_dump(server, cfilename, &buf, &bufLen)
+	if rv != 0 {
+		return nil, fmt.Errorf("dump failed with %d", rv)
+	}
+	data := C.GoBytes(buf, C.int(bufLen))
+	C.sqlite3_free(buf)
+	return data, nil
+}
+
 // Run the server.
 func (s *Server) Run() error {
 	server := (*C.dqlite)(unsafe.Pointer(s))
