@@ -158,10 +158,12 @@ func TestMembership(t *testing.T) {
 		defer server.Close()
 	}
 
+	store := dqlite.NewInmemServerStore()
+	store.Set(context.Background(), []dqlite.ServerInfo{leaderInfo})
 	server := servers[1]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	err := server.Join(ctx, leaderInfo)
+	err := server.Join(ctx, store, nil)
 	require.NoError(t, err)
 }
 

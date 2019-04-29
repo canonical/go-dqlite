@@ -104,15 +104,16 @@ func (s *Server) Start(listener net.Listener) error {
 }
 
 // Join a cluster.
-func (s *Server) Join(ctx context.Context, info ServerInfo) error {
-	store := NewInmemServerStore()
+func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) error {
+	if dial == nil {
+		dial = client.TCPDial
+	}
 	config := client.Config{
-		Dial:           client.TCPDial,
+		Dial:           bindings.DialFunc(dial),
 		AttemptTimeout: 100 * time.Millisecond,
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
 	}
-	store.Set(ctx, []ServerInfo{info})
 	connector := client.NewConnector(0, store, config, defaultLogFunc())
 	c, err := connector.Connect(ctx)
 	if err != nil {
@@ -126,6 +127,12 @@ func (s *Server) Join(ctx context.Context, info ServerInfo) error {
 	response.Init(4096)
 
 	client.EncodeJoin(&request, s.id, s.address)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	client.EncodePromote(&request, s.id)
 
 	if err := c.Call(ctx, &request, &response); err != nil {
 		return err

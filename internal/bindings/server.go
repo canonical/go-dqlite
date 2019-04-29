@@ -279,7 +279,7 @@ func connectWithDial(handle C.uintptr_t, server *C.dqlite_server, fd *C.int) C.i
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	id := uint64(server.id)
-	info := ServerInfo{ID: id}
+	info := ServerInfo{ID: id, Address: C.GoString(server.address)}
 	conn, err := dial(ctx, info.Address)
 	if err != nil {
 		return C.RAFT_NOCONNECTION
