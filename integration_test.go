@@ -144,7 +144,7 @@ func TestMembership(t *testing.T) {
 		info := dqlite.ServerInfo{ID: id, Address: listener.Addr().String()}
 		dir, cleanup := newDir(t)
 		defer cleanup()
-		server, err := dqlite.NewServer(info, dir)
+		server, err := dqlite.NewServer(info, dir, dqlite.WithServerLogFunc(logging.Test(t)))
 		require.NoError(t, err)
 		listeners[i] = listener
 		servers[i] = server
@@ -211,7 +211,7 @@ func newServers(t *testing.T, listeners []net.Listener, infos []dqlite.ServerInf
 		id := uint64(i + 1)
 		dir, dirCleanup := newDir(t)
 		info := dqlite.ServerInfo{ID: id, Address: listener.Addr().String()}
-		server, err := dqlite.NewServer(info, dir)
+		server, err := dqlite.NewServer(info, dir, dqlite.WithServerLogFunc(logging.Test(t)))
 		require.NoError(t, err)
 
 		cleanups = append(cleanups, func() {

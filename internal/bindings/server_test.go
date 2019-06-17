@@ -13,6 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func nullLog(level int, msg string) {
+}
+
 func TestNewServer(t *testing.T) {
 	dir, cleanup := newDir(t)
 	defer cleanup()
@@ -26,6 +29,8 @@ func TestNewServer(t *testing.T) {
 func TestServer_Run(t *testing.T) {
 	server, cleanup := newServer(t)
 	defer cleanup()
+
+	server.SetLogFunc(nullLog)
 
 	ch := make(chan error)
 	go func() {

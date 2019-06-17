@@ -9,6 +9,8 @@ package bindings
 #include <raft.h>
 #include <sqlite3.h>
 
+#define EMIT_BUF_LEN 1024
+
 // Duplicate a file descriptor and prevent it from being cloned into child processes.
 static int dupCloexec(int oldfd) {
 	int newfd = -1;
@@ -62,6 +64,23 @@ static int connectTrampoline(void *data, const dqlite_server *server, int *fd) {
 static void configConnect(dqlite *d, uintptr_t handle) {
         dqlite_config(d, DQLITE_CONFIG_CONNECT, connectTrampoline, (void*)handle);
 }
+
+// C to Go trampoline for custom logging function.
+void logWithLogger(uintptr_t handle, int level, char *message);
+
+// Wrapper to call the Go trampoline.
+static void logTrampoline(void *data, int level, const char *fmt, va_list args) {
+        uintptr_t handle = (uintptr_t)(data);
+	char buf[EMIT_BUF_LEN];
+
+	vsnprintf(buf, EMIT_BUF_LEN, fmt, args);
+        logWithLogger(handle, level, buf);
+}
+
+// Configure a custom log function.
+static void configLogger(dqlite *d, uintptr_t handle) {
+        dqlite_config(d, DQLITE_CONFIG_LOGGER, logTrampoline, (void*)handle);
+}
 */
 import "C"
 import (
@@ -84,6 +103,9 @@ type Server C.dqlite
 
 // DialFunc is a function that can be used to establish a network connection.
 type DialFunc func(context.Context, string) (net.Conn, error)
+
+// LogFunc is a function emitting a single log message.
+type LogFunc func(int, string)
 
 // Init initializes dqlite global state.
 func Init() error {
@@ -162,6 +184,15 @@ func (s *Server) SetDialFunc(dial DialFunc) {
 	// TODO: unregister when destroying the server.
 	connectRegistry[connectIndex] = dial
 	C.configConnect(server, connectIndex)
+}
+
+// SetLogFunc configure a custom log function.
+func (s *Server) SetLogFunc(log LogFunc) {
+	server := (*C.dqlite)(unsafe.Pointer(s))
+	logIndex++
+	// TODO: unregister when destroying the server.
+	logRegistry[logIndex] = log
+	C.configLogger(server, logIndex)
 }
 
 // Dump a database file.
@@ -308,9 +339,20 @@ func connectWithDial(handle C.uintptr_t, server *C.dqlite_server, fd *C.int) C.i
 	return C.int(0)
 }
 
+//export logWithLogger
+func logWithLogger(handle C.uintptr_t, level C.int, message *C.char) {
+	log := logRegistry[handle]
+	msg := C.GoString(message)
+	log(int(level), msg)
+}
+
 // Use handles to avoid passing Go pointers to C.
 var connectRegistry = make(map[C.uintptr_t]DialFunc)
 var connectIndex C.uintptr_t = 100
+
+// Use handles to avoid passing Go pointers to C.
+var logRegistry = make(map[C.uintptr_t]LogFunc)
+var logIndex C.uintptr_t = 100
 
 // ErrServerStopped is returned by Server.Handle() is the server was stopped.
 var ErrServerStopped = fmt.Errorf("server was stopped")

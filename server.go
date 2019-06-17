@@ -11,6 +11,7 @@ import (
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/CanonicalLtd/go-dqlite/internal/client"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
@@ -62,6 +63,14 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 	if o.DialFunc != nil {
 		server.SetDialFunc(bindings.DialFunc(o.DialFunc))
 	}
+	log := func(level int, msg string) {
+	}
+	if o.Log != nil {
+		log = func(level int, msg string) {
+			o.Log(logging.Level(level), msg)
+		}
+	}
+	server.SetLogFunc(log)
 
 	s := &Server{
 		log:      o.Log,
@@ -190,8 +199,6 @@ func (s *Server) run() {
 }
 
 func (s *Server) acceptLoop() {
-	s.log(LogDebug, "accepting connections")
-
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
