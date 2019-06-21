@@ -74,7 +74,9 @@ static void logTrampoline(void *data, int level, const char *fmt, va_list args) 
 	char buf[EMIT_BUF_LEN];
 
 	vsnprintf(buf, EMIT_BUF_LEN, fmt, args);
-        logWithLogger(handle, level, buf);
+        // FIXME: this seems to cause the stack to grow too much
+        // see https://github.com/therecipe/qt/issues/399#issuecomment-315191666
+        // logWithLogger(handle, level, buf);
 }
 
 // Configure a custom log function.
