@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	dqlite "github.com/CanonicalLtd/go-dqlite"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -98,7 +99,7 @@ func newServer(t *testing.T, listener net.Listener) (*dqlite.Server, func()) {
 	dir, dirCleanup := newDir(t)
 
 	info := dqlite.ServerInfo{ID: uint64(1), Address: listener.Addr().String()}
-	server, err := dqlite.NewServer(info, dir)
+	server, err := dqlite.NewServer(info, dir, dqlite.WithServerLogFunc(logging.Test(t)))
 	require.NoError(t, err)
 
 	servers := []dqlite.ServerInfo{
