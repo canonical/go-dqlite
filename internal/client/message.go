@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"strings"
@@ -60,6 +61,8 @@ func (m *Message) Reset() {
 // Append a byte slice to the message.
 func (m *Message) putBlob(v []byte) {
 	size := len(v)
+	m.putUint64(uint64(size))
+
 	pad := 0
 	if (size % messageWordSize) != 0 {
 		// Account for padding
@@ -350,6 +353,24 @@ func (m *Message) getString() string {
 	return s
 }
 
+func (m *Message) getBlob() []byte {
+	size := m.getUint64()
+	data := make([]byte, size)
+	for i := range data {
+		data[i] = m.getUint8()
+	}
+	pad := 0
+	if (size % messageWordSize) != 0 {
+		// Account for padding
+		pad = int(messageWordSize - (size % messageWordSize))
+	}
+	// Consume padding
+	for i := 0; i < pad; i++ {
+		m.getUint8()
+	}
+	return data
+}
+
 // Read a byte from the message body.
 func (m *Message) getUint8() uint8 {
 	b := m.bufferForGet()
@@ -442,6 +463,21 @@ func (m *Message) getRows() Rows {
 	return rows
 }
 
+func (m *Message) hasBeenConsumed() bool {
+	size := int(m.words * messageWordSize)
+	return (m.body1.Offset == size || m.body1.Offset == len(m.body1.Bytes)) &&
+		m.body1.Offset+m.body2.Offset == size
+}
+
+func (m *Message) lastByte() byte {
+	size := int(m.words * messageWordSize)
+	if size > len(m.body1.Bytes) {
+		size = size - m.body1.Offset
+		return m.body2.Bytes[size-1]
+	}
+	return m.body1.Bytes[size-1]
+}
+
 func (m *Message) bufferForGet() *buffer {
 	size := int(m.words * messageWordSize)
 	if m.body1.Offset == size || m.body1.Offset == len(m.body1.Bytes) {
@@ -518,7 +554,7 @@ func (r *Rows) Next(dest []driver.Value) error {
 		case bindings.Float:
 			dest[i] = r.message.getFloat64()
 		case bindings.Blob:
-			panic("todo")
+			dest[i] = r.message.getBlob()
 		case bindings.Text:
 			dest[i] = r.message.getString()
 		case bindings.Null:
@@ -559,8 +595,23 @@ func (r *Rows) Next(dest []driver.Value) error {
 }
 
 // Close the result set and reset the underlying message.
-func (r *Rows) Close() {
+func (r *Rows) Close() error {
+	// If we didn't go through all rows, let's look at the last byte.
+	var err error
+	if !r.message.hasBeenConsumed() {
+		slot := r.message.lastByte()
+		if slot == 0xee {
+			// More rows are available.
+			err = ErrRowsPart
+		} else if slot == 0xff {
+			// Rows EOF marker
+			err = io.EOF
+		} else {
+			err = fmt.Errorf("unexpected end of message")
+		}
+	}
 	r.message.Reset()
+	return err
 }
 
 const (

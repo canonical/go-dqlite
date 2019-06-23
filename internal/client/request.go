@@ -96,3 +96,25 @@ func EncodeInterrupt(request *Message, db uint64) {
 
 	request.putHeader(bindings.RequestInterrupt)
 }
+
+// EncodeJoin encodes a Join request.
+func EncodeJoin(request *Message, id uint64, address string) {
+	request.putUint64(id)
+	request.putString(address)
+
+	request.putHeader(bindings.RequestJoin)
+}
+
+// EncodePromote encodes a Promote request.
+func EncodePromote(request *Message, id uint64) {
+	request.putUint64(id)
+
+	request.putHeader(bindings.RequestPromote)
+}
+
+// EncodeRemove encodes a Remove request.
+func EncodeRemove(request *Message, id uint64) {
+	request.putUint64(id)
+
+	request.putHeader(bindings.RequestRemove)
+}

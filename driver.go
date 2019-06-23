@@ -28,7 +28,6 @@ import (
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/CanonicalLtd/go-dqlite/internal/client"
-	"github.com/CanonicalLtd/go-dqlite/internal/connection"
 )
 
 // Driver perform queries against a dqlite server.
@@ -55,12 +54,12 @@ func WithLogFunc(log LogFunc) DriverOption {
 }
 
 // DialFunc is a function that can be used to establish a network connection.
-type DialFunc client.DialFunc
+type DialFunc bindings.DialFunc
 
 // WithDialFunc sets a custom dial function.
 func WithDialFunc(dial DialFunc) DriverOption {
 	return func(options *driverOptions) {
-		options.Dial = client.DialFunc(dial)
+		options.Dial = bindings.DialFunc(dial)
 	}
 }
 
@@ -142,7 +141,7 @@ func NewDriver(store ServerStore, options ...DriverOption) (*Driver, error) {
 // Hold configuration options for a dqlite driver.
 type driverOptions struct {
 	Log                     LogFunc
-	Dial                    client.DialFunc
+	Dial                    bindings.DialFunc
 	ConnectionTimeout       time.Duration
 	ContextTimeout          time.Duration
 	ConnectionBackoffFactor time.Duration
@@ -156,7 +155,7 @@ func defaultDriverOptions() *driverOptions {
 		Log:                     defaultLogFunc(),
 		Dial:                    client.TCPDial,
 		ConnectionTimeout:       15 * time.Second,
-		ContextTimeout:          5 * time.Second,
+		ContextTimeout:          2 * time.Second,
 		ConnectionBackoffFactor: 50 * time.Millisecond,
 		ConnectionBackoffCap:    time.Second,
 		Context:                 context.Background(),
@@ -191,12 +190,6 @@ func driverConnectionRetryStrategy(factor, cap time.Duration) strategy.Strategy 
 // If this node is not the leader, or the leader is unknown an ErrNotLeader
 // error is returned.
 func (d *Driver) Open(uri string) (driver.Conn, error) {
-	// Validate the given data source string.
-	filename, flags, err := connection.ParseURI(uri)
-	if err != nil {
-		return nil, errors.Wrapf(err, "invalid URI %s", uri)
-	}
-
 	ctx, cancel := context.WithTimeout(d.context, d.connectionTimeout)
 	defer cancel()
 
@@ -208,6 +201,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 		contextTimeout: d.contextTimeout,
 	}
 
+	var err error
 	conn.client, err = connector.Connect(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create dqlite connection")
@@ -220,7 +214,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	defer conn.request.Reset()
 	defer conn.response.Reset()
 
-	client.EncodeOpen(&conn.request, filename, flags, "volatile")
+	client.EncodeOpen(&conn.request, uri, 0, "volatile")
 
 	if err := conn.client.Call(ctx, &conn.request, &conn.response); err != nil {
 		conn.client.Close()
@@ -533,7 +527,7 @@ func (r *Rows) Columns() []string {
 
 // Close closes the rows iterator.
 func (r *Rows) Close() error {
-	r.rows.Close()
+	err := r.rows.Close()
 
 	// If we consumed the whole result set, there's nothing to do as
 	// there's no pending response from the server.
@@ -541,7 +535,10 @@ func (r *Rows) Close() error {
 		return nil
 	}
 
-	r.rows.Close()
+	// If there is was a single-response result set, we're done.
+	if err == io.EOF {
+		return nil
+	}
 
 	// Let's issue an interrupt request and wait until we get an empty
 	// response, signalling that the query was interrupted.

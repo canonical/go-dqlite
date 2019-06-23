@@ -1,6 +1,7 @@
 package dqlite
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -9,22 +10,25 @@ import (
 	"time"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
-	"github.com/CanonicalLtd/go-dqlite/internal/replication"
-	"github.com/hashicorp/raft"
+	"github.com/CanonicalLtd/go-dqlite/internal/client"
+	"github.com/CanonicalLtd/go-dqlite/internal/logging"
+	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
 )
 
+// ServerInfo holds information about a single server.
+type ServerInfo = client.ServerInfo
+
 // Server implements the dqlite network protocol.
 type Server struct {
-	log         LogFunc          // Logger
-	registry    *Registry        // Registry wrapper
-	server      *bindings.Server // Low-level C implementation
-	listener    net.Listener     // Queue of new connections
-	runCh       chan error       // Receives the low-level C server return code
-	acceptCh    chan error       // Receives connection handling errors
-	replication *bindings.WalReplication
-	logger      *bindings.Logger
-	cluster     *bindings.Cluster
+	log      LogFunc          // Logger
+	server   *bindings.Server // Low-level C implementation
+	listener net.Listener     // Queue of new connections
+	runCh    chan error       // Receives the low-level C server return code
+	acceptCh chan error       // Receives connection handling errors
+	id       uint64
+	address  string
 }
 
 // ServerOption can be used to tweak server parameters.
@@ -37,90 +41,153 @@ func WithServerLogFunc(log LogFunc) ServerOption {
 	}
 }
 
-// WithServerAddressProvider sets a custom resolver for server addresses.
-func WithServerAddressProvider(provider raft.ServerAddressProvider) ServerOption {
+// WithServerDialFunc sets a custom dial function for the server.
+func WithServerDialFunc(dial DialFunc) ServerOption {
 	return func(options *serverOptions) {
-		options.AddressProvider = provider
+		options.DialFunc = dial
 	}
 }
 
 // NewServer creates a new Server instance.
-func NewServer(raft *raft.Raft, registry *Registry, listener net.Listener, options ...ServerOption) (*Server, error) {
+func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, error) {
 	o := defaultServerOptions()
 
 	for _, option := range options {
 		option(o)
 	}
 
-	replication, err := newWalReplication(registry, raft)
+	server, err := bindings.NewServer(uint(info.ID), info.Address, dir)
 	if err != nil {
 		return nil, err
 	}
-
-	cluster, err := newCluster(registry, raft, o.AddressProvider)
-	if err != nil {
-		return nil, err
+	if o.DialFunc != nil {
+		server.SetDialFunc(bindings.DialFunc(o.DialFunc))
 	}
-
-	server, err := bindings.NewServer(cluster)
-	if err != nil {
-		return nil, err
+	log := func(level int, msg string) {
 	}
-
-	logger := bindings.NewLogger(o.Log)
-
-	server.SetLogger(logger)
-	server.SetVfs(registry.name)
-	server.SetWalReplication(registry.name)
+	if o.Log != nil {
+		log = func(level int, msg string) {
+			o.Log(logging.Level(level), msg)
+		}
+	}
+	server.SetLogFunc(log)
 
 	s := &Server{
-		log:         o.Log,
-		registry:    registry,
-		server:      server,
-		listener:    listener,
-		runCh:       make(chan error),
-		acceptCh:    make(chan error, 1),
-		logger:      logger,
-		cluster:     cluster,
-		replication: replication,
+		log:      o.Log,
+		server:   server,
+		runCh:    make(chan error),
+		acceptCh: make(chan error, 1),
+		id:       info.ID,
+		address:  info.Address,
 	}
-
-	go s.run()
-
-	if !s.server.Ready() {
-		return nil, fmt.Errorf("server failed to start")
-	}
-
-	go s.acceptLoop()
 
 	return s, nil
 }
 
-func newWalReplication(registry *Registry, raft *raft.Raft) (*bindings.WalReplication, error) {
-	methods := replication.NewMethods(registry.registry, raft)
-
-	replication, err := bindings.NewWalReplication(registry.name, methods)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to register WAL replication")
-	}
-
-	return replication, nil
+// Bootstrap the server.
+func (s *Server) Bootstrap(servers []ServerInfo) error {
+	return s.server.Bootstrap(servers)
 }
 
-func newCluster(registry *Registry, raft *raft.Raft, provider raft.ServerAddressProvider) (*bindings.Cluster, error) {
-	methods := &cluster{
-		raft:     raft,
-		registry: registry.registry,
-		provider: provider,
+// Cluster returns information about all servers in the cluster.
+func (s *Server) Cluster() ([]ServerInfo, error) {
+	return s.server.Cluster()
+}
+
+// Leader returns information about the current leader, if any.
+func (s *Server) Leader() *ServerInfo {
+	return s.server.Leader()
+}
+
+// Start serving requests.
+func (s *Server) Start(listener net.Listener) error {
+	go s.run()
+
+	s.listener = listener
+
+	if !s.server.Ready() {
+		return fmt.Errorf("server failed to start")
 	}
 
-	return bindings.NewCluster(methods)
+	go s.acceptLoop()
+
+	return nil
+}
+
+// Join a cluster.
+func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) error {
+	if dial == nil {
+		dial = client.TCPDial
+	}
+	config := client.Config{
+		Dial:           bindings.DialFunc(dial),
+		AttemptTimeout: 100 * time.Millisecond,
+		RetryStrategies: []strategy.Strategy{
+			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
+	}
+	connector := client.NewConnector(0, store, config, defaultLogFunc())
+	c, err := connector.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(4096)
+	response := client.Message{}
+	response.Init(4096)
+
+	client.EncodeJoin(&request, s.id, s.address)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	client.EncodePromote(&request, s.id)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Leave a cluster.
+func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) error {
+	if dial == nil {
+		dial = client.TCPDial
+	}
+	config := client.Config{
+		Dial:           bindings.DialFunc(dial),
+		AttemptTimeout: 100 * time.Millisecond,
+		RetryStrategies: []strategy.Strategy{
+			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
+	}
+	connector := client.NewConnector(0, store, config, defaultLogFunc())
+	c, err := connector.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(4096)
+	response := client.Message{}
+	response.Init(4096)
+
+	client.EncodeRemove(&request, id)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Hold configuration options for a dqlite server.
 type serverOptions struct {
-	Log             LogFunc
-	AddressProvider raft.ServerAddressProvider
+	Log      LogFunc
+	DialFunc DialFunc
 }
 
 // Run the server.
@@ -132,8 +199,6 @@ func (s *Server) run() {
 }
 
 func (s *Server) acceptLoop() {
-	s.log(LogDebug, "accepting connections")
-
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
@@ -157,7 +222,7 @@ func (s *Server) acceptLoop() {
 // Dump the files of a database to disk.
 func (s *Server) Dump(name string, dir string) error {
 	// Dump the database file.
-	bytes, err := s.registry.vfs.ReadFile(name)
+	bytes, err := s.server.Dump(name)
 	if err != nil {
 		return errors.Wrap(err, "failed to get database file content")
 	}
@@ -168,7 +233,7 @@ func (s *Server) Dump(name string, dir string) error {
 	}
 
 	// Dump the WAL file.
-	bytes, err = s.registry.vfs.ReadFile(name + "-wal")
+	bytes, err = s.server.Dump(name + "-wal")
 	if err != nil {
 		return errors.Wrap(err, "failed to get WAL file content")
 	}
@@ -183,6 +248,10 @@ func (s *Server) Dump(name string, dir string) error {
 
 // Close the server, releasing all resources it created.
 func (s *Server) Close() error {
+	if s.listener == nil {
+		goto out
+	}
+
 	// Close the listener, which will make the listener.Accept() call in
 	// acceptLoop() return an error.
 	if err := s.listener.Close(); err != nil {
@@ -214,12 +283,8 @@ func (s *Server) Close() error {
 		return fmt.Errorf("server did not stop within a second")
 	}
 
+out:
 	s.server.Close()
-
-	s.logger.Close()
-	s.cluster.Close()
-	s.replication.Close()
-	s.registry.Close()
 
 	return nil
 }
@@ -227,7 +292,10 @@ func (s *Server) Close() error {
 // Create a serverOptions object with sane defaults.
 func defaultServerOptions() *serverOptions {
 	return &serverOptions{
-		Log:             defaultLogFunc(),
-		AddressProvider: nil,
+		Log: defaultLogFunc(),
 	}
 }
+
+// ErrServerCantBootstrap is returned by Server.Bootstrap() if the server has
+// already a raft configuration.
+var ErrServerCantBootstrap = bindings.ErrServerCantBootstrap
