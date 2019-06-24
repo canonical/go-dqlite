@@ -121,7 +121,7 @@ func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) err
 	}
 	config := client.Config{
 		Dial:           bindings.DialFunc(dial),
-		AttemptTimeout: 100 * time.Millisecond,
+		AttemptTimeout: time.Second,
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
 	}
@@ -159,7 +159,7 @@ func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) err
 	}
 	config := client.Config{
 		Dial:           bindings.DialFunc(dial),
-		AttemptTimeout: 100 * time.Millisecond,
+		AttemptTimeout: time.Second,
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
 	}
