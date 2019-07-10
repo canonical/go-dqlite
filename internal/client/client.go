@@ -5,11 +5,13 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
 	"github.com/CanonicalLtd/go-dqlite/internal/logging"
+	"github.com/lxc/lxd/shared/logger"
 	"github.com/pkg/errors"
 )
 
@@ -66,6 +68,10 @@ func (c *Client) Call(ctx context.Context, request, response *Message) (err erro
 
 	c.conn.SetDeadline(deadline)
 
+	if os.Getenv("GO_DQLITE_DEBUG") == "1" {
+		logger.Infof("Send %d", request.mtype)
+	}
+
 	if err = c.send(request); err != nil {
 		err = errors.Wrap(err, "failed to send request")
 		goto err
@@ -74,6 +80,10 @@ func (c *Client) Call(ctx context.Context, request, response *Message) (err erro
 	if err = c.recv(response); err != nil {
 		err = errors.Wrap(err, "failed to receive response")
 		goto err
+	}
+
+	if os.Getenv("GO_DQLITE_DEBUG") == "1" {
+		logger.Infof("Recv %d", response.mtype)
 	}
 
 	return
