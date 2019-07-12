@@ -83,6 +83,20 @@ static void logTrampoline(void *data, int level, const char *fmt, va_list args) 
 static void configLogger(dqlite *d, uintptr_t handle) {
         dqlite_config(d, DQLITE_CONFIG_LOGGER, logTrampoline, (void*)handle);
 }
+
+// C to Go trampoline for custom watch function.
+void triggerWatch(uintptr_t handle, int old_state, int new_state);
+
+// Wrapper to call the Go trampoline.
+static void watchTrampoline(void *data, int old_state, int new_state) {
+        uintptr_t handle = (uintptr_t)(data);
+        triggerWatch(handle, old_state, new_state);
+}
+
+// Configure a custom watch function.
+static void configWatcher(dqlite *d, uintptr_t handle) {
+        dqlite_config(d, DQLITE_CONFIG_WATCHER, watchTrampoline, (void*)handle);
+}
 */
 import "C"
 import (
@@ -108,6 +122,9 @@ type DialFunc func(context.Context, string) (net.Conn, error)
 
 // LogFunc is a function emitting a single log message.
 type LogFunc func(int, string)
+
+// WatchFunc is a function notifiying about state changes.
+type WatchFunc func(int, int)
 
 // Init initializes dqlite global state.
 func Init() error {
@@ -167,17 +184,6 @@ func (s *Server) Close() {
 	C.dqlite_destroy(server)
 }
 
-// SetLogger sets the server logger.
-// func (s *Server) SetLogger(logger *Logger) {
-// 	server := (*C.dqlite)(unsafe.Pointer(s))
-
-// 	rc := C.dqlite_server_config(server, C.DQLITE_CONFIG_LOGGER, unsafe.Pointer(logger))
-// 	if rc != 0 {
-// 		// Setting the logger should never fail.
-// 		panic("failed to set logger")
-// 	}
-// }
-
 // SetDialFunc configure a custom dial function.
 func (s *Server) SetDialFunc(dial DialFunc) {
 	server := (*C.dqlite)(unsafe.Pointer(s))
@@ -194,6 +200,15 @@ func (s *Server) SetLogFunc(log LogFunc) {
 	// TODO: unregister when destroying the server.
 	logRegistry[logIndex] = log
 	C.configLogger(server, logIndex)
+}
+
+// SetWatchFunc configures a watch function to be notified about state changes.
+func (s *Server) SetWatchFunc(watch WatchFunc) {
+	server := (*C.dqlite)(unsafe.Pointer(s))
+	watchIndex++
+	// TODO: unregister when destroying the server.
+	watchRegistry[watchIndex] = watch
+	C.configWatcher(server, watchIndex)
 }
 
 // Dump a database file.
@@ -347,13 +362,36 @@ func logWithLogger(handle C.uintptr_t, level C.int, message *C.char) {
 	log(int(level), msg)
 }
 
+func convertState(state C.int) int {
+	switch state {
+	case C.DQLITE_UNAVAILABLE:
+		return Unavailable
+	case C.DQLITE_FOLLOWER:
+		return Follower
+	case C.DQLITE_CANDIDATE:
+		return Candidate
+	case C.DQLITE_LEADER:
+		return Leader
+	default:
+		panic("unknown state")
+	}
+}
+
+//export triggerWatch
+func triggerWatch(handle C.uintptr_t, oldState C.int, newState C.int) {
+	watch := watchRegistry[handle]
+	watch(convertState(oldState), convertState(newState))
+}
+
 // Use handles to avoid passing Go pointers to C.
 var connectRegistry = make(map[C.uintptr_t]DialFunc)
 var connectIndex C.uintptr_t = 100
 
-// Use handles to avoid passing Go pointers to C.
 var logRegistry = make(map[C.uintptr_t]LogFunc)
 var logIndex C.uintptr_t = 100
+
+var watchRegistry = make(map[C.uintptr_t]WatchFunc)
+var watchIndex C.uintptr_t = 100
 
 // ErrServerStopped is returned by Server.Handle() is the server was stopped.
 var ErrServerStopped = fmt.Errorf("server was stopped")
