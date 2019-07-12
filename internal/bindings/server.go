@@ -111,8 +111,7 @@ type LogFunc func(int, string)
 
 // Init initializes dqlite global state.
 func Init() error {
-	rc := C.dqlite_initialize()
-	if rc != 0 {
+	if rc := C.dqlite_initialize(); rc != 0 {
 		return fmt.Errorf("%d", rc)
 	}
 	return nil
