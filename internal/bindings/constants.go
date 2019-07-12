@@ -33,6 +33,14 @@ const (
 	LogError = C.DQLITE_ERROR
 )
 
+// States
+const (
+	Unavailable = C.DQLITE_UNAVAILABLE
+	Follower    = C.DQLITE_FOLLOWER
+	Candidate   = C.DQLITE_CANDIDATE
+	Leader      = C.DQLITE_LEADER
+)
+
 // Request types.
 const (
 	RequestLeader    = C.DQLITE_REQUEST_LEADER
