@@ -127,8 +127,21 @@ func (s *Server) Start(listener net.Listener) error {
 
 	s.listener = listener
 
-	if !s.server.Ready() {
-		return fmt.Errorf("server failed to start")
+	readyCh := make(chan bool)
+
+	go func() {
+		readyCh <- s.server.Ready()
+	}()
+
+	select {
+	case ready := <-readyCh:
+		if !ready {
+			return fmt.Errorf("server failed to start")
+		}
+	case err := <-s.runCh:
+		if err != nil {
+			return err
+		}
 	}
 
 	go s.acceptLoop()
