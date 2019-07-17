@@ -314,11 +314,13 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 	client.EncodeQuerySQL(&c.request, uint64(c.id), query, args)
 
 	if err := c.client.Call(ctx, &c.request, &c.response); err != nil {
+		c.response.Reset()
 		return nil, driverError(err)
 	}
 
 	rows, err := client.DecodeRows(&c.response)
 	if err != nil {
+		c.response.Reset()
 		return nil, driverError(err)
 	}
 
@@ -470,14 +472,20 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
 	defer s.request.Reset()
 
+	// FIXME: this shouldn't be needed but we have hit a few panics
+	// probably due to the response object not being fully reset.
+	s.response.Reset()
+
 	client.EncodeQuery(s.request, s.db, s.id, args)
 
 	if err := s.client.Call(ctx, s.request, s.response); err != nil {
+		s.response.Reset()
 		return nil, driverError(err)
 	}
 
 	rows, err := client.DecodeRows(s.response)
 	if err != nil {
+		s.response.Reset()
 		return nil, driverError(err)
 	}
 
