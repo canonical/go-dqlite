@@ -4,6 +4,7 @@ package bindings
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <assert.h>
 
 #include <dqlite.h>
 #include <raft.h>
@@ -88,14 +89,16 @@ static void configLogger(dqlite *d, uintptr_t handle) {
 void triggerWatch(uintptr_t handle, int old_state, int new_state);
 
 // Wrapper to call the Go trampoline.
-static void watchTrampoline(void *data, int old_state, int new_state) {
-        uintptr_t handle = (uintptr_t)(data);
-        triggerWatch(handle, old_state, new_state);
+static void watchHandler(void *data, int old_state, int new_state) {
+        uintptr_t efd = (uintptr_t)(data);
+        uint64_t value = new_state;
+        int rv = write(efd, &value, sizeof value);
+        assert(rv == sizeof value);
 }
 
 // Configure a custom watch function.
-static void configWatcher(dqlite *d, uintptr_t handle) {
-        dqlite_config(d, DQLITE_CONFIG_WATCHER, watchTrampoline, (void*)handle);
+static void configWatcher(dqlite *d, uintptr_t efd) {
+        dqlite_config(d, DQLITE_CONFIG_WATCHER, watchHandler, (void*)efd);
 }
 */
 import "C"
@@ -106,6 +109,9 @@ import (
 	"os"
 	"time"
 	"unsafe"
+
+	endian "github.com/gxed/GoEndian"
+	"golang.org/x/sys/unix"
 )
 
 // ServerInfo is the Go equivalent of dqlite_server.
@@ -205,10 +211,26 @@ func (s *Server) SetLogFunc(log LogFunc) {
 // SetWatchFunc configures a watch function to be notified about state changes.
 func (s *Server) SetWatchFunc(watch WatchFunc) {
 	server := (*C.dqlite)(unsafe.Pointer(s))
-	watchIndex++
-	// TODO: unregister when destroying the server.
-	watchRegistry[watchIndex] = watch
-	C.configWatcher(server, watchIndex)
+	efd, err := unix.Eventfd(0, unix.EFD_CLOEXEC)
+	if err != nil {
+		panic(err)
+	}
+	// TODO: close eventfd an termnate the goroutine upon server shutdown
+	go func() {
+		buf := make([]byte, 8)
+		for {
+			n, err := unix.Read(efd, buf)
+			if err != nil {
+				panic(err)
+			}
+			if n != 8 {
+				panic("short read")
+			}
+			newState := endian.Endian.Uint64(buf)
+			watch(-1, int(newState))
+		}
+	}()
+	C.configWatcher(server, C.uintptr_t(efd))
 }
 
 // Dump a database file.
