@@ -107,6 +107,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -197,6 +198,8 @@ func (s *Server) Close() {
 
 // SetDialFunc configure a custom dial function.
 func (s *Server) SetDialFunc(dial DialFunc) {
+	connectLock.Lock()
+	defer connectLock.Unlock()
 	server := (*C.dqlite)(unsafe.Pointer(s))
 	connectIndex++
 	// TODO: unregister when destroying the server.
@@ -206,6 +209,8 @@ func (s *Server) SetDialFunc(dial DialFunc) {
 
 // SetLogFunc configure a custom log function.
 func (s *Server) SetLogFunc(log LogFunc) {
+	logLock.Lock()
+	defer logLock.Unlock()
 	server := (*C.dqlite)(unsafe.Pointer(s))
 	logIndex++
 	// TODO: unregister when destroying the server.
@@ -364,6 +369,8 @@ func (s *Server) Stop() error {
 
 //export connectWithDial
 func connectWithDial(handle C.uintptr_t, server *C.dqlite_server, fd *C.int) C.int {
+	connectLock.Lock()
+	defer connectLock.Unlock()
 	dial := connectRegistry[handle]
 	// TODO: make timeout customizable.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -404,21 +411,14 @@ func convertState(state C.int) int {
 	}
 }
 
-//export triggerWatch
-func triggerWatch(handle C.uintptr_t, oldState C.int, newState C.int) {
-	watch := watchRegistry[handle]
-	watch(convertState(oldState), convertState(newState))
-}
-
 // Use handles to avoid passing Go pointers to C.
 var connectRegistry = make(map[C.uintptr_t]DialFunc)
 var connectIndex C.uintptr_t = 100
+var connectLock = sync.Mutex{}
 
 var logRegistry = make(map[C.uintptr_t]LogFunc)
 var logIndex C.uintptr_t = 100
-
-var watchRegistry = make(map[C.uintptr_t]WatchFunc)
-var watchIndex C.uintptr_t = 100
+var logLock = sync.Mutex{}
 
 // ErrServerStopped is returned by Server.Handle() is the server was stopped.
 var ErrServerStopped = fmt.Errorf("server was stopped")
