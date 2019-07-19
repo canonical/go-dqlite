@@ -134,6 +134,11 @@ type WatchFunc func(int, int)
 
 // Init initializes dqlite global state.
 func Init() error {
+	// Don't enable single thread mode when running tests. TODO: find a
+	// better way to expose this functionality.
+	if os.Getenv("GO_DQLITE_MULTITHREAD") == "1" {
+		return nil
+	}
 	if rc := C.dqlite_initialize(); rc != 0 {
 		return fmt.Errorf("%d", rc)
 	}
