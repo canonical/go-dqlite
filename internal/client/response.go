@@ -7,7 +7,7 @@ package client
 import (
 	"fmt"
 
-	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/canonical/go-dqlite/internal/bindings"
 )
 
 // DecodeFailure decodes a Failure response.

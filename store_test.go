@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/CanonicalLtd/go-dqlite"
+	"github.com/canonical/go-dqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

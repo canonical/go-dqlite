@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
-	dqlite "github.com/CanonicalLtd/go-dqlite"
-	"github.com/CanonicalLtd/go-dqlite/internal/logging"
+	dqlite "github.com/canonical/go-dqlite"
+	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

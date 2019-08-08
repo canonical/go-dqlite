@@ -22,7 +22,7 @@ script:
   - go vet -tags libsqlite3 ./...
   - golint
   - deadcode
-  - project=github.com/CanonicalLtd/go-dqlite
+  - project=github.com/canonical/go-dqlite
   - GO_RAFT_TEST_LATENCY=10.0 $GOPATH/bin/overalls -project $project -covermode=count -- -tags libsqlite3 -timeout 240s
   - $GOPATH/bin/goveralls -coverprofile overalls.coverprofile -service=travis-ci
 

@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 
-	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/canonical/go-dqlite/internal/bindings"
 )
 
 // ServerInfo holds information about a single server.

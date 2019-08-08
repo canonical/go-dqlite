@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/canonical/go-dqlite/internal/bindings"
 )
 
 // NamedValues is a type alias of a slice of driver.NamedValue. It's used by

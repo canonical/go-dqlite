@@ -19,8 +19,8 @@ import (
 	"io"
 	"testing"
 
-	dqlite "github.com/CanonicalLtd/go-dqlite"
-	"github.com/CanonicalLtd/go-dqlite/internal/logging"
+	dqlite "github.com/canonical/go-dqlite"
+	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -341,7 +341,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/CanonicalLtd/go-dqlite"
+	"github.com/canonical/go-dqlite"
 	"github.com/CanonicalLtd/go-sqlite3"
 	"github.com/CanonicalLtd/raft-test"
 	"github.com/hashicorp/raft"

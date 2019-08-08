@@ -3,7 +3,7 @@ package client
 import (
 	"time"
 
-	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
+	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/Rican7/retry/strategy"
 )
 

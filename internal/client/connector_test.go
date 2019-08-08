@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CanonicalLtd/go-dqlite/internal/bindings"
-	"github.com/CanonicalLtd/go-dqlite/internal/client"
-	"github.com/CanonicalLtd/go-dqlite/internal/logging"
+	"github.com/canonical/go-dqlite/internal/bindings"
+	"github.com/canonical/go-dqlite/internal/client"
+	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
