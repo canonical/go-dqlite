@@ -172,7 +172,7 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 	defer C.free(unsafe.Pointer(cdir))
 
 	var server *C.dqlite_task
-	rc := C.dqlite_task_create(cid, caddress, cdir, &server)
+	rc := C.dqlite_task_create(cid, caddress, cdir, nil, &server)
 	if rc != 0 {
 		return nil, fmt.Errorf("failed to create server object")
 	}
