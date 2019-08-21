@@ -75,12 +75,11 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 		option(o)
 	}
 
-	server, err := bindings.NewServer(uint(info.ID), info.Address, dir)
+	dial := bindings.DialFunc(o.DialFunc)
+
+	server, err := bindings.NewServer(uint(info.ID), info.Address, dir, dial)
 	if err != nil {
 		return nil, err
-	}
-	if o.DialFunc != nil {
-		server.SetDialFunc(bindings.DialFunc(o.DialFunc))
 	}
 	log := func(level int, msg string) {
 	}

@@ -20,7 +20,7 @@ func TestNewServer(t *testing.T) {
 	dir, cleanup := newDir(t)
 	defer cleanup()
 
-	server, err := bindings.NewServer(1, "1", dir)
+	server, err := bindings.NewServer(1, "1", dir, nil)
 	require.NoError(t, err)
 
 	server.Close()
@@ -124,7 +124,7 @@ func newServer(t *testing.T) (*bindings.Server, func()) {
 
 	dir, dirCleanup := newDir(t)
 
-	server, err := bindings.NewServer(1, "1", dir)
+	server, err := bindings.NewServer(1, "1", dir, nil)
 	require.NoError(t, err)
 
 	cleanup := func() {

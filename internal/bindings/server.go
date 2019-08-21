@@ -53,17 +53,17 @@ static void getServer(struct dqlite_server *servers, int i, unsigned *id, const 
 typedef struct dqlite_server dqlite_server;
 
 // C to Go trampoline for custom connect function.
-int connectWithDial(uintptr_t handle, dqlite_server *server, int *fd);
+int connectWithDial(uintptr_t handle, unsigned id, char *address, int *fd);
 
 // Wrapper to call the Go trampoline.
-static int connectTrampoline(void *data, const dqlite_server *server, int *fd) {
+static int connectTrampoline(void *data, unsigned id, const char *address, int *fd) {
         uintptr_t handle = (uintptr_t)(data);
-        return connectWithDial(handle, (dqlite_server *)server, fd);
+        return connectWithDial(handle, id, (char*)address, fd);
 }
 
 // Configure a custom connect function.
-static void configConnect(dqlite_task *d, uintptr_t handle) {
-        dqlite_config(d, DQLITE_CONFIG_CONNECT, connectTrampoline, (void*)handle);
+static void configConnectFunc(dqlite_task_attr *a, uintptr_t handle) {
+        dqlite_task_attr_set_connect_func(a, connectTrampoline, (void*)handle);
 }
 
 // C to Go trampoline for custom logging function.
@@ -162,7 +162,10 @@ func Init() error {
 }
 
 // NewServer creates a new Server instance.
-func NewServer(id uint, address string, dir string) (*Server, error) {
+func NewServer(id uint, address string, dir string, dial DialFunc) (*Server, error) {
+	attr := C.dqlite_task_attr_create()
+	defer C.dqlite_task_attr_destroy(attr)
+
 	cid := C.unsigned(id)
 
 	caddress := C.CString(address)
@@ -171,8 +174,16 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 	cdir := C.CString(dir)
 	defer C.free(unsafe.Pointer(cdir))
 
+	if dial != nil {
+		connectLock.Lock()
+		defer connectLock.Unlock()
+		connectIndex++
+		connectRegistry[connectIndex] = dial
+		C.configConnectFunc(attr, connectIndex)
+	}
+
 	var server *C.dqlite_task
-	rc := C.dqlite_task_create(cid, caddress, cdir, nil, &server)
+	rc := C.dqlite_task_create(cid, caddress, cdir, attr, &server)
 	if rc != 0 {
 		return nil, fmt.Errorf("failed to create server object")
 	}
@@ -209,17 +220,6 @@ func (s *Server) Bootstrap(servers []ServerInfo) error {
 func (s *Server) Close() {
 	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	C.dqlite_task_destroy(server)
-}
-
-// SetDialFunc configure a custom dial function.
-func (s *Server) SetDialFunc(dial DialFunc) {
-	connectLock.Lock()
-	defer connectLock.Unlock()
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	connectIndex++
-	// TODO: unregister when destroying the server.
-	connectRegistry[connectIndex] = dial
-	C.configConnect(server, connectIndex)
 }
 
 // SetLogFunc configure a custom log function.
@@ -383,15 +383,14 @@ func (s *Server) Stop() error {
 }
 
 //export connectWithDial
-func connectWithDial(handle C.uintptr_t, server *C.dqlite_server, fd *C.int) C.int {
+func connectWithDial(handle C.uintptr_t, id C.unsigned, address *C.char, fd *C.int) C.int {
 	connectLock.Lock()
 	defer connectLock.Unlock()
 	dial := connectRegistry[handle]
 	// TODO: make timeout customizable.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	id := uint64(server.id)
-	info := ServerInfo{ID: id, Address: C.GoString(server.address)}
+	info := ServerInfo{ID: uint64(id), Address: C.GoString(address)}
 	conn, err := dial(ctx, info.Address)
 	if err != nil {
 		return C.RAFT_NOCONNECTION
