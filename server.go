@@ -105,11 +105,6 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 	return s, nil
 }
 
-// Bootstrap the server.
-func (s *Server) Bootstrap(servers []ServerInfo) error {
-	return s.server.Bootstrap(servers)
-}
-
 // Cluster returns information about all servers in the cluster.
 func (s *Server) Cluster() ([]ServerInfo, error) {
 	return s.server.Cluster()
@@ -330,7 +325,3 @@ func defaultServerOptions() *serverOptions {
 		Log: defaultLogFunc(),
 	}
 }
-
-// ErrServerCantBootstrap is returned by Server.Bootstrap() if the server has
-// already a raft configuration.
-var ErrServerCantBootstrap = bindings.ErrServerCantBootstrap

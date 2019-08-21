@@ -102,12 +102,6 @@ func newServer(t *testing.T, listener net.Listener) (*dqlite.Server, func()) {
 	server, err := dqlite.NewServer(info, dir, dqlite.WithServerLogFunc(logging.Test(t)))
 	require.NoError(t, err)
 
-	servers := []dqlite.ServerInfo{
-		{ID: 1, Address: listener.Addr().String()},
-	}
-	err = server.Bootstrap(servers)
-	require.NoError(t, err)
-
 	err = server.Start(listener)
 	require.NoError(t, err)
 

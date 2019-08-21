@@ -191,31 +191,6 @@ func NewServer(id uint, address string, dir string, dial DialFunc) (*Server, err
 	return (*Server)(unsafe.Pointer(server)), nil
 }
 
-// Bootstrap the a server, setting its initial raft configuration.
-func (s *Server) Bootstrap(servers []ServerInfo) error {
-	var cservers *C.dqlite_server
-	n := len(servers)
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	rv := C.allocServers(C.int(n), &cservers)
-	if rv != 0 {
-		return fmt.Errorf("out of memory")
-	}
-	for i := 0; i < n; i++ {
-		cid := C.unsigned(servers[i].ID)
-		caddress := C.CString(servers[i].Address)
-		defer C.free(unsafe.Pointer(caddress))
-		C.setServer(cservers, C.int(i), cid, caddress)
-	}
-	rv = C.dqlite_bootstrap(server, C.unsigned(n), cservers)
-	if rv != 0 {
-		if rv == C.DQLITE_CANTBOOTSTRAP {
-			return ErrServerCantBootstrap
-		}
-		return fmt.Errorf("bootstrap failed with %d", rv)
-	}
-	return nil
-}
-
 // Close the server releasing all used resources.
 func (s *Server) Close() {
 	server := (*C.dqlite_task)(unsafe.Pointer(s))
@@ -436,10 +411,6 @@ var logLock = sync.Mutex{}
 
 // ErrServerStopped is returned by Server.Handle() is the server was stopped.
 var ErrServerStopped = fmt.Errorf("server was stopped")
-
-// ErrServerCantBootstrap is returned by Server.Bootstrap() if the server has
-// already a raft configuration.
-var ErrServerCantBootstrap = fmt.Errorf("server already bootstrapped")
 
 // To compare bool values.
 var cfalse C.bool

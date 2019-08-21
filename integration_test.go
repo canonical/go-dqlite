@@ -149,8 +149,6 @@ func TestMembership(t *testing.T) {
 		listeners[i] = listener
 		servers[i] = server
 		if i == 0 {
-			err := server.Bootstrap([]dqlite.ServerInfo{info})
-			require.NoError(t, err)
 			leaderInfo = info
 		}
 		err = server.Start(listener)
@@ -218,9 +216,6 @@ func newServers(t *testing.T, listeners []net.Listener, infos []dqlite.ServerInf
 			require.NoError(t, server.Close())
 			dirCleanup()
 		})
-
-		err = server.Bootstrap(infos)
-		require.NoError(t, err)
 
 		err = server.Start(listener)
 		require.NoError(t, err)

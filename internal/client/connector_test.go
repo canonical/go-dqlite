@@ -257,14 +257,7 @@ func newServer(t *testing.T, index int) (string, func()) {
 	listener := newListener(t)
 	address := listener.Addr().String()
 
-	server, err := bindings.NewServer(id, address, dir)
-	require.NoError(t, err)
-
-	servers := []bindings.ServerInfo{
-		{ID: uint64(id), Address: address},
-	}
-
-	err = server.Bootstrap(servers)
+	server, err := bindings.NewServer(id, address, dir, nil)
 	require.NoError(t, err)
 
 	runCh := make(chan error)
