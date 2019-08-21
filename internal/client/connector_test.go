@@ -260,14 +260,6 @@ func newServer(t *testing.T, index int) (string, func()) {
 	server, err := bindings.NewServer(id, address, dir, nil)
 	require.NoError(t, err)
 
-	runCh := make(chan error)
-	go func() {
-		err := server.Run()
-		runCh <- err
-	}()
-
-	require.True(t, server.Ready())
-
 	acceptCh := make(chan error)
 	go func() {
 		for {
@@ -290,17 +282,8 @@ func newServer(t *testing.T, index int) (string, func()) {
 	}()
 
 	cleanup := func() {
-		require.NoError(t, server.Stop())
-
 		require.NoError(t, listener.Close())
-
-		// Wait for the run goroutine to exit.
-		select {
-		case err := <-runCh:
-			assert.NoError(t, err)
-		case <-time.After(time.Second):
-			t.Fatal("server did not stop within a second")
-		}
+		require.NoError(t, server.Close())
 
 		// Wait for the accept goroutine to exit.
 		select {
@@ -310,7 +293,6 @@ func newServer(t *testing.T, index int) (string, func()) {
 			t.Fatal("accept goroutine did not stop within a second")
 		}
 
-		server.Close()
 		dirCleanup()
 	}
 

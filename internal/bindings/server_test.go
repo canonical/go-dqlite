@@ -16,32 +16,11 @@ import (
 func nullLog(level int, msg string) {
 }
 
-func TestNewServer(t *testing.T) {
-	dir, cleanup := newDir(t)
-	defer cleanup()
-
-	server, err := bindings.NewServer(1, "1", dir, nil)
-	require.NoError(t, err)
-
-	server.Close()
-}
-
 func TestServer_Run(t *testing.T) {
 	server, cleanup := newServer(t)
 	defer cleanup()
 
 	server.SetLogFunc(nullLog)
-
-	ch := make(chan error)
-	go func() {
-		err := server.Run()
-		ch <- err
-	}()
-
-	require.True(t, server.Ready())
-	require.NoError(t, server.Stop())
-
-	assert.NoError(t, <-ch)
 }
 
 func TestServer_Leader(t *testing.T) {
@@ -88,14 +67,6 @@ func TestServer_ConcurrentHandleAndClose(t *testing.T) {
 	listener, cleanup := newListener(t)
 	defer cleanup()
 
-	runCh := make(chan error)
-	go func() {
-		err := server.Run()
-		runCh <- err
-	}()
-
-	require.True(t, server.Ready())
-
 	acceptCh := make(chan error)
 	go func() {
 		conn, err := listener.Accept()
@@ -111,10 +82,6 @@ func TestServer_ConcurrentHandleAndClose(t *testing.T) {
 
 	require.NoError(t, conn.Close())
 
-	require.NoError(t, server.Stop())
-
-	assert.NoError(t, <-runCh)
-
 	assert.NoError(t, <-acceptCh)
 }
 
@@ -128,7 +95,7 @@ func newServer(t *testing.T) (*bindings.Server, func()) {
 	require.NoError(t, err)
 
 	cleanup := func() {
-		server.Close()
+		require.NoError(t, server.Close())
 		dirCleanup()
 	}
 
@@ -168,14 +135,6 @@ func newClient(t *testing.T, listener net.Listener) net.Conn {
 func runServer(t *testing.T, server *bindings.Server, listener net.Listener) func() {
 	t.Helper()
 
-	runCh := make(chan error)
-	go func() {
-		err := server.Run()
-		runCh <- err
-	}()
-
-	require.True(t, server.Ready())
-
 	acceptCh := make(chan error)
 	go func() {
 		conn, err := listener.Accept()
@@ -188,9 +147,6 @@ func runServer(t *testing.T, server *bindings.Server, listener net.Listener) fun
 	}()
 
 	cleanup := func() {
-		require.NoError(t, server.Stop())
-
-		assert.NoError(t, <-runCh)
 		assert.NoError(t, <-acceptCh)
 	}
 

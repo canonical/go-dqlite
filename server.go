@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"net"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/canonical/go-dqlite/internal/bindings"
@@ -36,7 +35,6 @@ type Server struct {
 	log      LogFunc          // Logger
 	server   *bindings.Server // Low-level C implementation
 	listener net.Listener     // Queue of new connections
-	runCh    chan error       // Receives the low-level C server return code
 	acceptCh chan error       // Receives connection handling errors
 	id       uint64
 	address  string
@@ -96,7 +94,6 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 	s := &Server{
 		log:      o.Log,
 		server:   server,
-		runCh:    make(chan error),
 		acceptCh: make(chan error, 1),
 		id:       info.ID,
 		address:  info.Address,
@@ -117,26 +114,7 @@ func (s *Server) Leader() *ServerInfo {
 
 // Start serving requests.
 func (s *Server) Start(listener net.Listener) error {
-	go s.run()
-
 	s.listener = listener
-
-	readyCh := make(chan bool)
-
-	go func() {
-		readyCh <- s.server.Ready()
-	}()
-
-	select {
-	case ready := <-readyCh:
-		if !ready {
-			return fmt.Errorf("server failed to start")
-		}
-	case err := <-s.runCh:
-		if err != nil {
-			return err
-		}
-	}
 
 	go s.acceptLoop()
 
@@ -220,14 +198,6 @@ type serverOptions struct {
 	WatchFunc WatchFunc
 }
 
-// Run the server.
-func (s *Server) run() {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	s.runCh <- s.server.Run()
-}
-
 func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.listener.Accept()
@@ -279,7 +249,7 @@ func (s *Server) Dump(name string, dir string) error {
 // Close the server, releasing all resources it created.
 func (s *Server) Close() error {
 	if s.listener == nil {
-		goto out
+		return nil
 	}
 
 	// Close the listener, which will make the listener.Accept() call in
@@ -299,22 +269,9 @@ func (s *Server) Close() error {
 	}
 
 	// Send a stop signal to the dqlite event loop.
-	if err := s.server.Stop(); err != nil {
+	if err := s.server.Close(); err != nil {
 		return errors.Wrap(err, "server failed to stop")
 	}
-
-	// Wait for the run goroutine to exit.
-	select {
-	case err := <-s.runCh:
-		if err != nil {
-			return errors.Wrap(err, "accept goroutine failed")
-		}
-	case <-time.After(time.Second):
-		return fmt.Errorf("server did not stop within a second")
-	}
-
-out:
-	s.server.Close()
 
 	return nil
 }

@@ -183,7 +183,7 @@ func NewServer(id uint, address string, dir string, dial DialFunc) (*Server, err
 	}
 
 	var server *C.dqlite_task
-	rc := C.dqlite_task_create(cid, caddress, cdir, attr, &server)
+	rc := C.dqlite_task_start(cid, caddress, cdir, attr, &server)
 	if rc != 0 {
 		return nil, fmt.Errorf("failed to create server object")
 	}
@@ -192,9 +192,12 @@ func NewServer(id uint, address string, dir string, dial DialFunc) (*Server, err
 }
 
 // Close the server releasing all used resources.
-func (s *Server) Close() {
+func (s *Server) Close() error {
 	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	C.dqlite_task_destroy(server)
+	if rc := C.dqlite_task_stop(server); rc != 0 {
+		return fmt.Errorf("task stoped with error code %d", rc)
+	}
+	return nil
 }
 
 // SetLogFunc configure a custom log function.
@@ -247,22 +250,6 @@ func (s *Server) Dump(filename string) ([]byte, error) {
 	data := C.GoBytes(buf, C.int(bufLen))
 	C.sqlite3_free(buf)
 	return data, nil
-}
-
-// Run the server.
-func (s *Server) Run() error {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	rc := C.dqlite_run(server)
-	if rc != 0 {
-		return fmt.Errorf("run failed with %d", rc)
-	}
-	return nil
-}
-
-// Ready waits for the server to be ready to handle connections.
-func (s *Server) Ready() bool {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	return C.dqlite_ready(server) != cfalse
 }
 
 // Leader returns information about the current leader, if any.
@@ -345,16 +332,6 @@ func (s *Server) Handle(conn net.Conn) error {
 // file descriptor.
 type fileConn interface {
 	File() (*os.File, error)
-}
-
-// Stop the server.
-func (s *Server) Stop() error {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	rc := C.dqlite_stop(server)
-	if rc != 0 {
-		return fmt.Errorf("stop failed with %d", rc)
-	}
-	return nil
 }
 
 //export connectWithDial
