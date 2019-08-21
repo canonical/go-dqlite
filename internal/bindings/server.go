@@ -208,7 +208,7 @@ func (s *Server) Bootstrap(servers []ServerInfo) error {
 // Close the server releasing all used resources.
 func (s *Server) Close() {
 	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	C.dqlite_destroy(server)
+	C.dqlite_task_destroy(server)
 }
 
 // SetDialFunc configure a custom dial function.
