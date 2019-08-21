@@ -100,6 +100,21 @@ static void watchHandler(void *data, int old_state, int new_state) {
 static void configWatcher(dqlite *d, uintptr_t efd) {
         dqlite_config(d, DQLITE_CONFIG_WATCHER, watchHandler, (void*)efd);
 }
+
+
+static int initializeSQLite()
+{
+	int rc;
+
+	// Configure SQLite for single-thread mode. This is a global config.
+	rc = sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
+	if (rc != SQLITE_OK) {
+		assert(rc == SQLITE_MISUSE);
+		return DQLITE_MISUSE;
+	}
+	return 0;
+}
+
 */
 import "C"
 import (
@@ -140,7 +155,7 @@ func Init() error {
 	if os.Getenv("GO_DQLITE_MULTITHREAD") == "1" {
 		return nil
 	}
-	if rc := C.dqlite_initialize(); rc != 0 {
+	if rc := C.initializeSQLite(); rc != 0 {
 		return fmt.Errorf("%d", rc)
 	}
 	return nil
