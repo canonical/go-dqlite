@@ -62,7 +62,7 @@ static int connectTrampoline(void *data, const dqlite_server *server, int *fd) {
 }
 
 // Configure a custom connect function.
-static void configConnect(dqlite *d, uintptr_t handle) {
+static void configConnect(dqlite_task *d, uintptr_t handle) {
         dqlite_config(d, DQLITE_CONFIG_CONNECT, connectTrampoline, (void*)handle);
 }
 
@@ -81,7 +81,7 @@ static void logTrampoline(void *data, int level, const char *fmt, va_list args) 
 }
 
 // Configure a custom log function.
-static void configLogger(dqlite *d, uintptr_t handle) {
+static void configLogger(dqlite_task *d, uintptr_t handle) {
         dqlite_config(d, DQLITE_CONFIG_LOGGER, logTrampoline, (void*)handle);
 }
 
@@ -97,7 +97,7 @@ static void watchHandler(void *data, int old_state, int new_state) {
 }
 
 // Configure a custom watch function.
-static void configWatcher(dqlite *d, uintptr_t efd) {
+static void configWatcher(dqlite_task *d, uintptr_t efd) {
         dqlite_config(d, DQLITE_CONFIG_WATCHER, watchHandler, (void*)efd);
 }
 
@@ -137,7 +137,7 @@ type ServerInfo struct {
 }
 
 // Server is a Go wrapper arround dqlite_server.
-type Server C.dqlite
+type Server C.dqlite_task
 
 // DialFunc is a function that can be used to establish a network connection.
 type DialFunc func(context.Context, string) (net.Conn, error)
@@ -171,7 +171,7 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 	cdir := C.CString(dir)
 	defer C.free(unsafe.Pointer(cdir))
 
-	var server *C.dqlite
+	var server *C.dqlite_task
 	rc := C.dqlite_create(cid, caddress, cdir, &server)
 	if rc != 0 {
 		return nil, fmt.Errorf("failed to create server object")
@@ -184,7 +184,7 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 func (s *Server) Bootstrap(servers []ServerInfo) error {
 	var cservers *C.dqlite_server
 	n := len(servers)
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	rv := C.allocServers(C.int(n), &cservers)
 	if rv != 0 {
 		return fmt.Errorf("out of memory")
@@ -207,7 +207,7 @@ func (s *Server) Bootstrap(servers []ServerInfo) error {
 
 // Close the server releasing all used resources.
 func (s *Server) Close() {
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	C.dqlite_destroy(server)
 }
 
@@ -215,7 +215,7 @@ func (s *Server) Close() {
 func (s *Server) SetDialFunc(dial DialFunc) {
 	connectLock.Lock()
 	defer connectLock.Unlock()
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	connectIndex++
 	// TODO: unregister when destroying the server.
 	connectRegistry[connectIndex] = dial
@@ -226,7 +226,7 @@ func (s *Server) SetDialFunc(dial DialFunc) {
 func (s *Server) SetLogFunc(log LogFunc) {
 	logLock.Lock()
 	defer logLock.Unlock()
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	logIndex++
 	// TODO: unregister when destroying the server.
 	logRegistry[logIndex] = log
@@ -235,7 +235,7 @@ func (s *Server) SetLogFunc(log LogFunc) {
 
 // SetWatchFunc configures a watch function to be notified about state changes.
 func (s *Server) SetWatchFunc(watch WatchFunc) {
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	efd, err := unix.Eventfd(0, unix.EFD_CLOEXEC)
 	if err != nil {
 		panic(err)
@@ -260,7 +260,7 @@ func (s *Server) SetWatchFunc(watch WatchFunc) {
 
 // Dump a database file.
 func (s *Server) Dump(filename string) ([]byte, error) {
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	cfilename := C.CString(filename)
 	defer C.free(unsafe.Pointer(cfilename))
 	var buf unsafe.Pointer
@@ -276,7 +276,7 @@ func (s *Server) Dump(filename string) ([]byte, error) {
 
 // Run the server.
 func (s *Server) Run() error {
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	rc := C.dqlite_run(server)
 	if rc != 0 {
 		return fmt.Errorf("run failed with %d", rc)
@@ -286,13 +286,13 @@ func (s *Server) Run() error {
 
 // Ready waits for the server to be ready to handle connections.
 func (s *Server) Ready() bool {
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	return C.dqlite_ready(server) != cfalse
 }
 
 // Leader returns information about the current leader, if any.
 func (s *Server) Leader() *ServerInfo {
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	var info C.dqlite_server
 	if C.dqlite_leader(server, &info) != cfalse {
 		return &ServerInfo{
@@ -305,7 +305,7 @@ func (s *Server) Leader() *ServerInfo {
 
 // Cluster returns information about all servers in the cluster.
 func (s *Server) Cluster() ([]ServerInfo, error) {
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	var servers *C.dqlite_server
 	var n C.unsigned
 	rv := C.dqlite_cluster(server, &servers, &n)
@@ -347,7 +347,7 @@ func connToSocket(conn net.Conn) (C.int, error) {
 
 // Handle a new connection.
 func (s *Server) Handle(conn net.Conn) error {
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 
 	fd, err := connToSocket(conn)
 	if err != nil {
@@ -374,7 +374,7 @@ type fileConn interface {
 
 // Stop the server.
 func (s *Server) Stop() error {
-	server := (*C.dqlite)(unsafe.Pointer(s))
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	rc := C.dqlite_stop(server)
 	if rc != 0 {
 		return fmt.Errorf("stop failed with %d", rc)
