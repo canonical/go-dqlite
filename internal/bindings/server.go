@@ -62,8 +62,8 @@ static int connectTrampoline(void *data, unsigned id, const char *address, int *
 }
 
 // Configure a custom connect function.
-static void configConnectFunc(dqlite_task_attr *a, uintptr_t handle) {
-        dqlite_task_attr_set_connect_func(a, connectTrampoline, (void*)handle);
+static void configConnectFunc(dqlite_task *t, uintptr_t handle) {
+        dqlite_task_set_connect_func(t, connectTrampoline, (void*)handle);
 }
 
 // C to Go trampoline for custom logging function.
@@ -163,9 +163,7 @@ func Init() error {
 
 // NewServer creates a new Server instance.
 func NewServer(id uint, address string, dir string, dial DialFunc) (*Server, error) {
-	attr := C.dqlite_task_attr_create()
-	defer C.dqlite_task_attr_destroy(attr)
-
+	var server *C.dqlite_task
 	cid := C.unsigned(id)
 
 	caddress := C.CString(address)
@@ -174,18 +172,20 @@ func NewServer(id uint, address string, dir string, dial DialFunc) (*Server, err
 	cdir := C.CString(dir)
 	defer C.free(unsafe.Pointer(cdir))
 
+	if rc := C.dqlite_task_create(cid, caddress, cdir, &server); rc != 0 {
+		return nil, fmt.Errorf("failed to create task object")
+	}
+
 	if dial != nil {
 		connectLock.Lock()
 		defer connectLock.Unlock()
 		connectIndex++
 		connectRegistry[connectIndex] = dial
-		C.configConnectFunc(attr, connectIndex)
+		C.configConnectFunc(server, connectIndex)
 	}
 
-	var server *C.dqlite_task
-	rc := C.dqlite_task_start(cid, caddress, cdir, attr, &server)
-	if rc != 0 {
-		return nil, fmt.Errorf("failed to create server object")
+	if rc := C.dqlite_task_start(server); rc != 0 {
+		return nil, fmt.Errorf("failed to start task")
 	}
 
 	return (*Server)(unsafe.Pointer(server)), nil
@@ -197,6 +197,7 @@ func (s *Server) Close() error {
 	if rc := C.dqlite_task_stop(server); rc != 0 {
 		return fmt.Errorf("task stoped with error code %d", rc)
 	}
+	C.dqlite_task_destroy(server)
 	return nil
 }
 
