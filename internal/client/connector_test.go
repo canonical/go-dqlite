@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/client"
 	"github.com/canonical/go-dqlite/internal/logging"
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -257,7 +257,7 @@ func newServer(t *testing.T, index int) (string, func()) {
 	listener := newListener(t)
 	address := listener.Addr().String()
 
-	server, err := bindings.NewServer(id, address, dir, nil)
+	server, err := bindings.NewServer(id, address, dir)
 	require.NoError(t, err)
 
 	acceptCh := make(chan error)

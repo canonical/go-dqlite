@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"path/filepath"
 	"time"
 
+	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/client"
 	"github.com/canonical/go-dqlite/internal/logging"
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
 )
 
@@ -34,7 +33,6 @@ const (
 type Server struct {
 	log      LogFunc          // Logger
 	server   *bindings.Server // Low-level C implementation
-	listener net.Listener     // Queue of new connections
 	acceptCh chan error       // Receives connection handling errors
 	id       uint64
 	address  string
@@ -57,6 +55,13 @@ func WithServerDialFunc(dial DialFunc) ServerOption {
 	}
 }
 
+// WithBindAddress sets a custom bind address for the server.
+func WithServerBindAddress(address string) ServerOption {
+	return func(options *serverOptions) {
+		options.BindAddress = address
+	}
+}
+
 // WithServerWatchFunc sets a function that will be invoked
 // whenever this server acquires leadership.
 func WithServerWatchFunc(watch WatchFunc) ServerOption {
@@ -73,10 +78,20 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 		option(o)
 	}
 
-	dial := bindings.DialFunc(o.DialFunc)
-
-	server, err := bindings.NewServer(uint(info.ID), info.Address, dir, dial)
+	server, err := bindings.NewServer(uint(info.ID), info.Address, dir)
 	if err != nil {
+		return nil, err
+	}
+	if o.DialFunc != nil {
+		if err := server.SetDialFunc(bindings.DialFunc(o.DialFunc)); err != nil {
+			return nil, err
+		}
+	}
+	bindAddress := fmt.Sprintf("@dqlite-%d", info.ID)
+	if o.BindAddress != "" {
+		bindAddress = o.BindAddress
+	}
+	if err := server.SetBindAddress(bindAddress); err != nil {
 		return nil, err
 	}
 	log := func(level int, msg string) {
@@ -113,12 +128,8 @@ func (s *Server) Leader() *ServerInfo {
 }
 
 // Start serving requests.
-func (s *Server) Start(listener net.Listener) error {
-	s.listener = listener
-
-	go s.acceptLoop()
-
-	return nil
+func (s *Server) Start() error {
+	return s.server.Start()
 }
 
 // Join a cluster.
@@ -193,30 +204,10 @@ func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) err
 
 // Hold configuration options for a dqlite server.
 type serverOptions struct {
-	Log       LogFunc
-	DialFunc  DialFunc
-	WatchFunc WatchFunc
-}
-
-func (s *Server) acceptLoop() {
-	for {
-		conn, err := s.listener.Accept()
-		if err != nil {
-			s.acceptCh <- nil
-			return
-		}
-
-		err = s.server.Handle(conn)
-		if err != nil {
-			if err == bindings.ErrServerStopped {
-				// Ignore failures due to the server being
-				// stopped.
-				err = nil
-			}
-			s.acceptCh <- err
-			return
-		}
-	}
+	Log         LogFunc
+	DialFunc    DialFunc
+	WatchFunc   WatchFunc
+	BindAddress string
 }
 
 // Dump the files of a database to disk.
@@ -248,30 +239,12 @@ func (s *Server) Dump(name string, dir string) error {
 
 // Close the server, releasing all resources it created.
 func (s *Server) Close() error {
-	if s.listener == nil {
-		return nil
-	}
-
-	// Close the listener, which will make the listener.Accept() call in
-	// acceptLoop() return an error.
-	if err := s.listener.Close(); err != nil {
-		return err
-	}
-
-	// Wait for the acceptLoop goroutine to exit.
-	select {
-	case err := <-s.acceptCh:
-		if err != nil {
-			return errors.Wrap(err, "accept goroutine failed")
-		}
-	case <-time.After(time.Second):
-		return fmt.Errorf("accept goroutine did not stop within a second")
-	}
-
 	// Send a stop signal to the dqlite event loop.
-	if err := s.server.Close(); err != nil {
+	if err := s.server.Stop(); err != nil {
 		return errors.Wrap(err, "server failed to stop")
 	}
+
+	s.server.Close()
 
 	return nil
 }

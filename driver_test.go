@@ -316,16 +316,13 @@ INSERT INTO test (n,t) VALUES (3,'b');
 func newDriver(t *testing.T) (*dqlite.Driver, func()) {
 	t.Helper()
 
-	listener := newListener(t)
-	address := listener.Addr().String()
+	_, cleanup := newServer(t)
 
-	_, cleanup := newServer(t, listener)
-
-	store := newStore(t, address)
+	store := newStore(t, "1")
 
 	log := logging.Test(t)
 
-	driver, err := dqlite.NewDriver(store, dqlite.WithLogFunc(log))
+	driver, err := dqlite.NewDriver(store, dqlite.WithDialFunc(dialFunc), dqlite.WithLogFunc(log))
 	require.NoError(t, err)
 
 	return driver, cleanup

@@ -3,7 +3,6 @@ package dqlite_test
 import (
 	"context"
 	"io/ioutil"
-	"net"
 	"os"
 	"testing"
 
@@ -94,15 +93,15 @@ func newStore(t *testing.T, address string) *dqlite.DatabaseServerStore {
 	return store
 }
 
-func newServer(t *testing.T, listener net.Listener) (*dqlite.Server, func()) {
+func newServer(t *testing.T) (*dqlite.Server, func()) {
 	t.Helper()
 	dir, dirCleanup := newDir(t)
 
-	info := dqlite.ServerInfo{ID: uint64(1), Address: listener.Addr().String()}
+	info := dqlite.ServerInfo{ID: uint64(1), Address: "1"}
 	server, err := dqlite.NewServer(info, dir, dqlite.WithServerLogFunc(logging.Test(t)))
 	require.NoError(t, err)
 
-	err = server.Start(listener)
+	err = server.Start()
 	require.NoError(t, err)
 
 	cleanup := func() {
@@ -111,15 +110,6 @@ func newServer(t *testing.T, listener net.Listener) (*dqlite.Server, func()) {
 	}
 
 	return server, cleanup
-}
-
-func newListener(t *testing.T) net.Listener {
-	t.Helper()
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-
-	return listener
 }
 
 // Return a new temporary directory.

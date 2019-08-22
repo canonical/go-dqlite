@@ -62,8 +62,8 @@ static int connectTrampoline(void *data, unsigned id, const char *address, int *
 }
 
 // Configure a custom connect function.
-static void configConnectFunc(dqlite_task *t, uintptr_t handle) {
-        dqlite_task_set_connect_func(t, connectTrampoline, (void*)handle);
+static int configConnectFunc(dqlite_task *t, uintptr_t handle) {
+        return dqlite_task_set_connect_func(t, connectTrampoline, (void*)handle);
 }
 
 // C to Go trampoline for custom logging function.
@@ -162,7 +162,7 @@ func Init() error {
 }
 
 // NewServer creates a new Server instance.
-func NewServer(id uint, address string, dir string, dial DialFunc) (*Server, error) {
+func NewServer(id uint, address string, dir string) (*Server, error) {
 	var server *C.dqlite_task
 	cid := C.unsigned(id)
 
@@ -176,29 +176,51 @@ func NewServer(id uint, address string, dir string, dial DialFunc) (*Server, err
 		return nil, fmt.Errorf("failed to create task object")
 	}
 
-	if dial != nil {
-		connectLock.Lock()
-		defer connectLock.Unlock()
-		connectIndex++
-		connectRegistry[connectIndex] = dial
-		C.configConnectFunc(server, connectIndex)
-	}
-
-	if rc := C.dqlite_task_start(server); rc != 0 {
-		return nil, fmt.Errorf("failed to start task")
-	}
-
 	return (*Server)(unsafe.Pointer(server)), nil
 }
 
-// Close the server releasing all used resources.
-func (s *Server) Close() error {
+func (s *Server) SetDialFunc(dial DialFunc) error {
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
+	connectLock.Lock()
+	defer connectLock.Unlock()
+	connectIndex++
+	connectRegistry[connectIndex] = dial
+	if rc := C.configConnectFunc(server, connectIndex); rc != 0 {
+		return fmt.Errorf("failed to set connect func")
+	}
+	return nil
+}
+
+func (s *Server) SetBindAddress(address string) error {
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
+	caddress := C.CString(address)
+	defer C.free(unsafe.Pointer(caddress))
+	if rc := C.dqlite_task_set_bind_address(server, caddress); rc != 0 {
+		return fmt.Errorf("failed to set bind address")
+	}
+	return nil
+}
+
+func (s *Server) Start() error {
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
+	if rc := C.dqlite_task_start(server); rc != 0 {
+		return fmt.Errorf("failed to start task")
+	}
+	return nil
+}
+
+func (s *Server) Stop() error {
 	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	if rc := C.dqlite_task_stop(server); rc != 0 {
-		return fmt.Errorf("task stoped with error code %d", rc)
+		return fmt.Errorf("task stopped with error code %d", rc)
 	}
-	C.dqlite_task_destroy(server)
 	return nil
+}
+
+// Close the server releasing all used resources.
+func (s *Server) Close() {
+	server := (*C.dqlite_task)(unsafe.Pointer(s))
+	C.dqlite_task_destroy(server)
 }
 
 // SetLogFunc configure a custom log function.
@@ -306,27 +328,6 @@ func connToSocket(conn net.Conn) (C.int, error) {
 	conn.Close()
 
 	return fd2, nil
-}
-
-// Handle a new connection.
-func (s *Server) Handle(conn net.Conn) error {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-
-	fd, err := connToSocket(conn)
-	if err != nil {
-		return err
-	}
-
-	rc := C.dqlite_handle(server, fd)
-	if rc != 0 {
-		C.close(fd)
-		if rc == C.DQLITE_STOPPED {
-			return ErrServerStopped
-		}
-		return fmt.Errorf("hadle failed with %d", rc)
-	}
-
-	return nil
 }
 
 // Interface that net.Conn must implement in order to extract the underlying
