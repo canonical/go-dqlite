@@ -31,11 +31,12 @@ const (
 
 // Server implements the dqlite network protocol.
 type Server struct {
-	log      LogFunc          // Logger
-	server   *bindings.Server // Low-level C implementation
-	acceptCh chan error       // Receives connection handling errors
-	id       uint64
-	address  string
+	log         LogFunc          // Logger
+	server      *bindings.Server // Low-level C implementation
+	acceptCh    chan error       // Receives connection handling errors
+	id          uint64
+	address     string
+	bindAddress string
 }
 
 // ServerOption can be used to tweak server parameters.
@@ -107,11 +108,12 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 	}
 
 	s := &Server{
-		log:      o.Log,
-		server:   server,
-		acceptCh: make(chan error, 1),
-		id:       info.ID,
-		address:  info.Address,
+		log:         o.Log,
+		server:      server,
+		acceptCh:    make(chan error, 1),
+		id:          info.ID,
+		address:     info.Address,
+		bindAddress: bindAddress,
 	}
 
 	return s, nil
@@ -123,8 +125,31 @@ func (s *Server) Cluster() ([]ServerInfo, error) {
 }
 
 // Leader returns information about the current leader, if any.
-func (s *Server) Leader() *ServerInfo {
-	return s.server.Leader()
+func (s *Server) LeaderAddress(ctx context.Context) (string, error) {
+	store := NewInmemServerStore()
+	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress, store, s.log)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to connect to dqlite task")
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(16)
+	response := client.Message{}
+	response.Init(512)
+
+	client.EncodeLeader(&request)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return "", errors.Wrap(err, "failed to send Leader request")
+	}
+
+	leader, err := client.DecodeServer(&response)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse Server response")
+	}
+
+	return leader, nil
 }
 
 // Start serving requests.

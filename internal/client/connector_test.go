@@ -2,6 +2,7 @@ package client_test
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
@@ -254,45 +255,17 @@ func newServer(t *testing.T, index int) (string, func()) {
 	id := uint(index + 1)
 	dir, dirCleanup := newDir(t)
 
-	listener := newListener(t)
-	address := listener.Addr().String()
+	address := fmt.Sprintf("@dqlite-%d", id)
 
 	server, err := bindings.NewServer(id, address, dir)
 	require.NoError(t, err)
 
-	acceptCh := make(chan error)
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				acceptCh <- nil
-				return
-			}
+	server.SetBindAddress(address)
 
-			err = server.Handle(conn)
-			if err == bindings.ErrServerStopped {
-				acceptCh <- nil
-				return
-			}
-			if err != nil {
-				acceptCh <- err
-				return
-			}
-		}
-	}()
-
+	require.NoError(t, server.Start())
 	cleanup := func() {
-		require.NoError(t, listener.Close())
-		require.NoError(t, server.Close())
-
-		// Wait for the accept goroutine to exit.
-		select {
-		case err := <-acceptCh:
-			assert.NoError(t, err)
-		case <-time.After(time.Second):
-			t.Fatal("accept goroutine did not stop within a second")
-		}
-
+		require.NoError(t, server.Stop())
+		server.Close()
 		dirCleanup()
 	}
 

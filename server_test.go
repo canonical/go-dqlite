@@ -80,6 +80,16 @@ import (
 // 	require.NoError(t, c.Close())
 // }
 
+func TestServer_LeaderAddress(t *testing.T) {
+	server, cleanup := newServer(t)
+	defer cleanup()
+
+	leader, err := server.LeaderAddress(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, "1", leader)
+}
+
 // Create a new in-memory server store populated with the given addresses.
 func newStore(t *testing.T, address string) *dqlite.DatabaseServerStore {
 	t.Helper()

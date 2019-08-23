@@ -277,19 +277,6 @@ func (s *Server) Dump(filename string) ([]byte, error) {
 	return data, nil
 }
 
-// Leader returns information about the current leader, if any.
-func (s *Server) Leader() *ServerInfo {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	var info C.dqlite_server
-	if C.dqlite_leader(server, &info) != cfalse {
-		return &ServerInfo{
-			ID:      uint64(info.id),
-			Address: C.GoString(info.address),
-		}
-	}
-	return nil
-}
-
 // Cluster returns information about all servers in the cluster.
 func (s *Server) Cluster() ([]ServerInfo, error) {
 	server := (*C.dqlite_task)(unsafe.Pointer(s))
