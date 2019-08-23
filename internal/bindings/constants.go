@@ -57,6 +57,7 @@ const (
 	RequestJoin      = C.DQLITE_REQUEST_JOIN
 	RequestPromote   = C.DQLITE_REQUEST_PROMOTE
 	RequestRemove    = C.DQLITE_REQUEST_REMOVE
+	RequestDump      = C.DQLITE_REQUEST_DUMP
 )
 
 // Response types.
@@ -70,4 +71,5 @@ const (
 	ResponseResult  = C.DQLITE_RESPONSE_RESULT
 	ResponseRows    = C.DQLITE_RESPONSE_ROWS
 	ResponseEmpty   = C.DQLITE_RESPONSE_EMPTY
+	ResponseFiles   = C.DQLITE_RESPONSE_FILES
 )

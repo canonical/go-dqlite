@@ -463,6 +463,14 @@ func (m *Message) getRows() Rows {
 	return rows
 }
 
+func (m *Message) getFiles() Files {
+	files := Files{
+		n:       m.getUint64(),
+		message: m,
+	}
+	return files
+}
+
 func (m *Message) hasBeenConsumed() bool {
 	size := int(m.words * messageWordSize)
 	return (m.body1.Offset == size || m.body1.Offset == len(m.body1.Bytes)) &&
@@ -613,6 +621,30 @@ func (r *Rows) Close() error {
 	}
 	r.message.Reset()
 	return err
+}
+
+// Files holds a set of files encoded in a message body.
+type Files struct {
+	n       uint64
+	message *Message
+}
+
+func (f *Files) Next() (string, []byte) {
+	if f.n == 0 {
+		return "", nil
+	}
+	f.n--
+	name := f.message.getString()
+	length := f.message.getUint64()
+	data := make([]byte, length)
+	for i := 0; i < int(length); i++ {
+		data[i] = f.message.getUint8()
+	}
+	return name, data
+}
+
+func (f *Files) Close() {
+	f.message.Reset()
 }
 
 const (

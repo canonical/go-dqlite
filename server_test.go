@@ -2,83 +2,84 @@ package dqlite_test
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/strategy"
 	dqlite "github.com/canonical/go-dqlite"
+	"github.com/canonical/go-dqlite/internal/client"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// func TestServer_Dump(t *testing.T) {
-// 	// Start a server and connect to it.
-// 	listener := newListener(t)
-// 	server, cleanup := newServer(t, listener)
-// 	defer cleanup()
+func TestServer_Dump(t *testing.T) {
+	server, cleanup := newServer(t)
+	defer cleanup()
 
-// 	address := listener.Addr().String()
-// 	store := newStore(t, address)
-// 	config := client.Config{
-// 		Dial:           client.TCPDial,
-// 		AttemptTimeout: 100 * time.Millisecond,
-// 		RetryStrategies: []strategy.Strategy{
-// 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
-// 		},
-// 	}
+	store := newStore(t, "1")
+	config := client.Config{
+		Dial:           dialFunc,
+		AttemptTimeout: 100 * time.Millisecond,
+		RetryStrategies: []strategy.Strategy{
+			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
+		},
+	}
 
-// 	log := func(l logging.Level, format string, a ...interface{}) {
-// 		format = fmt.Sprintf("%s: %s", l.String(), format)
-// 		t.Logf(format, a...)
-// 	}
+	log := func(l logging.Level, format string, a ...interface{}) {
+		format = fmt.Sprintf("%s: %s", l.String(), format)
+		t.Logf(format, a...)
+	}
 
-// 	connector := client.NewConnector(0, store, config, log)
+	connector := client.NewConnector(0, store, config, log)
 
-// 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-// 	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-// 	c, err := connector.Connect(ctx)
-// 	require.NoError(t, err)
+	c, err := connector.Connect(ctx)
+	require.NoError(t, err)
+	defer c.Close()
 
-// 	// Open a database and create a test table.
-// 	request := client.Message{}
-// 	request.Init(4096)
+	// Open a database and create a test table.
+	request := client.Message{}
+	request.Init(4096)
 
-// 	response := client.Message{}
-// 	response.Init(4096)
+	response := client.Message{}
+	response.Init(4096)
 
-// 	flags := uint64(bindings.OpenReadWrite | bindings.OpenCreate)
-// 	client.EncodeOpen(&request, "test.db", flags, "volatile")
+	client.EncodeOpen(&request, "test.db", 0, "volatile")
 
-// 	err = c.Call(ctx, &request, &response)
-// 	require.NoError(t, err)
+	err = c.Call(ctx, &request, &response)
+	require.NoError(t, err)
 
-// 	db, err := client.DecodeDb(&response)
-// 	require.NoError(t, err)
+	db, err := client.DecodeDb(&response)
+	require.NoError(t, err)
 
-// 	request.Reset()
-// 	response.Reset()
+	request.Reset()
+	response.Reset()
 
-// 	client.EncodeExecSQL(&request, uint64(db), "CREATE TABLE foo (n INT)", nil)
+	client.EncodeExecSQL(&request, uint64(db), "CREATE TABLE foo (n INT)", nil)
 
-// 	err = c.Call(ctx, &request, &response)
-// 	require.NoError(t, err)
+	err = c.Call(ctx, &request, &response)
+	require.NoError(t, err)
 
-// 	request.Reset()
-// 	response.Reset()
+	request.Reset()
+	response.Reset()
 
-// 	// Dump the database to disk.
-// 	dir, err := ioutil.TempDir("", "dqlite-server-")
-// 	require.NoError(t, err)
+	files, err := server.Dump(ctx, "test.db")
+	require.NoError(t, err)
 
-// 	defer os.RemoveAll(dir)
+	require.Len(t, files, 2)
+	assert.Equal(t, "test.db", files[0].Name)
+	assert.Equal(t, 4096, len(files[0].Data))
 
-// 	err = server.Dump("test.db", dir)
-// 	require.NoError(t, err)
-
-// 	require.NoError(t, c.Close())
-// }
+	assert.Equal(t, "test.db-wal", files[1].Name)
+	assert.Equal(t, 8272, len(files[1].Data))
+}
 
 func TestServer_LeaderAddress(t *testing.T) {
 	server, cleanup := newServer(t)

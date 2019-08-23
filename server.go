@@ -3,8 +3,6 @@ package dqlite
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
 	"time"
 
 	"github.com/Rican7/retry/backoff"
@@ -235,31 +233,47 @@ type serverOptions struct {
 	BindAddress string
 }
 
-// Dump the files of a database to disk.
-func (s *Server) Dump(name string, dir string) error {
-	// Dump the database file.
-	bytes, err := s.server.Dump(name)
+type File struct {
+	Name string
+	Data []byte
+}
+
+func (s *Server) Dump(ctx context.Context, filename string) ([]File, error) {
+	store := NewInmemServerStore()
+	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress, store, s.log)
 	if err != nil {
-		return errors.Wrap(err, "failed to get database file content")
+		return nil, errors.Wrap(err, "failed to connect to dqlite task")
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(16)
+	response := client.Message{}
+	response.Init(512)
+
+	client.EncodeDump(&request, filename)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to send dump request")
 	}
 
-	path := filepath.Join(dir, name)
-	if err := ioutil.WriteFile(path, bytes, 0600); err != nil {
-		return errors.Wrap(err, "failed to write database file")
-	}
-
-	// Dump the WAL file.
-	bytes, err = s.server.Dump(name + "-wal")
+	files, err := client.DecodeFiles(&response)
 	if err != nil {
-		return errors.Wrap(err, "failed to get WAL file content")
+		return nil, errors.Wrap(err, "failed to parse files response")
+	}
+	defer files.Close()
+
+	dump := make([]File, 0)
+
+	for {
+		name, data := files.Next()
+		if name == "" {
+			break
+		}
+		dump = append(dump, File{Name: name, Data: data})
 	}
 
-	path = filepath.Join(dir, name+"-wal")
-	if err := ioutil.WriteFile(path, bytes, 0600); err != nil {
-		return errors.Wrap(err, "failed to write WAL file")
-	}
-
-	return nil
+	return dump, nil
 }
 
 // Close the server, releasing all resources it created.

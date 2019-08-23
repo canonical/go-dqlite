@@ -211,3 +211,25 @@ func DecodeRows(response *Message) (rows Rows, err error) {
 
 	return
 }
+
+// DecodeFiles decodes a Files response.
+func DecodeFiles(response *Message) (files Files, err error) {
+	mtype, _ := response.getHeader()
+
+	if mtype == bindings.ResponseFailure {
+		e := ErrRequest{}
+		e.Code = response.getUint64()
+		e.Description = response.getString()
+                err = e
+                return
+	}
+
+	if mtype != bindings.ResponseFiles {
+		err = fmt.Errorf("unexpected response type %d", mtype)
+                return
+	}
+
+	files = response.getFiles()
+
+	return
+}
