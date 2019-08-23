@@ -150,6 +150,8 @@ type WatchFunc func(int, int)
 
 // Init initializes dqlite global state.
 func Init() error {
+	// FIXME: ignore SIGPIPE, see https://github.com/joyent/libuv/issues/1254
+	C.signal(C.SIGPIPE, C.SIG_IGN)
 	// Don't enable single thread mode when running tests. TODO: find a
 	// better way to expose this functionality.
 	if os.Getenv("GO_DQLITE_MULTITHREAD") == "1" {
