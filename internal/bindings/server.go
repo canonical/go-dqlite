@@ -28,30 +28,6 @@ static int dupCloexec(int oldfd) {
 	return newfd;
 }
 
-// Allocate an array of n dqlite_server structs.
-static int allocServers(int n, struct dqlite_server **servers) {
-        *servers = malloc(n * sizeof **servers);
-        if (servers == NULL) {
-                return -1;
-        }
-        return 0;
-}
-
-// Set the attributes of the i'th server in the given array.
-static void setServer(struct dqlite_server *servers, int i, unsigned id, const char *address) {
-        servers[i].id = id;
-        servers[i].address = address;
-}
-
-// Get the attributes of the i'th server in the given array.
-static void getServer(struct dqlite_server *servers, int i, unsigned *id, const char **address) {
-        *id = servers[i].id;
-        *address = servers[i].address;
-}
-
-
-typedef struct dqlite_server dqlite_server;
-
 // C to Go trampoline for custom connect function.
 int connectWithDial(uintptr_t handle, unsigned id, char *address, int *fd);
 
@@ -226,27 +202,6 @@ func (s *Server) SetWatchFunc(watch WatchFunc) {
 		}
 	}()
 	C.configWatcher(server, C.uintptr_t(efd))
-}
-
-// Cluster returns information about all servers in the cluster.
-func (s *Server) Cluster() ([]ServerInfo, error) {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	var servers *C.dqlite_server
-	var n C.unsigned
-	rv := C.dqlite_cluster(server, &servers, &n)
-	if rv != 0 {
-		return nil, fmt.Errorf("cluster failed with %d", rv)
-	}
-	defer C.sqlite3_free(unsafe.Pointer(servers))
-	infos := make([]ServerInfo, int(n))
-	for i := range infos {
-		var id C.unsigned
-		var address *C.char
-		C.getServer(servers, C.int(i), &id, &address)
-		infos[i].ID = uint64(id)
-		infos[i].Address = C.GoString(address)
-	}
-	return infos, nil
 }
 
 // Extract the underlying socket from a connection.
