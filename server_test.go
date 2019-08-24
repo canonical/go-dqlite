@@ -91,6 +91,18 @@ func TestServer_LeaderAddress(t *testing.T) {
 	assert.Equal(t, "1", leader)
 }
 
+func TestServer_Cluster(t *testing.T) {
+	server, cleanup := newServer(t)
+	defer cleanup()
+
+	servers, err := server.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Len(t, servers, 1)
+	assert.Equal(t, servers[0].ID, uint64(1))
+	assert.Equal(t, servers[0].Address, "1")
+}
+
 // Create a new in-memory server store populated with the given addresses.
 func newStore(t *testing.T, address string) *dqlite.DatabaseServerStore {
 	t.Helper()

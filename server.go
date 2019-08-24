@@ -105,8 +105,31 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 }
 
 // Cluster returns information about all servers in the cluster.
-func (s *Server) Cluster() ([]ServerInfo, error) {
-	return s.server.Cluster()
+func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
+	store := NewInmemServerStore()
+	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress, store, s.log)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to connect to dqlite task")
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(16)
+	response := client.Message{}
+	response.Init(512)
+
+	client.EncodeCluster(&request)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to send Cluster request")
+	}
+
+	servers, err := client.DecodeServers(&response)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse Server response")
+	}
+
+	return servers, nil
 }
 
 // Leader returns information about the current leader, if any.

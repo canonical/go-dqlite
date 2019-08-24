@@ -420,23 +420,16 @@ func (m *Message) getFloat64() float64 {
 }
 
 // Decode a list of server objects from the message body.
-func (m *Message) getServers() (servers Servers) {
-	defer func() {
-		err := recover()
-		if err != errMessageEOF {
-			panic(err)
-		}
+func (m *Message) getServers() Servers {
+	n := m.getUint64()
+	servers := make(Servers, n)
 
-	}()
-
-	for {
-		server := bindings.ServerInfo{
-			ID:      m.getUint64(),
-			Address: m.getString(),
-		}
-		servers = append(servers, server)
-		m.bufferForGet()
+	for i := 0; i < int(n); i++ {
+		servers[i].ID = m.getUint64()
+		servers[i].Address = m.getString()
 	}
+
+	return servers
 }
 
 // Decode a statement result object from the message body.

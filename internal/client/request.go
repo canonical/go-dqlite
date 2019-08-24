@@ -125,3 +125,10 @@ func EncodeDump(request *Message, name string) {
 
 	request.putHeader(bindings.RequestDump)
 }
+
+// EncodeCluster encodes a Cluster request.
+func EncodeCluster(request *Message) {
+	request.putUint64(0)
+
+	request.putHeader(bindings.RequestCluster)
+}

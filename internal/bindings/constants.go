@@ -58,6 +58,7 @@ const (
 	RequestPromote   = C.DQLITE_REQUEST_PROMOTE
 	RequestRemove    = C.DQLITE_REQUEST_REMOVE
 	RequestDump      = C.DQLITE_REQUEST_DUMP
+	RequestCluster   = C.DQLITE_REQUEST_CLUSTER
 )
 
 // Response types.
