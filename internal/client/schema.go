@@ -14,8 +14,10 @@ package client
 //go:generate ./schema.sh --request QuerySQL  db:uint64 sql:string values:NamedValues
 //go:generate ./schema.sh --request Interrupt  db:uint64
 //go:generate ./schema.sh --request Join  id:uint64 address:string
-//go:generate ./schema.sh --request Promote  id:uint64
-//go:generate ./schema.sh --request Remove  id:uint64
+//go:generate ./schema.sh --request Promote   id:uint64
+//go:generate ./schema.sh --request Remove    id:uint64
+//go:generate ./schema.sh --request Dump      name:string
+//go:generate ./schema.sh --request Cluster   unused:uint64
 
 //go:generate ./schema.sh --response init
 //go:generate ./schema.sh --response Failure  code:uint64 message:string
@@ -27,3 +29,4 @@ package client
 //go:generate ./schema.sh --response Empty    unused:uint64
 //go:generate ./schema.sh --response Result   result:Result
 //go:generate ./schema.sh --response Rows     rows:Rows
+//go:generate ./schema.sh --response Files    files:Files

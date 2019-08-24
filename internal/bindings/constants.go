@@ -33,14 +33,6 @@ const (
 	LogError = C.DQLITE_ERROR
 )
 
-// States
-const (
-	Unavailable = C.DQLITE_UNAVAILABLE
-	Follower    = C.DQLITE_FOLLOWER
-	Candidate   = C.DQLITE_CANDIDATE
-	Leader      = C.DQLITE_LEADER
-)
-
 // Request types.
 const (
 	RequestLeader    = C.DQLITE_REQUEST_LEADER
@@ -57,6 +49,8 @@ const (
 	RequestJoin      = C.DQLITE_REQUEST_JOIN
 	RequestPromote   = C.DQLITE_REQUEST_PROMOTE
 	RequestRemove    = C.DQLITE_REQUEST_REMOVE
+	RequestDump      = C.DQLITE_REQUEST_DUMP
+	RequestCluster   = C.DQLITE_REQUEST_CLUSTER
 )
 
 // Response types.
@@ -70,4 +64,5 @@ const (
 	ResponseResult  = C.DQLITE_RESPONSE_RESULT
 	ResponseRows    = C.DQLITE_RESPONSE_ROWS
 	ResponseEmpty   = C.DQLITE_RESPONSE_EMPTY
+	ResponseFiles   = C.DQLITE_RESPONSE_FILES
 )

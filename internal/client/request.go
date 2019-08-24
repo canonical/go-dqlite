@@ -118,3 +118,17 @@ func EncodeRemove(request *Message, id uint64) {
 
 	request.putHeader(bindings.RequestRemove)
 }
+
+// EncodeDump encodes a Dump request.
+func EncodeDump(request *Message, name string) {
+	request.putString(name)
+
+	request.putHeader(bindings.RequestDump)
+}
+
+// EncodeCluster encodes a Cluster request.
+func EncodeCluster(request *Message) {
+	request.putUint64(0)
+
+	request.putHeader(bindings.RequestCluster)
+}

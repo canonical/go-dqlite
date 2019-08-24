@@ -3,43 +3,26 @@ package dqlite
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"net"
-	"path/filepath"
-	"runtime"
 	"time"
 
-	"github.com/canonical/go-dqlite/internal/bindings"
-	"github.com/canonical/go-dqlite/internal/client"
-	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
+	"github.com/canonical/go-dqlite/internal/bindings"
+	"github.com/canonical/go-dqlite/internal/client"
 	"github.com/pkg/errors"
 )
 
 // ServerInfo holds information about a single server.
 type ServerInfo = client.ServerInfo
 
-// WatchFunc notifies about state changes.
-type WatchFunc = bindings.WatchFunc
-
-// States
-const (
-	Unavailable = bindings.Unavailable
-	Follower    = bindings.Follower
-	Candidate   = bindings.Candidate
-	Leader      = bindings.Leader
-)
-
 // Server implements the dqlite network protocol.
 type Server struct {
-	log      LogFunc          // Logger
-	server   *bindings.Server // Low-level C implementation
-	listener net.Listener     // Queue of new connections
-	runCh    chan error       // Receives the low-level C server return code
-	acceptCh chan error       // Receives connection handling errors
-	id       uint64
-	address  string
+	log         LogFunc          // Logger
+	server      *bindings.Server // Low-level C implementation
+	acceptCh    chan error       // Receives connection handling errors
+	id          uint64
+	address     string
+	bindAddress string
 }
 
 // ServerOption can be used to tweak server parameters.
@@ -59,11 +42,10 @@ func WithServerDialFunc(dial DialFunc) ServerOption {
 	}
 }
 
-// WithServerWatchFunc sets a function that will be invoked
-// whenever this server acquires leadership.
-func WithServerWatchFunc(watch WatchFunc) ServerOption {
+// WithBindAddress sets a custom bind address for the server.
+func WithServerBindAddress(address string) ServerOption {
 	return func(options *serverOptions) {
-		options.WatchFunc = watch
+		options.BindAddress = address
 	}
 }
 
@@ -80,73 +62,88 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 		return nil, err
 	}
 	if o.DialFunc != nil {
-		server.SetDialFunc(bindings.DialFunc(o.DialFunc))
-	}
-	log := func(level int, msg string) {
-	}
-	if o.Log != nil {
-		log = func(level int, msg string) {
-			o.Log(logging.Level(level), msg)
+		if err := server.SetDialFunc(bindings.DialFunc(o.DialFunc)); err != nil {
+			return nil, err
 		}
 	}
-	server.SetLogFunc(log)
-	if o.WatchFunc != nil {
-		server.SetWatchFunc(o.WatchFunc)
+	bindAddress := fmt.Sprintf("@dqlite-%d", info.ID)
+	if o.BindAddress != "" {
+		bindAddress = o.BindAddress
 	}
-
+	if err := server.SetBindAddress(bindAddress); err != nil {
+		return nil, err
+	}
 	s := &Server{
-		log:      o.Log,
-		server:   server,
-		runCh:    make(chan error),
-		acceptCh: make(chan error, 1),
-		id:       info.ID,
-		address:  info.Address,
+		log:         o.Log,
+		server:      server,
+		acceptCh:    make(chan error, 1),
+		id:          info.ID,
+		address:     info.Address,
+		bindAddress: bindAddress,
 	}
 
 	return s, nil
 }
 
-// Bootstrap the server.
-func (s *Server) Bootstrap(servers []ServerInfo) error {
-	return s.server.Bootstrap(servers)
-}
-
 // Cluster returns information about all servers in the cluster.
-func (s *Server) Cluster() ([]ServerInfo, error) {
-	return s.server.Cluster()
+func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
+	store := NewInmemServerStore()
+	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress, store, s.log)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to connect to dqlite task")
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(16)
+	response := client.Message{}
+	response.Init(512)
+
+	client.EncodeCluster(&request)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to send Cluster request")
+	}
+
+	servers, err := client.DecodeServers(&response)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse Server response")
+	}
+
+	return servers, nil
 }
 
 // Leader returns information about the current leader, if any.
-func (s *Server) Leader() *ServerInfo {
-	return s.server.Leader()
+func (s *Server) LeaderAddress(ctx context.Context) (string, error) {
+	store := NewInmemServerStore()
+	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress, store, s.log)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to connect to dqlite task")
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(16)
+	response := client.Message{}
+	response.Init(512)
+
+	client.EncodeLeader(&request)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return "", errors.Wrap(err, "failed to send Leader request")
+	}
+
+	leader, err := client.DecodeServer(&response)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse Server response")
+	}
+
+	return leader, nil
 }
 
 // Start serving requests.
-func (s *Server) Start(listener net.Listener) error {
-	go s.run()
-
-	s.listener = listener
-
-	readyCh := make(chan bool)
-
-	go func() {
-		readyCh <- s.server.Ready()
-	}()
-
-	select {
-	case ready := <-readyCh:
-		if !ready {
-			return fmt.Errorf("server failed to start")
-		}
-	case err := <-s.runCh:
-		if err != nil {
-			return err
-		}
-	}
-
-	go s.acceptLoop()
-
-	return nil
+func (s *Server) Start() error {
+	return s.server.Start()
 }
 
 // Join a cluster.
@@ -160,7 +157,7 @@ func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) err
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
 	}
-	connector := client.NewConnector(0, store, config, defaultLogFunc())
+	connector := client.NewConnector(0, store, config, s.log)
 	c, err := connector.Connect(ctx)
 	if err != nil {
 		return err
@@ -221,105 +218,61 @@ func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) err
 
 // Hold configuration options for a dqlite server.
 type serverOptions struct {
-	Log       LogFunc
-	DialFunc  DialFunc
-	WatchFunc WatchFunc
+	Log         LogFunc
+	DialFunc    DialFunc
+	BindAddress string
 }
 
-// Run the server.
-func (s *Server) run() {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	s.runCh <- s.server.Run()
+type File struct {
+	Name string
+	Data []byte
 }
 
-func (s *Server) acceptLoop() {
+func (s *Server) Dump(ctx context.Context, filename string) ([]File, error) {
+	store := NewInmemServerStore()
+	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress, store, s.log)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to connect to dqlite task")
+	}
+	defer c.Close()
+
+	request := client.Message{}
+	request.Init(16)
+	response := client.Message{}
+	response.Init(512)
+
+	client.EncodeDump(&request, filename)
+
+	if err := c.Call(ctx, &request, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to send dump request")
+	}
+
+	files, err := client.DecodeFiles(&response)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse files response")
+	}
+	defer files.Close()
+
+	dump := make([]File, 0)
+
 	for {
-		conn, err := s.listener.Accept()
-		if err != nil {
-			s.acceptCh <- nil
-			return
+		name, data := files.Next()
+		if name == "" {
+			break
 		}
-
-		err = s.server.Handle(conn)
-		if err != nil {
-			if err == bindings.ErrServerStopped {
-				// Ignore failures due to the server being
-				// stopped.
-				err = nil
-			}
-			s.acceptCh <- err
-			return
-		}
-	}
-}
-
-// Dump the files of a database to disk.
-func (s *Server) Dump(name string, dir string) error {
-	// Dump the database file.
-	bytes, err := s.server.Dump(name)
-	if err != nil {
-		return errors.Wrap(err, "failed to get database file content")
+		dump = append(dump, File{Name: name, Data: data})
 	}
 
-	path := filepath.Join(dir, name)
-	if err := ioutil.WriteFile(path, bytes, 0600); err != nil {
-		return errors.Wrap(err, "failed to write database file")
-	}
-
-	// Dump the WAL file.
-	bytes, err = s.server.Dump(name + "-wal")
-	if err != nil {
-		return errors.Wrap(err, "failed to get WAL file content")
-	}
-
-	path = filepath.Join(dir, name+"-wal")
-	if err := ioutil.WriteFile(path, bytes, 0600); err != nil {
-		return errors.Wrap(err, "failed to write WAL file")
-	}
-
-	return nil
+	return dump, nil
 }
 
 // Close the server, releasing all resources it created.
 func (s *Server) Close() error {
-	if s.listener == nil {
-		goto out
-	}
-
-	// Close the listener, which will make the listener.Accept() call in
-	// acceptLoop() return an error.
-	if err := s.listener.Close(); err != nil {
-		return err
-	}
-
-	// Wait for the acceptLoop goroutine to exit.
-	select {
-	case err := <-s.acceptCh:
-		if err != nil {
-			return errors.Wrap(err, "accept goroutine failed")
-		}
-	case <-time.After(time.Second):
-		return fmt.Errorf("accept goroutine did not stop within a second")
-	}
-
 	// Send a stop signal to the dqlite event loop.
 	if err := s.server.Stop(); err != nil {
 		return errors.Wrap(err, "server failed to stop")
 	}
 
-	// Wait for the run goroutine to exit.
-	select {
-	case err := <-s.runCh:
-		if err != nil {
-			return errors.Wrap(err, "accept goroutine failed")
-		}
-	case <-time.After(time.Second):
-		return fmt.Errorf("server did not stop within a second")
-	}
-
-out:
 	s.server.Close()
 
 	return nil
@@ -331,7 +284,3 @@ func defaultServerOptions() *serverOptions {
 		Log: defaultLogFunc(),
 	}
 }
-
-// ErrServerCantBootstrap is returned by Server.Bootstrap() if the server has
-// already a raft configuration.
-var ErrServerCantBootstrap = bindings.ErrServerCantBootstrap

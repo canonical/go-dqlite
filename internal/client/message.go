@@ -420,23 +420,16 @@ func (m *Message) getFloat64() float64 {
 }
 
 // Decode a list of server objects from the message body.
-func (m *Message) getServers() (servers Servers) {
-	defer func() {
-		err := recover()
-		if err != errMessageEOF {
-			panic(err)
-		}
+func (m *Message) getServers() Servers {
+	n := m.getUint64()
+	servers := make(Servers, n)
 
-	}()
-
-	for {
-		server := bindings.ServerInfo{
-			ID:      m.getUint64(),
-			Address: m.getString(),
-		}
-		servers = append(servers, server)
-		m.bufferForGet()
+	for i := 0; i < int(n); i++ {
+		servers[i].ID = m.getUint64()
+		servers[i].Address = m.getString()
 	}
+
+	return servers
 }
 
 // Decode a statement result object from the message body.
@@ -461,6 +454,14 @@ func (m *Message) getRows() Rows {
 		message: m,
 	}
 	return rows
+}
+
+func (m *Message) getFiles() Files {
+	files := Files{
+		n:       m.getUint64(),
+		message: m,
+	}
+	return files
 }
 
 func (m *Message) hasBeenConsumed() bool {
@@ -613,6 +614,30 @@ func (r *Rows) Close() error {
 	}
 	r.message.Reset()
 	return err
+}
+
+// Files holds a set of files encoded in a message body.
+type Files struct {
+	n       uint64
+	message *Message
+}
+
+func (f *Files) Next() (string, []byte) {
+	if f.n == 0 {
+		return "", nil
+	}
+	f.n--
+	name := f.message.getString()
+	length := f.message.getUint64()
+	data := make([]byte, length)
+	for i := 0; i < int(length); i++ {
+		data[i] = f.message.getUint8()
+	}
+	return name, data
+}
+
+func (f *Files) Close() {
+	f.message.Reset()
 }
 
 const (

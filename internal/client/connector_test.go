@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/client"
 	"github.com/canonical/go-dqlite/internal/logging"
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -254,69 +254,21 @@ func newServer(t *testing.T, index int) (string, func()) {
 	id := uint(index + 1)
 	dir, dirCleanup := newDir(t)
 
-	listener := newListener(t)
+	listener, err := net.Listen("unix", "")
+	require.NoError(t, err)
+
 	address := listener.Addr().String()
+
+	listener.Close()
 
 	server, err := bindings.NewServer(id, address, dir)
 	require.NoError(t, err)
 
-	servers := []bindings.ServerInfo{
-		{ID: uint64(id), Address: address},
-	}
+	server.SetBindAddress(address)
 
-	err = server.Bootstrap(servers)
-	require.NoError(t, err)
-
-	runCh := make(chan error)
-	go func() {
-		err := server.Run()
-		runCh <- err
-	}()
-
-	require.True(t, server.Ready())
-
-	acceptCh := make(chan error)
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				acceptCh <- nil
-				return
-			}
-
-			err = server.Handle(conn)
-			if err == bindings.ErrServerStopped {
-				acceptCh <- nil
-				return
-			}
-			if err != nil {
-				acceptCh <- err
-				return
-			}
-		}
-	}()
-
+	require.NoError(t, server.Start())
 	cleanup := func() {
 		require.NoError(t, server.Stop())
-
-		require.NoError(t, listener.Close())
-
-		// Wait for the run goroutine to exit.
-		select {
-		case err := <-runCh:
-			assert.NoError(t, err)
-		case <-time.After(time.Second):
-			t.Fatal("server did not stop within a second")
-		}
-
-		// Wait for the accept goroutine to exit.
-		select {
-		case err := <-acceptCh:
-			assert.NoError(t, err)
-		case <-time.After(time.Second):
-			t.Fatal("accept goroutine did not stop within a second")
-		}
-
 		server.Close()
 		dirCleanup()
 	}

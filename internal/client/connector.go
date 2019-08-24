@@ -7,9 +7,9 @@ import (
 	"io"
 	"time"
 
+	"github.com/Rican7/retry"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/logging"
-	"github.com/Rican7/retry"
 	"github.com/pkg/errors"
 )
 
@@ -146,6 +146,32 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 	return nil, ErrNoAvailableLeader
 }
 
+// Connect establishes a connection with a dqlite node.
+func Connect(ctx context.Context, dial bindings.DialFunc, address string, store ServerStore, log logging.Func) (*Client, error) {
+	// Establish the connection.
+	conn, err := dial(ctx, address)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to establish network connection")
+	}
+
+	// Latest protocol version.
+	protocol := make([]byte, 8)
+	binary.LittleEndian.PutUint64(protocol, bindings.ProtocolVersion)
+
+	// Perform the protocol handshake.
+	n, err := conn.Write(protocol)
+	if err != nil {
+		conn.Close()
+		return nil, errors.Wrap(err, "failed to send handshake")
+	}
+	if n != 8 {
+		conn.Close()
+		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
+	}
+
+	return newClient(conn, address, store, log), nil
+}
+
 // Connect to the given dqlite server and check if it's the leader.
 //
 // Return values:
@@ -156,24 +182,10 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 // - Target is the leader:                   -> server, "", nil
 //
 func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Client, string, error) {
-	// Establish the connection.
-	conn, err := c.config.Dial(ctx, address)
+	client, err := Connect(ctx, c.config.Dial, address, c.store, c.log)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "failed to establish network connection")
+		return nil, "", err
 	}
-
-	// Perform the protocol handshake.
-	n, err := conn.Write(c.protocol)
-	if err != nil {
-		conn.Close()
-		return nil, "", errors.Wrap(err, "failed to send handshake")
-	}
-	if n != 8 {
-		conn.Close()
-		return nil, "", errors.Wrap(io.ErrShortWrite, "failed to send handshake")
-	}
-
-	client := newClient(conn, address, c.store, c.log)
 
 	// Send the initial Leader request.
 	request := Message{}

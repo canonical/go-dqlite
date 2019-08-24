@@ -13,48 +13,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func nullLog(level int, msg string) {
-}
-
-func TestNewServer(t *testing.T) {
-	dir, cleanup := newDir(t)
+func TestServer_Create(t *testing.T) {
+	_, cleanup := newServer(t)
 	defer cleanup()
-
-	server, err := bindings.NewServer(1, "1", dir)
-	require.NoError(t, err)
-
-	server.Close()
-}
-
-func TestServer_Run(t *testing.T) {
-	server, cleanup := newServer(t)
-	defer cleanup()
-
-	server.SetLogFunc(nullLog)
-
-	ch := make(chan error)
-	go func() {
-		err := server.Run()
-		ch <- err
-	}()
-
-	require.True(t, server.Ready())
-	require.NoError(t, server.Stop())
-
-	assert.NoError(t, <-ch)
 }
 
 func TestServer_Leader(t *testing.T) {
-	server, cleanup := newServer(t)
+	_, cleanup := newServer(t)
 	defer cleanup()
 
-	listener, cleanup := newListener(t)
-	defer cleanup()
-
-	cleanup = runServer(t, server, listener)
-	defer cleanup()
-
-	conn := newClient(t, listener)
+	conn := newClient(t)
 
 	// Make a Leader request
 	buf := makeClientRequest(t, conn, bindings.RequestLeader)
@@ -81,42 +49,30 @@ func TestServer_Leader(t *testing.T) {
 // 	require.NoError(t, conn.Close())
 // }
 
-func TestServer_ConcurrentHandleAndClose(t *testing.T) {
-	server, cleanup := newServer(t)
-	defer cleanup()
+// func TestServer_ConcurrentHandleAndClose(t *testing.T) {
+// 	server, cleanup := newServer(t)
+// 	defer cleanup()
 
-	listener, cleanup := newListener(t)
-	defer cleanup()
+// 	listener, cleanup := newListener(t)
+// 	defer cleanup()
 
-	runCh := make(chan error)
-	go func() {
-		err := server.Run()
-		runCh <- err
-	}()
+// 	acceptCh := make(chan error)
+// 	go func() {
+// 		conn, err := listener.Accept()
+// 		if err != nil {
+// 			acceptCh <- err
+// 		}
+// 		server.Handle(conn)
+// 		acceptCh <- nil
+// 	}()
 
-	require.True(t, server.Ready())
+// 	conn, err := net.Dial("unix", listener.Addr().String())
+// 	require.NoError(t, err)
 
-	acceptCh := make(chan error)
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			acceptCh <- err
-		}
-		server.Handle(conn)
-		acceptCh <- nil
-	}()
+// 	require.NoError(t, conn.Close())
 
-	conn, err := net.Dial("unix", listener.Addr().String())
-	require.NoError(t, err)
-
-	require.NoError(t, conn.Close())
-
-	require.NoError(t, server.Stop())
-
-	assert.NoError(t, <-runCh)
-
-	assert.NoError(t, <-acceptCh)
-}
+// 	assert.NoError(t, <-acceptCh)
+// }
 
 // Create a new Server object for tests.
 func newServer(t *testing.T) (*bindings.Server, func()) {
@@ -127,7 +83,13 @@ func newServer(t *testing.T) (*bindings.Server, func()) {
 	server, err := bindings.NewServer(1, "1", dir)
 	require.NoError(t, err)
 
+	err = server.SetBindAddress("@test")
+	require.NoError(t, err)
+
+	require.NoError(t, server.Start())
+
 	cleanup := func() {
+		require.NoError(t, server.Stop())
 		server.Close()
 		dirCleanup()
 	}
@@ -135,25 +97,11 @@ func newServer(t *testing.T) (*bindings.Server, func()) {
 	return server, cleanup
 }
 
-// Create a new server unix socket.
-func newListener(t *testing.T) (net.Listener, func()) {
-	t.Helper()
-
-	listener, err := net.Listen("unix", "")
-	require.NoError(t, err)
-
-	cleanup := func() {
-		require.NoError(t, listener.Close())
-	}
-
-	return listener, cleanup
-}
-
 // Create a new client network connection, performing the handshake.
-func newClient(t *testing.T, listener net.Listener) net.Conn {
+func newClient(t *testing.T) net.Conn {
 	t.Helper()
 
-	conn, err := net.Dial("unix", listener.Addr().String())
+	conn, err := net.Dial("unix", "@test")
 	require.NoError(t, err)
 
 	// Handshake
@@ -161,40 +109,6 @@ func newClient(t *testing.T, listener net.Listener) net.Conn {
 	require.NoError(t, err)
 
 	return conn
-}
-
-// Run the server handling connections from the given listener, and stop it in the
-// cleanup function.
-func runServer(t *testing.T, server *bindings.Server, listener net.Listener) func() {
-	t.Helper()
-
-	runCh := make(chan error)
-	go func() {
-		err := server.Run()
-		runCh <- err
-	}()
-
-	require.True(t, server.Ready())
-
-	acceptCh := make(chan error)
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			acceptCh <- err
-			return
-		}
-		err = server.Handle(conn)
-		acceptCh <- err
-	}()
-
-	cleanup := func() {
-		require.NoError(t, server.Stop())
-
-		assert.NoError(t, <-runCh)
-		assert.NoError(t, <-acceptCh)
-	}
-
-	return cleanup
 }
 
 // Perform a client request.
