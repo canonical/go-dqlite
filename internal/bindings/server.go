@@ -66,25 +66,6 @@ static int configConnectFunc(dqlite_task *t, uintptr_t handle) {
         return dqlite_task_set_connect_func(t, connectTrampoline, (void*)handle);
 }
 
-// C to Go trampoline for custom logging function.
-void logWithLogger(uintptr_t handle, int level, char *message);
-
-// Wrapper to call the Go trampoline.
-static void logTrampoline(void *data, int level, const char *fmt, va_list args) {
-        uintptr_t handle = (uintptr_t)(data);
-	char buf[EMIT_BUF_LEN];
-
-	vsnprintf(buf, EMIT_BUF_LEN, fmt, args);
-        // FIXME: this seems to cause the stack to grow too much
-        // see https://github.com/therecipe/qt/issues/399#issuecomment-315191666
-        // logWithLogger(handle, level, buf);
-}
-
-// Configure a custom log function.
-static void configLogger(dqlite_task *d, uintptr_t handle) {
-        dqlite_config(d, DQLITE_CONFIG_LOGGER, logTrampoline, (void*)handle);
-}
-
 // C to Go trampoline for custom watch function.
 void triggerWatch(uintptr_t handle, int old_state, int new_state);
 
@@ -141,9 +122,6 @@ type Server C.dqlite_task
 
 // DialFunc is a function that can be used to establish a network connection.
 type DialFunc func(context.Context, string) (net.Conn, error)
-
-// LogFunc is a function emitting a single log message.
-type LogFunc func(int, string)
 
 // WatchFunc is a function notifiying about state changes.
 type WatchFunc func(int, int)
@@ -225,17 +203,6 @@ func (s *Server) Close() {
 	C.dqlite_task_destroy(server)
 }
 
-// SetLogFunc configure a custom log function.
-func (s *Server) SetLogFunc(log LogFunc) {
-	logLock.Lock()
-	defer logLock.Unlock()
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	logIndex++
-	// TODO: unregister when destroying the server.
-	logRegistry[logIndex] = log
-	C.configLogger(server, logIndex)
-}
-
 // SetWatchFunc configures a watch function to be notified about state changes.
 func (s *Server) SetWatchFunc(watch WatchFunc) {
 	server := (*C.dqlite_task)(unsafe.Pointer(s))
@@ -259,22 +226,6 @@ func (s *Server) SetWatchFunc(watch WatchFunc) {
 		}
 	}()
 	C.configWatcher(server, C.uintptr_t(efd))
-}
-
-// Dump a database file.
-func (s *Server) Dump(filename string) ([]byte, error) {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	cfilename := C.CString(filename)
-	defer C.free(unsafe.Pointer(cfilename))
-	var buf unsafe.Pointer
-	var bufLen C.size_t
-	rv := C.dqlite_dump(server, cfilename, &buf, &bufLen)
-	if rv != 0 {
-		return nil, fmt.Errorf("dump failed with %d", rv)
-	}
-	data := C.GoBytes(buf, C.int(bufLen))
-	C.sqlite3_free(buf)
-	return data, nil
 }
 
 // Cluster returns information about all servers in the cluster.
@@ -346,13 +297,6 @@ func connectWithDial(handle C.uintptr_t, id C.unsigned, address *C.char, fd *C.i
 	return C.int(0)
 }
 
-//export logWithLogger
-func logWithLogger(handle C.uintptr_t, level C.int, message *C.char) {
-	log := logRegistry[handle]
-	msg := C.GoString(message)
-	log(int(level), msg)
-}
-
 func convertState(state C.int) int {
 	switch state {
 	case C.DQLITE_UNAVAILABLE:
@@ -372,10 +316,6 @@ func convertState(state C.int) int {
 var connectRegistry = make(map[C.uintptr_t]DialFunc)
 var connectIndex C.uintptr_t = 100
 var connectLock = sync.Mutex{}
-
-var logRegistry = make(map[C.uintptr_t]LogFunc)
-var logIndex C.uintptr_t = 100
-var logLock = sync.Mutex{}
 
 // ErrServerStopped is returned by Server.Handle() is the server was stopped.
 var ErrServerStopped = fmt.Errorf("server was stopped")

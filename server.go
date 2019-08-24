@@ -9,7 +9,6 @@ import (
 	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/client"
-	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/pkg/errors"
 )
 
@@ -93,18 +92,6 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 	if err := server.SetBindAddress(bindAddress); err != nil {
 		return nil, err
 	}
-	log := func(level int, msg string) {
-	}
-	if o.Log != nil {
-		log = func(level int, msg string) {
-			o.Log(logging.Level(level), msg)
-		}
-	}
-	server.SetLogFunc(log)
-	if o.WatchFunc != nil {
-		server.SetWatchFunc(o.WatchFunc)
-	}
-
 	s := &Server{
 		log:         o.Log,
 		server:      server,
