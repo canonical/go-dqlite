@@ -42,23 +42,6 @@ static int configConnectFunc(dqlite_task *t, uintptr_t handle) {
         return dqlite_task_set_connect_func(t, connectTrampoline, (void*)handle);
 }
 
-// C to Go trampoline for custom watch function.
-void triggerWatch(uintptr_t handle, int old_state, int new_state);
-
-// Wrapper to call the Go trampoline.
-static void watchHandler(void *data, int old_state, int new_state) {
-        uintptr_t efd = (uintptr_t)(data);
-        uint64_t value = new_state;
-        int rv = write(efd, &value, sizeof value);
-        assert(rv == sizeof value);
-}
-
-// Configure a custom watch function.
-static void configWatcher(dqlite_task *d, uintptr_t efd) {
-        dqlite_config(d, DQLITE_CONFIG_WATCHER, watchHandler, (void*)efd);
-}
-
-
 static int initializeSQLite()
 {
 	int rc;
@@ -82,9 +65,6 @@ import (
 	"sync"
 	"time"
 	"unsafe"
-
-	endian "github.com/gxed/GoEndian"
-	"golang.org/x/sys/unix"
 )
 
 // ServerInfo is the Go equivalent of dqlite_server.
@@ -98,9 +78,6 @@ type Server C.dqlite_task
 
 // DialFunc is a function that can be used to establish a network connection.
 type DialFunc func(context.Context, string) (net.Conn, error)
-
-// WatchFunc is a function notifiying about state changes.
-type WatchFunc func(int, int)
 
 // Init initializes dqlite global state.
 func Init() error {
@@ -179,31 +156,6 @@ func (s *Server) Close() {
 	C.dqlite_task_destroy(server)
 }
 
-// SetWatchFunc configures a watch function to be notified about state changes.
-func (s *Server) SetWatchFunc(watch WatchFunc) {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	efd, err := unix.Eventfd(0, unix.EFD_CLOEXEC)
-	if err != nil {
-		panic(err)
-	}
-	// TODO: close eventfd an termnate the goroutine upon server shutdown
-	go func() {
-		buf := make([]byte, 8)
-		for {
-			n, err := unix.Read(efd, buf)
-			if err != nil {
-				panic(err)
-			}
-			if n != 8 {
-				panic("short read")
-			}
-			newState := endian.Endian.Uint64(buf)
-			watch(-1, int(newState))
-		}
-	}()
-	C.configWatcher(server, C.uintptr_t(efd))
-}
-
 // Extract the underlying socket from a connection.
 func connToSocket(conn net.Conn) (C.int, error) {
 	file, err := conn.(fileConn).File()
@@ -250,21 +202,6 @@ func connectWithDial(handle C.uintptr_t, id C.unsigned, address *C.char, fd *C.i
 	}
 	*fd = socket
 	return C.int(0)
-}
-
-func convertState(state C.int) int {
-	switch state {
-	case C.DQLITE_UNAVAILABLE:
-		return Unavailable
-	case C.DQLITE_FOLLOWER:
-		return Follower
-	case C.DQLITE_CANDIDATE:
-		return Candidate
-	case C.DQLITE_LEADER:
-		return Leader
-	default:
-		panic("unknown state")
-	}
 }
 
 // Use handles to avoid passing Go pointers to C.

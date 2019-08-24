@@ -15,17 +15,6 @@ import (
 // ServerInfo holds information about a single server.
 type ServerInfo = client.ServerInfo
 
-// WatchFunc notifies about state changes.
-type WatchFunc = bindings.WatchFunc
-
-// States
-const (
-	Unavailable = bindings.Unavailable
-	Follower    = bindings.Follower
-	Candidate   = bindings.Candidate
-	Leader      = bindings.Leader
-)
-
 // Server implements the dqlite network protocol.
 type Server struct {
 	log         LogFunc          // Logger
@@ -57,14 +46,6 @@ func WithServerDialFunc(dial DialFunc) ServerOption {
 func WithServerBindAddress(address string) ServerOption {
 	return func(options *serverOptions) {
 		options.BindAddress = address
-	}
-}
-
-// WithServerWatchFunc sets a function that will be invoked
-// whenever this server acquires leadership.
-func WithServerWatchFunc(watch WatchFunc) ServerOption {
-	return func(options *serverOptions) {
-		options.WatchFunc = watch
 	}
 }
 
@@ -239,7 +220,6 @@ func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) err
 type serverOptions struct {
 	Log         LogFunc
 	DialFunc    DialFunc
-	WatchFunc   WatchFunc
 	BindAddress string
 }
 
