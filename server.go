@@ -157,7 +157,7 @@ func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) err
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
 	}
-	connector := client.NewConnector(0, store, config, defaultLogFunc())
+	connector := client.NewConnector(0, store, config, s.log)
 	c, err := connector.Connect(ctx)
 	if err != nil {
 		return err
