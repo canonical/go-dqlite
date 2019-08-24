@@ -2,7 +2,6 @@ package client_test
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
@@ -255,7 +254,12 @@ func newServer(t *testing.T, index int) (string, func()) {
 	id := uint(index + 1)
 	dir, dirCleanup := newDir(t)
 
-	address := fmt.Sprintf("@dqlite-%d", id)
+	listener, err := net.Listen("unix", "")
+	require.NoError(t, err)
+
+	address := listener.Addr().String()
+
+	listener.Close()
 
 	server, err := bindings.NewServer(id, address, dir)
 	require.NoError(t, err)
