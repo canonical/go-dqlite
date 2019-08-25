@@ -5,6 +5,8 @@ package bindings
 #include <unistd.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <stdint.h>
+#include <signal.h>
 
 #include <dqlite.h>
 #include <raft.h>
