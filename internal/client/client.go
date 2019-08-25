@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/pkg/errors"
 )
 
@@ -21,7 +20,7 @@ type Client struct {
 	netErr         error         // A network error occurred
 }
 
-func newClient(conn net.Conn, address string, store ServerStore, log logging.Func) *Client {
+func newClient(conn net.Conn) *Client {
 	//logger.With(zap.String("target", address)
 	client := &Client{
 		conn:           conn,

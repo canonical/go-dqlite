@@ -149,7 +149,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 }
 
 // Connect establishes a connection with a dqlite node.
-func Connect(ctx context.Context, dial DialFunc, address string, store ServerStore, log logging.Func) (*Client, error) {
+func Connect(ctx context.Context, dial DialFunc, address string) (*Client, error) {
 	// Establish the connection.
 	conn, err := dial(ctx, address)
 	if err != nil {
@@ -171,7 +171,7 @@ func Connect(ctx context.Context, dial DialFunc, address string, store ServerSto
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
-	return newClient(conn, address, store, log), nil
+	return newClient(conn), nil
 }
 
 // Connect to the given dqlite server and check if it's the leader.
@@ -184,7 +184,7 @@ func Connect(ctx context.Context, dial DialFunc, address string, store ServerSto
 // - Target is the leader:                   -> server, "", nil
 //
 func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Client, string, error) {
-	client, err := Connect(ctx, c.config.Dial, address, c.store, c.log)
+	client, err := Connect(ctx, c.config.Dial, address)
 	if err != nil {
 		return nil, "", err
 	}

@@ -87,8 +87,7 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 
 // Cluster returns information about all servers in the cluster.
 func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
-	store := NewInmemServerStore()
-	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress, store, s.log)
+	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
 	}
@@ -115,8 +114,7 @@ func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
 
 // Leader returns information about the current leader, if any.
 func (s *Server) LeaderAddress(ctx context.Context) (string, error) {
-	store := NewInmemServerStore()
-	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress, store, s.log)
+	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to connect to dqlite task")
 	}
@@ -229,8 +227,7 @@ type File struct {
 }
 
 func (s *Server) Dump(ctx context.Context, filename string) ([]File, error) {
-	store := NewInmemServerStore()
-	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress, store, s.log)
+	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
 	}
