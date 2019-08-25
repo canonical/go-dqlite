@@ -1,20 +1,9 @@
 go-dqlite [![Build Status](https://travis-ci.org/canonical/go-dqlite.png)](https://travis-ci.org/canonical/go-dqlite) [![Coverage Status](https://coveralls.io/repos/github/canonical/go-dqlite/badge.svg?branch=master)](https://coveralls.io/github/canonical/go-dqlite?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/canonical/go-dqlite)](https://goreportcard.com/report/github.com/canonical/go-dqlite) [![GoDoc](https://godoc.org/github.com/canonical/go-dqlite?status.svg)](https://godoc.org/github.com/canonical/go-dqlite)
 ======
 
-This repository provides the `dqlite` Go package, which can be used to
-replicate a SQLite database across a cluster, using the Raft
-algorithm.
-
-Design higlights
-----------------
-
-* No external processes needed: dqlite is just a Go library, you link it
-  it to your application exactly like you would with SQLite.
-* Replication needs a [SQLite patch](https://github.com/canonical/sqlite/commit/2a9aa8b056f37ae05f38835182a2856ffc95aee4)
-  which is not yet included upstream.
-* The Go [Raft package](https://github.com/hashicorp/raft) from Hashicorp
-  is used internally for replicating the write-ahead log frames of SQLite
-  across all nodes.
+This repository provides the `go-dqlite` Go package, containing bindings for the
+[dqlite](https://github.com/canonical/canonical/dqlite) C library and a pure-Go
+client for the dqlite wire [protocol](https://github.com/canonical/dqlite/blob/master/doc/protocol.md).
 
 How does it compare to rqlite?
 ------------------------------
