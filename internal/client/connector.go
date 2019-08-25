@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"time"
 
 	"github.com/Rican7/retry"
 	"github.com/canonical/go-dqlite/internal/logging"
@@ -226,15 +225,14 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Cli
 			return nil, "", errors.Wrap(err, "failed to send Client request")
 		}
 
-		heartbeatTimeout, err := DecodeWelcome(&response)
+		_, err := DecodeWelcome(&response)
 		if err != nil {
 			client.Close()
 			return nil, "", errors.Wrap(err, "failed to parse Welcome response")
 		}
 
-		client.heartbeatTimeout = time.Duration(heartbeatTimeout) * time.Millisecond
-
 		// TODO: enable heartbeat
+		// client.heartbeatTimeout = time.Duration(heartbeatTimeout) * time.Millisecond
 		//go client.heartbeat()
 
 		return client, "", nil

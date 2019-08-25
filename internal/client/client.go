@@ -14,24 +14,17 @@ import (
 
 // Client connecting to a dqlite server and speaking the dqlite wire protocol.
 type Client struct {
-	log              logging.Func  // Logging function.
-	address          string        // Address of the connected dqlite server.
-	store            ServerStore   // Update this store upon heartbeats.
-	conn             net.Conn      // Underlying network connection.
-	heartbeatTimeout time.Duration // Heartbeat timeout reported at registration.
-	contextTimeout   time.Duration // Default context timeout.
-	closeCh          chan struct{} // Stops the heartbeat when the connection gets closed
-	mu               sync.Mutex    // Serialize requests
-	netErr           error         // A network error occurred
+	conn           net.Conn      // Underlying network connection.
+	contextTimeout time.Duration // Default context timeout.
+	closeCh        chan struct{} // Stops the heartbeat when the connection gets closed
+	mu             sync.Mutex    // Serialize requests
+	netErr         error         // A network error occurred
 }
 
 func newClient(conn net.Conn, address string, store ServerStore, log logging.Func) *Client {
 	//logger.With(zap.String("target", address)
 	client := &Client{
 		conn:           conn,
-		address:        address,
-		store:          store,
-		log:            log,
 		closeCh:        make(chan struct{}),
 		contextTimeout: 5 * time.Second,
 	}
@@ -276,6 +269,7 @@ func (c *Client) recvFill(buf []byte) (int, error) {
 	return -1, io.ErrNoProgress
 }
 
+/*
 func (c *Client) heartbeat() {
 	request := Message{}
 	request.Init(16)
@@ -330,3 +324,4 @@ func (c *Client) heartbeat() {
 		response.Reset()
 	}
 }
+*/
