@@ -4,7 +4,7 @@ language: go
 addons:
   apt:
     sources:
-    - sourceline: 'ppa:dqlite-maintainers/master'
+    - sourceline: 'ppa:dqlite/master'
     packages:
     - golint
     - libsqlite3-dev
