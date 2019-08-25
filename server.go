@@ -62,7 +62,7 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 		return nil, err
 	}
 	if o.DialFunc != nil {
-		if err := server.SetDialFunc(bindings.DialFunc(o.DialFunc)); err != nil {
+		if err := server.SetDialFunc(client.DialFunc(o.DialFunc)); err != nil {
 			return nil, err
 		}
 	}
@@ -152,7 +152,7 @@ func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) err
 		dial = client.TCPDial
 	}
 	config := client.Config{
-		Dial:           bindings.DialFunc(dial),
+		Dial:           client.DialFunc(dial),
 		AttemptTimeout: time.Second,
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
@@ -190,7 +190,7 @@ func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) err
 		dial = client.TCPDial
 	}
 	config := client.Config{
-		Dial:           bindings.DialFunc(dial),
+		Dial:           client.DialFunc(dial),
 		AttemptTimeout: time.Second,
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},

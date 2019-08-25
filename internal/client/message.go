@@ -15,8 +15,8 @@ import (
 // schema.sh to generate encoding logic for statement parameters.
 type NamedValues = []driver.NamedValue
 
-// Servers is a type alias of a slice of bindings.ServerInfo. It's used by
-// schema.sh to generate decoding logic for the heartbeat response.
+// Servers is a type alias of a slice of ServerInfo. It's used by schema.sh to
+// generate decoding logic for the heartbeat response.
 type Servers []ServerInfo
 
 // Message holds data about a single request or response.

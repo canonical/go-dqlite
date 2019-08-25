@@ -67,13 +67,12 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+
+	"github.com/canonical/go-dqlite/internal/client"
 )
 
 // Server is a Go wrapper arround dqlite_server.
 type Server C.dqlite_task
-
-// DialFunc is a function that can be used to establish a network connection.
-type DialFunc func(context.Context, string) (net.Conn, error)
 
 // Init initializes dqlite global state.
 func Init() error {
@@ -108,7 +107,7 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 	return (*Server)(unsafe.Pointer(server)), nil
 }
 
-func (s *Server) SetDialFunc(dial DialFunc) error {
+func (s *Server) SetDialFunc(dial client.DialFunc) error {
 	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	connectLock.Lock()
 	defer connectLock.Unlock()
@@ -200,7 +199,7 @@ func connectWithDial(handle C.uintptr_t, id C.unsigned, address *C.char, fd *C.i
 }
 
 // Use handles to avoid passing Go pointers to C.
-var connectRegistry = make(map[C.uintptr_t]DialFunc)
+var connectRegistry = make(map[C.uintptr_t]client.DialFunc)
 var connectIndex C.uintptr_t = 100
 var connectLock = sync.Mutex{}
 

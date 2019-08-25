@@ -5,13 +5,16 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net"
 	"time"
 
 	"github.com/Rican7/retry"
-	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/pkg/errors"
 )
+
+// DialFunc is a function that can be used to establish a network connection.
+type DialFunc func(context.Context, string) (net.Conn, error)
 
 // Connector is in charge of creating a dqlite SQL client connected to the
 // current leader of a cluster.
@@ -147,7 +150,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 }
 
 // Connect establishes a connection with a dqlite node.
-func Connect(ctx context.Context, dial bindings.DialFunc, address string, store ServerStore, log logging.Func) (*Client, error) {
+func Connect(ctx context.Context, dial DialFunc, address string, store ServerStore, log logging.Func) (*Client, error) {
 	// Establish the connection.
 	conn, err := dial(ctx, address)
 	if err != nil {
