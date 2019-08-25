@@ -20,7 +20,7 @@ type Conn struct {
 	netErr         error         // A network error occurred
 }
 
-func newConn(conn net.Conn) *Conn {
+func NewConn(conn net.Conn) *Conn {
 	//logger.With(zap.String("target", address)
 	client := &Conn{
 		conn:           conn,
