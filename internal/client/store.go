@@ -2,12 +2,13 @@ package client
 
 import (
 	"context"
-
-	"github.com/canonical/go-dqlite/internal/bindings"
 )
 
 // ServerInfo holds information about a single server.
-type ServerInfo = bindings.ServerInfo
+type ServerInfo struct {
+	ID      uint64
+	Address string
+}
 
 // ServerStore is used by a dqlite client to get an initial list of candidate
 // dqlite servers that it can dial in order to find a leader server to connect

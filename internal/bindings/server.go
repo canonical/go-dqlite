@@ -69,12 +69,6 @@ import (
 	"unsafe"
 )
 
-// ServerInfo is the Go equivalent of dqlite_server.
-type ServerInfo struct {
-	ID      uint64
-	Address string
-}
-
 // Server is a Go wrapper arround dqlite_server.
 type Server C.dqlite_task
 
@@ -193,8 +187,7 @@ func connectWithDial(handle C.uintptr_t, id C.unsigned, address *C.char, fd *C.i
 	// TODO: make timeout customizable.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	info := ServerInfo{ID: uint64(id), Address: C.GoString(address)}
-	conn, err := dial(ctx, info.Address)
+	conn, err := dial(ctx, C.GoString(address))
 	if err != nil {
 		return C.RAFT_NOCONNECTION
 	}

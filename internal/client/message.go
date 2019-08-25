@@ -19,7 +19,7 @@ type NamedValues = []driver.NamedValue
 
 // Servers is a type alias of a slice of bindings.ServerInfo. It's used by
 // schema.sh to generate decoding logic for the heartbeat response.
-type Servers []bindings.ServerInfo
+type Servers []ServerInfo
 
 // Message holds data about a single request or response.
 type Message struct {
