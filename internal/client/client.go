@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Client connecting to a dqlite server and speaking the dqlite wire protocol.
-type Client struct {
+// Conn connecting to a dqlite server and speaking the dqlite wire protocol.
+type Conn struct {
 	conn           net.Conn      // Underlying network connection.
 	contextTimeout time.Duration // Default context timeout.
 	closeCh        chan struct{} // Stops the heartbeat when the connection gets closed
@@ -20,9 +20,9 @@ type Client struct {
 	netErr         error         // A network error occurred
 }
 
-func newClient(conn net.Conn) *Client {
+func newConn(conn net.Conn) *Conn {
 	//logger.With(zap.String("target", address)
-	client := &Client{
+	client := &Conn{
 		conn:           conn,
 		closeCh:        make(chan struct{}),
 		contextTimeout: 5 * time.Second,
@@ -33,13 +33,13 @@ func newClient(conn net.Conn) *Client {
 
 // SetContextTimeout sets the default context timeout when no deadline is
 // provided.
-func (c *Client) SetContextTimeout(timeout time.Duration) {
+func (c *Conn) SetContextTimeout(timeout time.Duration) {
 	c.contextTimeout = timeout
 }
 
 // Call invokes a dqlite RPC, sending a request message and receiving a
 // response message.
-func (c *Client) Call(ctx context.Context, request, response *Message) (err error) {
+func (c *Conn) Call(ctx context.Context, request, response *Message) (err error) {
 	// We need to take a lock since the dqlite server currently does not
 	// support concurrent requests.
 	c.mu.Lock()
@@ -78,13 +78,13 @@ err:
 }
 
 // More is used when a request maps to multiple responses.
-func (c *Client) More(ctx context.Context, response *Message) error {
+func (c *Conn) More(ctx context.Context, response *Message) error {
 	return c.recv(response)
 }
 
 // Interrupt sends an interrupt request and awaits for the server's empty
 // response.
-func (c *Client) Interrupt(ctx context.Context, request *Message, response *Message) error {
+func (c *Conn) Interrupt(ctx context.Context, request *Message, response *Message) error {
 	// We need to take a lock since the dqlite server currently does not
 	// support concurrent requests.
 	c.mu.Lock()
@@ -123,12 +123,12 @@ func (c *Client) Interrupt(ctx context.Context, request *Message, response *Mess
 }
 
 // Close the client connection.
-func (c *Client) Close() error {
+func (c *Conn) Close() error {
 	close(c.closeCh)
 	return c.conn.Close()
 }
 
-func (c *Client) send(req *Message) error {
+func (c *Conn) send(req *Message) error {
 	if err := c.sendHeader(req); err != nil {
 		return errors.Wrap(err, "failed to send header")
 	}
@@ -140,7 +140,7 @@ func (c *Client) send(req *Message) error {
 	return nil
 }
 
-func (c *Client) sendHeader(req *Message) error {
+func (c *Conn) sendHeader(req *Message) error {
 	n, err := c.conn.Write(req.header[:])
 	if err != nil {
 		return errors.Wrap(err, "failed to send header")
@@ -153,7 +153,7 @@ func (c *Client) sendHeader(req *Message) error {
 	return nil
 }
 
-func (c *Client) sendBody(req *Message) error {
+func (c *Conn) sendBody(req *Message) error {
 	buf := req.body1.Bytes[:req.body1.Offset]
 	n, err := c.conn.Write(buf)
 	if err != nil {
@@ -181,7 +181,7 @@ func (c *Client) sendBody(req *Message) error {
 	return nil
 }
 
-func (c *Client) recv(res *Message) error {
+func (c *Conn) recv(res *Message) error {
 	if err := c.recvHeader(res); err != nil {
 		return errors.Wrap(err, "failed to receive header")
 	}
@@ -193,7 +193,7 @@ func (c *Client) recv(res *Message) error {
 	return nil
 }
 
-func (c *Client) recvHeader(res *Message) error {
+func (c *Conn) recvHeader(res *Message) error {
 	if err := c.recvPeek(res.header); err != nil {
 		return errors.Wrap(err, "failed to receive header")
 	}
@@ -206,7 +206,7 @@ func (c *Client) recvHeader(res *Message) error {
 	return nil
 }
 
-func (c *Client) recvBody(res *Message) error {
+func (c *Conn) recvBody(res *Message) error {
 	n := int(res.words) * messageWordSize
 	n1 := n
 	n2 := 0
@@ -236,7 +236,7 @@ func (c *Client) recvBody(res *Message) error {
 }
 
 // Read until buf is full.
-func (c *Client) recvPeek(buf []byte) error {
+func (c *Conn) recvPeek(buf []byte) error {
 	for offset := 0; offset < len(buf); {
 		n, err := c.recvFill(buf[offset:])
 		if err != nil {
@@ -249,7 +249,7 @@ func (c *Client) recvPeek(buf []byte) error {
 }
 
 // Try to fill buf, but perform at most one read.
-func (c *Client) recvFill(buf []byte) (int, error) {
+func (c *Conn) recvFill(buf []byte) (int, error) {
 	// Read new data: try a limited number of times.
 	//
 	// This technique is copied from bufio.Reader.
@@ -269,7 +269,7 @@ func (c *Client) recvFill(buf []byte) (int, error) {
 }
 
 /*
-func (c *Client) heartbeat() {
+func (c *Conn) heartbeat() {
 	request := Message{}
 	request.Init(16)
 	response := Message{}

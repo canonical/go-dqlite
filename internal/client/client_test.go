@@ -146,7 +146,7 @@ func TestClient_Query(t *testing.T) {
 }
 */
 
-func newClient(t *testing.T) (*client.Client, func()) {
+func newClient(t *testing.T) (*client.Conn, func()) {
 	t.Helper()
 
 	address, serverCleanup := newServer(t, 0)
@@ -171,7 +171,7 @@ func newClient(t *testing.T) (*client.Client, func()) {
 }
 
 // Perform a client call.
-func makeClientCall(t *testing.T, c *client.Client, request, response *client.Message) {
+func makeClientCall(t *testing.T, c *client.Conn, request, response *client.Message) {
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 

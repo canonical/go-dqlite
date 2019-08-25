@@ -18,7 +18,7 @@ type DialFunc func(context.Context, string) (net.Conn, error)
 // Connector is in charge of creating a dqlite SQL client connected to the
 // current leader of a cluster.
 type Connector struct {
-	id       uint64       // Client ID to use when registering against the server.
+	id       uint64       // Conn ID to use when registering against the server.
 	store    ServerStore  // Used to get and update current cluster servers.
 	config   Config       // Connection parameters.
 	log      logging.Func // Logging function.
@@ -48,8 +48,8 @@ func NewConnector(id uint64, store ServerStore, config Config, log logging.Func)
 // Connect finds the leader server and returns a connection to it.
 //
 // If the connector is stopped before a leader is found, nil is returned.
-func (c *Connector) Connect(ctx context.Context) (*Client, error) {
-	var client *Client
+func (c *Connector) Connect(ctx context.Context) (*Conn, error) {
+	var client *Conn
 
 	// The retry strategy should be configured to retry indefinitely, until
 	// the given context is done.
@@ -91,7 +91,7 @@ func (c *Connector) Connect(ctx context.Context) (*Client, error) {
 
 // Make a single attempt to establish a connection to the leader server trying
 // all addresses available in the store.
-func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Client, error) {
+func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Conn, error) {
 	servers, err := c.store.Get(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get cluster servers")
@@ -149,7 +149,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 }
 
 // Connect establishes a connection with a dqlite node.
-func Connect(ctx context.Context, dial DialFunc, address string) (*Client, error) {
+func Connect(ctx context.Context, dial DialFunc, address string) (*Conn, error) {
 	// Establish the connection.
 	conn, err := dial(ctx, address)
 	if err != nil {
@@ -171,7 +171,7 @@ func Connect(ctx context.Context, dial DialFunc, address string) (*Client, error
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
-	return newClient(conn), nil
+	return newConn(conn), nil
 }
 
 // Connect to the given dqlite server and check if it's the leader.
@@ -183,7 +183,7 @@ func Connect(ctx context.Context, dial DialFunc, address string) (*Client, error
 // - Target not leader and leader known:     -> nil, leader, nil
 // - Target is the leader:                   -> server, "", nil
 //
-func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Client, string, error) {
+func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Conn, string, error) {
 	client, err := Connect(ctx, c.config.Dial, address)
 	if err != nil {
 		return nil, "", err
@@ -222,7 +222,7 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Cli
 
 		if err := client.Call(ctx, &request, &response); err != nil {
 			client.Close()
-			return nil, "", errors.Wrap(err, "failed to send Client request")
+			return nil, "", errors.Wrap(err, "failed to send Conn request")
 		}
 
 		_, err := DecodeWelcome(&response)

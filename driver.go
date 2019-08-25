@@ -243,7 +243,7 @@ var ErrNoAvailableLeader = client.ErrNoAvailableLeader
 // Conn implements the sql.Conn interface.
 type Conn struct {
 	log            LogFunc
-	client         *client.Client
+	client         *client.Conn
 	request        client.Message
 	response       client.Message
 	id             uint32 // Database ID.
@@ -405,7 +405,7 @@ func (tx *Tx) Rollback() error {
 // Stmt is a prepared statement. It is bound to a Conn and not
 // used by multiple goroutines concurrently.
 type Stmt struct {
-	client   *client.Client
+	client   *client.Conn
 	request  *client.Message
 	response *client.Message
 	db       uint32
@@ -518,7 +518,7 @@ func (r *Result) RowsAffected() (int64, error) {
 // Rows is an iterator over an executed query's results.
 type Rows struct {
 	ctx      context.Context
-	client   *client.Client
+	client   *client.Conn
 	request  *client.Message
 	response *client.Message
 	rows     client.Rows
