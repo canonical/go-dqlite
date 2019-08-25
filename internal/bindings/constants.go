@@ -1,68 +1,62 @@
 package bindings
 
-/*
-#include <sqlite3.h>
-#include <dqlite.h>
-*/
-import "C"
-
 // ProtocolVersion is the latest dqlite server protocol version.
-const ProtocolVersion = uint64(C.DQLITE_PROTOCOL_VERSION)
+const ProtocolVersion = uint64(0x86104dd760433fe5)
 
 // SQLite datatype codes
 const (
-	Integer = C.SQLITE_INTEGER
-	Float   = C.SQLITE_FLOAT
-	Text    = C.SQLITE_TEXT
-	Blob    = C.SQLITE_BLOB
-	Null    = C.SQLITE_NULL
+	Integer = 1
+	Float   = 2
+	Text    = 3
+	Blob    = 4
+	Null    = 5
 )
 
 // Special data types for time values.
 const (
-	UnixTime = C.DQLITE_UNIXTIME
-	ISO8601  = C.DQLITE_ISO8601
-	Boolean  = C.DQLITE_BOOLEAN
+	UnixTime = 9
+	ISO8601  = 10
+	Boolean  = 11
 )
 
 // Logging levels.
 const (
-	LogDebug = C.DQLITE_DEBUG
-	LogInfo  = C.DQLITE_INFO
-	LogWarn  = C.DQLITE_WARN
-	LogError = C.DQLITE_ERROR
+	LogDebug = 0
+	LogInfo  = 1
+	LogWarn  = 2
+	LogError = 3
 )
 
 // Request types.
 const (
-	RequestLeader    = C.DQLITE_REQUEST_LEADER
-	RequestClient    = C.DQLITE_REQUEST_CLIENT
-	RequestHeartbeat = C.DQLITE_REQUEST_HEARTBEAT
-	RequestOpen      = C.DQLITE_REQUEST_OPEN
-	RequestPrepare   = C.DQLITE_REQUEST_PREPARE
-	RequestExec      = C.DQLITE_REQUEST_EXEC
-	RequestQuery     = C.DQLITE_REQUEST_QUERY
-	RequestFinalize  = C.DQLITE_REQUEST_FINALIZE
-	RequestExecSQL   = C.DQLITE_REQUEST_EXEC_SQL
-	RequestQuerySQL  = C.DQLITE_REQUEST_QUERY_SQL
-	RequestInterrupt = C.DQLITE_REQUEST_INTERRUPT
-	RequestJoin      = C.DQLITE_REQUEST_JOIN
-	RequestPromote   = C.DQLITE_REQUEST_PROMOTE
-	RequestRemove    = C.DQLITE_REQUEST_REMOVE
-	RequestDump      = C.DQLITE_REQUEST_DUMP
-	RequestCluster   = C.DQLITE_REQUEST_CLUSTER
+	RequestLeader    = 0
+	RequestClient    = 1
+	RequestHeartbeat = 2
+	RequestOpen      = 3
+	RequestPrepare   = 4
+	RequestExec      = 5
+	RequestQuery     = 6
+	RequestFinalize  = 7
+	RequestExecSQL   = 8
+	RequestQuerySQL  = 9
+	RequestInterrupt = 10
+	RequestJoin      = 12
+	RequestPromote   = 13
+	RequestRemove    = 14
+	RequestDump      = 15
+	RequestCluster   = 16
 )
 
 // Response types.
 const (
-	ResponseFailure = C.DQLITE_RESPONSE_FAILURE
-	ResponseServer  = C.DQLITE_RESPONSE_SERVER
-	ResponseWelcome = C.DQLITE_RESPONSE_WELCOME
-	ResponseServers = C.DQLITE_RESPONSE_SERVERS
-	ResponseDb      = C.DQLITE_RESPONSE_DB
-	ResponseStmt    = C.DQLITE_RESPONSE_STMT
-	ResponseResult  = C.DQLITE_RESPONSE_RESULT
-	ResponseRows    = C.DQLITE_RESPONSE_ROWS
-	ResponseEmpty   = C.DQLITE_RESPONSE_EMPTY
-	ResponseFiles   = C.DQLITE_RESPONSE_FILES
+	ResponseFailure = 0
+	ResponseServer  = 1
+	ResponseWelcome = 2
+	ResponseServers = 3
+	ResponseDb      = 4
+	ResponseStmt    = 5
+	ResponseResult  = 6
+	ResponseRows    = 7
+	ResponseEmpty   = 8
+	ResponseFiles   = 9
 )
