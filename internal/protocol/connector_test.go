@@ -1,4 +1,4 @@
-package client_test
+package protocol_test
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/internal/bindings"
-	"github.com/canonical/go-dqlite/internal/client"
 	"github.com/canonical/go-dqlite/internal/logging"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -214,11 +214,11 @@ func TestConnector_Connect_Error_AfterCancel(t *testing.T) {
 // 	assert.NoError(t, client.Close())
 // }
 
-func newConnector(t *testing.T, store client.ServerStore) *client.Connector {
+func newConnector(t *testing.T, store protocol.ServerStore) *protocol.Connector {
 	t.Helper()
 
-	config := client.Config{
-		Dial:           client.UnixDial,
+	config := protocol.Config{
+		Dial:           protocol.UnixDial,
 		AttemptTimeout: 100 * time.Millisecond,
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
@@ -227,22 +227,22 @@ func newConnector(t *testing.T, store client.ServerStore) *client.Connector {
 
 	log := logging.Test(t)
 
-	connector := client.NewConnector(0, store, config, log)
+	connector := protocol.NewConnector(0, store, config, log)
 
 	return connector
 }
 
 // Create a new in-memory server store populated with the given addresses.
-func newStore(t *testing.T, addresses []string) client.ServerStore {
+func newStore(t *testing.T, addresses []string) protocol.ServerStore {
 	t.Helper()
 
-	servers := make([]client.ServerInfo, len(addresses))
+	servers := make([]protocol.ServerInfo, len(addresses))
 	for i, address := range addresses {
 		servers[i].ID = uint64(i)
 		servers[i].Address = address
 	}
 
-	store := client.NewInmemServerStore()
+	store := protocol.NewInmemServerStore()
 	require.NoError(t, store.Set(context.Background(), servers))
 
 	return store

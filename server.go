@@ -8,12 +8,12 @@ import (
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/internal/bindings"
-	"github.com/canonical/go-dqlite/internal/client"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/pkg/errors"
 )
 
 // ServerInfo holds information about a single server.
-type ServerInfo = client.ServerInfo
+type ServerInfo = protocol.ServerInfo
 
 // Server implements the dqlite network protocol.
 type Server struct {
@@ -62,7 +62,7 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 		return nil, err
 	}
 	if o.DialFunc != nil {
-		if err := server.SetDialFunc(client.DialFunc(o.DialFunc)); err != nil {
+		if err := server.SetDialFunc(protocol.DialFunc(o.DialFunc)); err != nil {
 			return nil, err
 		}
 	}
@@ -87,24 +87,24 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 
 // Cluster returns information about all servers in the cluster.
 func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
-	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress)
+	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
 	}
 	defer c.Close()
 
-	request := client.Message{}
+	request := protocol.Message{}
 	request.Init(16)
-	response := client.Message{}
+	response := protocol.Message{}
 	response.Init(512)
 
-	client.EncodeCluster(&request)
+	protocol.EncodeCluster(&request)
 
 	if err := c.Call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send Cluster request")
 	}
 
-	servers, err := client.DecodeServers(&response)
+	servers, err := protocol.DecodeServers(&response)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse Server response")
 	}
@@ -114,24 +114,24 @@ func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
 
 // Leader returns information about the current leader, if any.
 func (s *Server) LeaderAddress(ctx context.Context) (string, error) {
-	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress)
+	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to connect to dqlite task")
 	}
 	defer c.Close()
 
-	request := client.Message{}
+	request := protocol.Message{}
 	request.Init(16)
-	response := client.Message{}
+	response := protocol.Message{}
 	response.Init(512)
 
-	client.EncodeLeader(&request)
+	protocol.EncodeLeader(&request)
 
 	if err := c.Call(ctx, &request, &response); err != nil {
 		return "", errors.Wrap(err, "failed to send Leader request")
 	}
 
-	leader, err := client.DecodeServer(&response)
+	leader, err := protocol.DecodeServer(&response)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse Server response")
 	}
@@ -147,33 +147,33 @@ func (s *Server) Start() error {
 // Join a cluster.
 func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) error {
 	if dial == nil {
-		dial = client.TCPDial
+		dial = protocol.TCPDial
 	}
-	config := client.Config{
-		Dial:           client.DialFunc(dial),
+	config := protocol.Config{
+		Dial:           protocol.DialFunc(dial),
 		AttemptTimeout: time.Second,
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
 	}
-	connector := client.NewConnector(0, store, config, s.log)
+	connector := protocol.NewConnector(0, store, config, s.log)
 	c, err := connector.Connect(ctx)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
 
-	request := client.Message{}
+	request := protocol.Message{}
 	request.Init(4096)
-	response := client.Message{}
+	response := protocol.Message{}
 	response.Init(4096)
 
-	client.EncodeJoin(&request, s.id, s.address)
+	protocol.EncodeJoin(&request, s.id, s.address)
 
 	if err := c.Call(ctx, &request, &response); err != nil {
 		return err
 	}
 
-	client.EncodePromote(&request, s.id)
+	protocol.EncodePromote(&request, s.id)
 
 	if err := c.Call(ctx, &request, &response); err != nil {
 		return err
@@ -185,27 +185,27 @@ func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) err
 // Leave a cluster.
 func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) error {
 	if dial == nil {
-		dial = client.TCPDial
+		dial = protocol.TCPDial
 	}
-	config := client.Config{
-		Dial:           client.DialFunc(dial),
+	config := protocol.Config{
+		Dial:           protocol.DialFunc(dial),
 		AttemptTimeout: time.Second,
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
 	}
-	connector := client.NewConnector(0, store, config, defaultLogFunc())
+	connector := protocol.NewConnector(0, store, config, defaultLogFunc())
 	c, err := connector.Connect(ctx)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
 
-	request := client.Message{}
+	request := protocol.Message{}
 	request.Init(4096)
-	response := client.Message{}
+	response := protocol.Message{}
 	response.Init(4096)
 
-	client.EncodeRemove(&request, id)
+	protocol.EncodeRemove(&request, id)
 
 	if err := c.Call(ctx, &request, &response); err != nil {
 		return err
@@ -227,24 +227,24 @@ type File struct {
 }
 
 func (s *Server) Dump(ctx context.Context, filename string) ([]File, error) {
-	c, err := client.Connect(ctx, client.UnixDial, s.bindAddress)
+	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
 	}
 	defer c.Close()
 
-	request := client.Message{}
+	request := protocol.Message{}
 	request.Init(16)
-	response := client.Message{}
+	response := protocol.Message{}
 	response.Init(512)
 
-	client.EncodeDump(&request, filename)
+	protocol.EncodeDump(&request, filename)
 
 	if err := c.Call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send dump request")
 	}
 
-	files, err := client.DecodeFiles(&response)
+	files, err := protocol.DecodeFiles(&response)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse files response")
 	}

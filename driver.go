@@ -27,7 +27,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/canonical/go-dqlite/internal/bindings"
-	"github.com/canonical/go-dqlite/internal/client"
+	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
 // Driver perform queries against a dqlite server.
@@ -37,7 +37,7 @@ type Driver struct {
 	context           context.Context // Global cancellation context
 	connectionTimeout time.Duration   // Max time to wait for a new connection
 	contextTimeout    time.Duration   // Default client context timeout.
-	clientConfig      client.Config   // Configuration for dqlite client instances
+	clientConfig      protocol.Config // Configuration for dqlite client instances
 }
 
 // DriverError is returned in case of database errors.
@@ -54,12 +54,12 @@ func WithLogFunc(log LogFunc) DriverOption {
 }
 
 // DialFunc is a function that can be used to establish a network connection.
-type DialFunc client.DialFunc
+type DialFunc protocol.DialFunc
 
 // WithDialFunc sets a custom dial function.
 func WithDialFunc(dial DialFunc) DriverOption {
 	return func(options *driverOptions) {
-		options.Dial = client.DialFunc(dial)
+		options.Dial = protocol.DialFunc(dial)
 	}
 }
 
@@ -141,7 +141,7 @@ func NewDriver(store ServerStore, options ...DriverOption) (*Driver, error) {
 // Hold configuration options for a dqlite driver.
 type driverOptions struct {
 	Log                     LogFunc
-	Dial                    client.DialFunc
+	Dial                    protocol.DialFunc
 	ConnectionTimeout       time.Duration
 	ContextTimeout          time.Duration
 	ConnectionBackoffFactor time.Duration
@@ -153,7 +153,7 @@ type driverOptions struct {
 func defaultDriverOptions() *driverOptions {
 	return &driverOptions{
 		Log:                     defaultLogFunc(),
-		Dial:                    client.TCPDial,
+		Dial:                    protocol.TCPDial,
 		ConnectionTimeout:       15 * time.Second,
 		ContextTimeout:          2 * time.Second,
 		ConnectionBackoffFactor: 50 * time.Millisecond,
@@ -194,7 +194,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	defer cancel()
 
 	// TODO: generate a client ID.
-	connector := client.NewConnector(0, d.store, d.clientConfig, d.log)
+	connector := protocol.NewConnector(0, d.store, d.clientConfig, d.log)
 
 	conn := &Conn{
 		log:            d.log,
@@ -214,14 +214,14 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	defer conn.request.Reset()
 	defer conn.response.Reset()
 
-	client.EncodeOpen(&conn.request, uri, 0, "volatile")
+	protocol.EncodeOpen(&conn.request, uri, 0, "volatile")
 
 	if err := conn.client.Call(ctx, &conn.request, &conn.response); err != nil {
 		conn.client.Close()
 		return nil, errors.Wrap(err, "failed to open database")
 	}
 
-	conn.id, err = client.DecodeDb(&conn.response)
+	conn.id, err = protocol.DecodeDb(&conn.response)
 	if err != nil {
 		conn.client.Close()
 		return nil, errors.Wrap(err, "failed to open database")
@@ -238,14 +238,14 @@ func (d *Driver) SetContextTimeout(timeout time.Duration) {
 
 // ErrNoAvailableLeader is returned as root cause of Open() if there's no
 // leader available in the cluster.
-var ErrNoAvailableLeader = client.ErrNoAvailableLeader
+var ErrNoAvailableLeader = protocol.ErrNoAvailableLeader
 
 // Conn implements the sql.Conn interface.
 type Conn struct {
 	log            LogFunc
-	client         *client.Conn
-	request        client.Message
-	response       client.Message
+	client         *protocol.Conn
+	request        protocol.Message
+	response       protocol.Message
 	id             uint32 // Database ID.
 	contextTimeout time.Duration
 }
@@ -263,14 +263,14 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 		response: &c.response,
 	}
 
-	client.EncodePrepare(&c.request, uint64(c.id), query)
+	protocol.EncodePrepare(&c.request, uint64(c.id), query)
 
 	if err := c.client.Call(ctx, &c.request, &c.response); err != nil {
 		return nil, driverError(err)
 	}
 
 	var err error
-	stmt.db, stmt.id, stmt.params, err = client.DecodeStmt(&c.response)
+	stmt.db, stmt.id, stmt.params, err = protocol.DecodeStmt(&c.response)
 	if err != nil {
 		return nil, driverError(err)
 	}
@@ -288,13 +288,13 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 	defer c.request.Reset()
 	defer c.response.Reset()
 
-	client.EncodeExecSQL(&c.request, uint64(c.id), query, args)
+	protocol.EncodeExecSQL(&c.request, uint64(c.id), query, args)
 
 	if err := c.client.Call(ctx, &c.request, &c.response); err != nil {
 		return nil, driverError(err)
 	}
 
-	result, err := client.DecodeResult(&c.response)
+	result, err := protocol.DecodeResult(&c.response)
 	if err != nil {
 		return nil, driverError(err)
 	}
@@ -311,14 +311,14 @@ func (c *Conn) Query(query string, args []driver.Value) (driver.Rows, error) {
 func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	defer c.request.Reset()
 
-	client.EncodeQuerySQL(&c.request, uint64(c.id), query, args)
+	protocol.EncodeQuerySQL(&c.request, uint64(c.id), query, args)
 
 	if err := c.client.Call(ctx, &c.request, &c.response); err != nil {
 		c.response.Reset()
 		return nil, driverError(err)
 	}
 
-	rows, err := client.DecodeRows(&c.response)
+	rows, err := protocol.DecodeRows(&c.response)
 	if err != nil {
 		c.response.Reset()
 		return nil, driverError(err)
@@ -405,9 +405,9 @@ func (tx *Tx) Rollback() error {
 // Stmt is a prepared statement. It is bound to a Conn and not
 // used by multiple goroutines concurrently.
 type Stmt struct {
-	client   *client.Conn
-	request  *client.Message
-	response *client.Message
+	client   *protocol.Conn
+	request  *protocol.Message
+	response *protocol.Message
 	db       uint32
 	id       uint32
 	params   uint64
@@ -418,7 +418,7 @@ func (s *Stmt) Close() error {
 	defer s.request.Reset()
 	defer s.response.Reset()
 
-	client.EncodeFinalize(s.request, s.db, s.id)
+	protocol.EncodeFinalize(s.request, s.db, s.id)
 
 	ctx := context.Background()
 
@@ -426,7 +426,7 @@ func (s *Stmt) Close() error {
 		return driverError(err)
 	}
 
-	if err := client.DecodeEmpty(s.response); err != nil {
+	if err := protocol.DecodeEmpty(s.response); err != nil {
 		return driverError(err)
 	}
 
@@ -446,13 +446,13 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 	defer s.request.Reset()
 	defer s.response.Reset()
 
-	client.EncodeExec(s.request, s.db, s.id, args)
+	protocol.EncodeExec(s.request, s.db, s.id, args)
 
 	if err := s.client.Call(ctx, s.request, s.response); err != nil {
 		return nil, driverError(err)
 	}
 
-	result, err := client.DecodeResult(s.response)
+	result, err := protocol.DecodeResult(s.response)
 	if err != nil {
 		return nil, driverError(err)
 	}
@@ -476,14 +476,14 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 	// probably due to the response object not being fully reset.
 	s.response.Reset()
 
-	client.EncodeQuery(s.request, s.db, s.id, args)
+	protocol.EncodeQuery(s.request, s.db, s.id, args)
 
 	if err := s.client.Call(ctx, s.request, s.response); err != nil {
 		s.response.Reset()
 		return nil, driverError(err)
 	}
 
-	rows, err := client.DecodeRows(s.response)
+	rows, err := protocol.DecodeRows(s.response)
 	if err != nil {
 		s.response.Reset()
 		return nil, driverError(err)
@@ -499,7 +499,7 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 
 // Result is the result of a query execution.
 type Result struct {
-	result client.Result
+	result protocol.Result
 }
 
 // LastInsertId returns the database's auto-generated ID
@@ -518,10 +518,10 @@ func (r *Result) RowsAffected() (int64, error) {
 // Rows is an iterator over an executed query's results.
 type Rows struct {
 	ctx      context.Context
-	client   *client.Conn
-	request  *client.Message
-	response *client.Message
-	rows     client.Rows
+	client   *protocol.Conn
+	request  *protocol.Message
+	response *protocol.Message
+	rows     protocol.Rows
 	consumed bool
 }
 
@@ -565,12 +565,12 @@ func (r *Rows) Close() error {
 func (r *Rows) Next(dest []driver.Value) error {
 	err := r.rows.Next(dest)
 
-	if err == client.ErrRowsPart {
+	if err == protocol.ErrRowsPart {
 		r.rows.Close()
 		if err := r.client.More(r.ctx, r.response); err != nil {
 			return driverError(err)
 		}
-		rows, err := client.DecodeRows(r.response)
+		rows, err := protocol.DecodeRows(r.response)
 		if err != nil {
 			return driverError(err)
 		}
@@ -627,7 +627,7 @@ func driverError(err error) error {
 	switch err := errors.Cause(err).(type) {
 	case *net.OpError:
 		return driver.ErrBadConn
-	case client.ErrRequest:
+	case protocol.ErrRequest:
 		switch err.Code {
 		case bindings.ErrIoErrNotLeader:
 			fallthrough

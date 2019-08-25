@@ -1,4 +1,4 @@
-package client
+package protocol
 
 // DO NOT EDIT
 //

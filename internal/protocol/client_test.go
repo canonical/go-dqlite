@@ -1,11 +1,11 @@
-package client_test
+package protocol_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/internal/client"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,11 +16,11 @@ import (
 
 // 	request, response := newMessagePair(512, 512)
 
-// 	client.EncodeHeartbeat(&request, uint64(time.Now().Unix()))
+// 	protocol.EncodeHeartbeat(&request, uint64(time.Now().Unix()))
 
 // 	makeClientCall(t, c, &request, &response)
 
-// 	servers, err := client.DecodeServers(&response)
+// 	servers, err := protocol.DecodeServers(&response)
 // 	require.NoError(t, err)
 
 // 	assert.Len(t, servers, 2)
@@ -37,11 +37,11 @@ func TestClient_RequestWithDynamicBuffer(t *testing.T) {
 
 	request, response := newMessagePair(64, 64)
 
-	client.EncodeOpen(&request, "test.db", 0, "test-0")
+	protocol.EncodeOpen(&request, "test.db", 0, "test-0")
 
 	makeClientCall(t, c, &request, &response)
 
-	id, err := client.DecodeDb(&response)
+	id, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
 
 	request.Reset()
@@ -53,7 +53,7 @@ CREATE TABLE bar (n INT);
 CREATE TABLE egg (n INT);
 CREATE TABLE baz (n INT);
 `
-	client.EncodeExecSQL(&request, uint64(id), sql, nil)
+	protocol.EncodeExecSQL(&request, uint64(id), sql, nil)
 
 	makeClientCall(t, c, &request, &response)
 }
@@ -64,21 +64,21 @@ func TestClient_Prepare(t *testing.T) {
 
 	request, response := newMessagePair(64, 64)
 
-	client.EncodeOpen(&request, "test.db", 0, "test-0")
+	protocol.EncodeOpen(&request, "test.db", 0, "test-0")
 
 	makeClientCall(t, c, &request, &response)
 
-	db, err := client.DecodeDb(&response)
+	db, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
 
 	request.Reset()
 	response.Reset()
 
-	client.EncodePrepare(&request, uint64(db), "CREATE TABLE test (n INT)")
+	protocol.EncodePrepare(&request, uint64(db), "CREATE TABLE test (n INT)")
 
 	makeClientCall(t, c, &request, &response)
 
-	_, stmt, params, err := client.DecodeStmt(&response)
+	_, stmt, params, err := protocol.DecodeStmt(&response)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint32(0), stmt)
@@ -146,7 +146,7 @@ func TestClient_Query(t *testing.T) {
 }
 */
 
-func newClient(t *testing.T) (*client.Conn, func()) {
+func newClient(t *testing.T) (*protocol.Conn, func()) {
 	t.Helper()
 
 	address, serverCleanup := newServer(t, 0)
@@ -171,7 +171,7 @@ func newClient(t *testing.T) (*client.Conn, func()) {
 }
 
 // Perform a client call.
-func makeClientCall(t *testing.T, c *client.Conn, request, response *client.Message) {
+func makeClientCall(t *testing.T, c *protocol.Conn, request, response *protocol.Message) {
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 
@@ -180,11 +180,11 @@ func makeClientCall(t *testing.T, c *client.Conn, request, response *client.Mess
 }
 
 // Return a new message pair to be used as request and response.
-func newMessagePair(size1, size2 int) (client.Message, client.Message) {
-	message1 := client.Message{}
+func newMessagePair(size1, size2 int) (protocol.Message, protocol.Message) {
+	message1 := protocol.Message{}
 	message1.Init(size1)
 
-	message2 := client.Message{}
+	message2 := protocol.Message{}
 	message2.Init(size2)
 
 	return message1, message2

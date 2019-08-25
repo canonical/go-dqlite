@@ -1,4 +1,4 @@
-package client
+package protocol
 
 //go:generate ./schema.sh --request init
 

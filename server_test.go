@@ -11,8 +11,8 @@ import (
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
 	dqlite "github.com/canonical/go-dqlite"
-	"github.com/canonical/go-dqlite/internal/client"
 	"github.com/canonical/go-dqlite/internal/logging"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +22,7 @@ func TestServer_Dump(t *testing.T) {
 	defer cleanup()
 
 	store := newStore(t, "1")
-	config := client.Config{
+	config := protocol.Config{
 		Dial:           dialFunc,
 		AttemptTimeout: 100 * time.Millisecond,
 		RetryStrategies: []strategy.Strategy{
@@ -35,7 +35,7 @@ func TestServer_Dump(t *testing.T) {
 		t.Logf(format, a...)
 	}
 
-	connector := client.NewConnector(0, store, config, log)
+	connector := protocol.NewConnector(0, store, config, log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -45,24 +45,24 @@ func TestServer_Dump(t *testing.T) {
 	defer c.Close()
 
 	// Open a database and create a test table.
-	request := client.Message{}
+	request := protocol.Message{}
 	request.Init(4096)
 
-	response := client.Message{}
+	response := protocol.Message{}
 	response.Init(4096)
 
-	client.EncodeOpen(&request, "test.db", 0, "volatile")
+	protocol.EncodeOpen(&request, "test.db", 0, "volatile")
 
 	err = c.Call(ctx, &request, &response)
 	require.NoError(t, err)
 
-	db, err := client.DecodeDb(&response)
+	db, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
 
 	request.Reset()
 	response.Reset()
 
-	client.EncodeExecSQL(&request, uint64(db), "CREATE TABLE foo (n INT)", nil)
+	protocol.EncodeExecSQL(&request, uint64(db), "CREATE TABLE foo (n INT)", nil)
 
 	err = c.Call(ctx, &request, &response)
 	require.NoError(t, err)

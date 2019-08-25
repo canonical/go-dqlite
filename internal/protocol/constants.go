@@ -1,4 +1,4 @@
-package client
+package protocol
 
 // ProtocolVersion is the latest dqlite server protocol version.
 const ProtocolVersion = uint64(0x86104dd760433fe5)

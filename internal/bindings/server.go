@@ -68,7 +68,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/canonical/go-dqlite/internal/client"
+	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
 // Server is a Go wrapper arround dqlite_server.
@@ -107,7 +107,7 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 	return (*Server)(unsafe.Pointer(server)), nil
 }
 
-func (s *Server) SetDialFunc(dial client.DialFunc) error {
+func (s *Server) SetDialFunc(dial protocol.DialFunc) error {
 	server := (*C.dqlite_task)(unsafe.Pointer(s))
 	connectLock.Lock()
 	defer connectLock.Unlock()
@@ -199,7 +199,7 @@ func connectWithDial(handle C.uintptr_t, id C.unsigned, address *C.char, fd *C.i
 }
 
 // Use handles to avoid passing Go pointers to C.
-var connectRegistry = make(map[C.uintptr_t]client.DialFunc)
+var connectRegistry = make(map[C.uintptr_t]protocol.DialFunc)
 var connectIndex C.uintptr_t = 100
 var connectLock = sync.Mutex{}
 

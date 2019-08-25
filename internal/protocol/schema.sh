@@ -2,7 +2,7 @@
 
 request_init() {
     cat > request.go <<EOF
-package client
+package protocol
 
 // DO NOT EDIT
 //
@@ -16,7 +16,7 @@ EOF
 
 response_init() {
     cat > response.go <<EOF
-package client
+package protocol
 
 // DO NOT EDIT
 //

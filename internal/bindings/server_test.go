@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/canonical/go-dqlite/internal/bindings"
-	"github.com/canonical/go-dqlite/internal/client"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +26,7 @@ func TestServer_Leader(t *testing.T) {
 	conn := newClient(t)
 
 	// Make a Leader request
-	buf := makeClientRequest(t, conn, client.RequestLeader)
+	buf := makeClientRequest(t, conn, protocol.RequestLeader)
 	assert.Equal(t, uint8(1), buf[0])
 
 	require.NoError(t, conn.Close())
@@ -106,7 +106,7 @@ func newClient(t *testing.T) net.Conn {
 	require.NoError(t, err)
 
 	// Handshake
-	err = binary.Write(conn, binary.LittleEndian, client.ProtocolVersion)
+	err = binary.Write(conn, binary.LittleEndian, protocol.ProtocolVersion)
 	require.NoError(t, err)
 
 	return conn

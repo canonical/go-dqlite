@@ -7,7 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/canonical/go-dqlite/internal/client"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	_ "github.com/mattn/go-sqlite3" // Go SQLite bindings
 )
 
@@ -18,13 +18,13 @@ import (
 // Once connected, the client periodically updates the addresses in the store
 // by querying the leader server about changes in the cluster (such as servers
 // being added or removed).
-type ServerStore = client.ServerStore
+type ServerStore = protocol.ServerStore
 
 // InmemServerStore keeps the list of target gRPC SQL servers in memory.
-type InmemServerStore = client.InmemServerStore
+type InmemServerStore = protocol.InmemServerStore
 
 // NewInmemServerStore creates ServerStore which stores its data in-memory.
-var NewInmemServerStore = client.NewInmemServerStore
+var NewInmemServerStore = protocol.NewInmemServerStore
 
 // DatabaseServerStore persists a list addresses of dqlite servers in a SQL table.
 type DatabaseServerStore struct {
