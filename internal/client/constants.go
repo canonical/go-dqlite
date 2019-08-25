@@ -1,4 +1,4 @@
-package bindings
+package client
 
 // ProtocolVersion is the latest dqlite server protocol version.
 const ProtocolVersion = uint64(0x86104dd760433fe5)
@@ -17,14 +17,6 @@ const (
 	UnixTime = 9
 	ISO8601  = 10
 	Boolean  = 11
-)
-
-// Logging levels.
-const (
-	LogDebug = 0
-	LogInfo  = 1
-	LogWarn  = 2
-	LogError = 3
 )
 
 // Request types.

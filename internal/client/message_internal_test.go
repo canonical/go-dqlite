@@ -6,7 +6,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -166,13 +165,13 @@ func TestMessage_putNamedValues(t *testing.T) {
 
 	assert.Equal(t, 96, offset)
 	assert.Equal(t, bytes[0], byte(7))
-	assert.Equal(t, bytes[1], byte(bindings.Integer))
-	assert.Equal(t, bytes[2], byte(bindings.Float))
-	assert.Equal(t, bytes[3], byte(bindings.Boolean))
-	assert.Equal(t, bytes[4], byte(bindings.Blob))
-	assert.Equal(t, bytes[5], byte(bindings.Text))
-	assert.Equal(t, bytes[6], byte(bindings.Null))
-	assert.Equal(t, bytes[7], byte(bindings.ISO8601))
+	assert.Equal(t, bytes[1], byte(Integer))
+	assert.Equal(t, bytes[2], byte(Float))
+	assert.Equal(t, bytes[3], byte(Boolean))
+	assert.Equal(t, bytes[4], byte(Blob))
+	assert.Equal(t, bytes[5], byte(Text))
+	assert.Equal(t, bytes[6], byte(Null))
+	assert.Equal(t, bytes[7], byte(ISO8601))
 }
 
 func TestMessage_putHeader(t *testing.T) {
@@ -180,7 +179,7 @@ func TestMessage_putHeader(t *testing.T) {
 	message.Init(64)
 
 	message.putString("hello")
-	message.putHeader(bindings.RequestExec)
+	message.putHeader(RequestExec)
 }
 
 func BenchmarkMessage_putString(b *testing.B) {

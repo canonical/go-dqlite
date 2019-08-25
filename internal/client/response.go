@@ -6,25 +6,23 @@ package client
 
 import (
 	"fmt"
-
-	"github.com/canonical/go-dqlite/internal/bindings"
 )
 
 // DecodeFailure decodes a Failure response.
 func DecodeFailure(response *Message) (code uint64, message string, err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseFailure {
+	if mtype != ResponseFailure {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	code = response.getUint64()
@@ -37,17 +35,17 @@ func DecodeFailure(response *Message) (code uint64, message string, err error) {
 func DecodeWelcome(response *Message) (heartbeatTimeout uint64, err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseWelcome {
+	if mtype != ResponseWelcome {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	heartbeatTimeout = response.getUint64()
@@ -59,17 +57,17 @@ func DecodeWelcome(response *Message) (heartbeatTimeout uint64, err error) {
 func DecodeServer(response *Message) (address string, err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseServer {
+	if mtype != ResponseServer {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	address = response.getString()
@@ -81,17 +79,17 @@ func DecodeServer(response *Message) (address string, err error) {
 func DecodeServers(response *Message) (servers Servers, err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseServers {
+	if mtype != ResponseServers {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	servers = response.getServers()
@@ -103,17 +101,17 @@ func DecodeServers(response *Message) (servers Servers, err error) {
 func DecodeDb(response *Message) (id uint32, err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseDb {
+	if mtype != ResponseDb {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	id = response.getUint32()
@@ -126,17 +124,17 @@ func DecodeDb(response *Message) (id uint32, err error) {
 func DecodeStmt(response *Message) (db uint32, id uint32, params uint64, err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseStmt {
+	if mtype != ResponseStmt {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	db = response.getUint32()
@@ -150,17 +148,17 @@ func DecodeStmt(response *Message) (db uint32, id uint32, params uint64, err err
 func DecodeEmpty(response *Message) (err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseEmpty {
+	if mtype != ResponseEmpty {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	response.getUint64()
@@ -172,17 +170,17 @@ func DecodeEmpty(response *Message) (err error) {
 func DecodeResult(response *Message) (result Result, err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseResult {
+	if mtype != ResponseResult {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	result = response.getResult()
@@ -194,17 +192,17 @@ func DecodeResult(response *Message) (result Result, err error) {
 func DecodeRows(response *Message) (rows Rows, err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseRows {
+	if mtype != ResponseRows {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	rows = response.getRows()
@@ -216,17 +214,17 @@ func DecodeRows(response *Message) (rows Rows, err error) {
 func DecodeFiles(response *Message) (files Files, err error) {
 	mtype, _ := response.getHeader()
 
-	if mtype == bindings.ResponseFailure {
+	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != bindings.ResponseFiles {
+	if mtype != ResponseFiles {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	files = response.getFiles()

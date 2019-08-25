@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/pkg/errors"
 )
@@ -123,7 +122,7 @@ func (c *Client) Interrupt(ctx context.Context, request *Message, response *Mess
 		mtype, _ := response.getHeader()
 		response.Reset()
 
-		if mtype == bindings.ResponseEmpty {
+		if mtype == ResponseEmpty {
 			break
 		}
 	}
@@ -133,10 +132,7 @@ func (c *Client) Interrupt(ctx context.Context, request *Message, response *Mess
 
 // Close the client connection.
 func (c *Client) Close() error {
-	c.log(bindings.LogInfo, "closing client")
-
 	close(c.closeCh)
-
 	return c.conn.Close()
 }
 

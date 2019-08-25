@@ -37,7 +37,7 @@ func NewConnector(id uint64, store ServerStore, config Config, log logging.Func)
 	// Latest protocol version.
 	binary.LittleEndian.PutUint64(
 		connector.protocol,
-		bindings.ProtocolVersion,
+		ProtocolVersion,
 	)
 
 	return connector
@@ -156,7 +156,7 @@ func Connect(ctx context.Context, dial bindings.DialFunc, address string, store 
 
 	// Latest protocol version.
 	protocol := make([]byte, 8)
-	binary.LittleEndian.PutUint64(protocol, bindings.ProtocolVersion)
+	binary.LittleEndian.PutUint64(protocol, ProtocolVersion)
 
 	// Perform the protocol handshake.
 	n, err := conn.Write(protocol)
