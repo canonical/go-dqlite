@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,30 @@ import (
 func TestServer_Create(t *testing.T) {
 	_, cleanup := newServer(t)
 	defer cleanup()
+}
+
+func TestServer_Start(t *testing.T) {
+	dir, cleanup := newDir(t)
+	defer cleanup()
+
+	server, err := bindings.NewServer(1, "1", dir)
+	require.NoError(t, err)
+	defer server.Close()
+
+	err = server.SetBindAddress("@")
+	require.NoError(t, err)
+
+	err = server.Start()
+	require.NoError(t, err)
+
+	conn, err := net.Dial("unix", server.GetBindAddress())
+	require.NoError(t, err)
+	conn.Close()
+
+	assert.True(t, strings.HasPrefix(server.GetBindAddress(), "@"))
+
+	err = server.Stop()
+	require.NoError(t, err)
 }
 
 func TestServer_Leader(t *testing.T) {

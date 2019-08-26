@@ -129,6 +129,11 @@ func (s *Server) SetBindAddress(address string) error {
 	return nil
 }
 
+func (s *Server) GetBindAddress() string {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	return C.GoString(C.dqlite_node_get_bind_address(server))
+}
+
 func (s *Server) Start() error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	if rc := C.dqlite_node_start(server); rc != 0 {
