@@ -31,12 +31,12 @@ static int dupCloexec(int oldfd) {
 }
 
 // C to Go trampoline for custom connect function.
-int connectWithDial(uintptr_t handle, unsigned id, char *address, int *fd);
+int connectWithDial(uintptr_t handle, char *address, int *fd);
 
 // Wrapper to call the Go trampoline.
-static int connectTrampoline(void *data, unsigned id, const char *address, int *fd) {
+static int connectTrampoline(void *data, const char *address, int *fd) {
         uintptr_t handle = (uintptr_t)(data);
-        return connectWithDial(handle, id, (char*)address, fd);
+        return connectWithDial(handle, (char*)address, fd);
 }
 
 // Configure a custom connect function.
@@ -184,7 +184,7 @@ type fileConn interface {
 }
 
 //export connectWithDial
-func connectWithDial(handle C.uintptr_t, id C.unsigned, address *C.char, fd *C.int) C.int {
+func connectWithDial(handle C.uintptr_t, address *C.char, fd *C.int) C.int {
 	connectLock.Lock()
 	defer connectLock.Unlock()
 	dial := connectRegistry[handle]
