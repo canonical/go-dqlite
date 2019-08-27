@@ -169,7 +169,7 @@ func Connect(ctx context.Context, dial DialFunc, address string, version uint64)
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
-	return NewProtocol(conn), nil
+	return NewProtocol(version, conn), nil
 }
 
 // Connect to the given dqlite server and check if it's the leader.

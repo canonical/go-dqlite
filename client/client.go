@@ -63,7 +63,7 @@ func New(ctx context.Context, address string, options ...Option) (*Client, error
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
-	client := &Client{protocol: protocol.NewProtocol(conn)}
+	client := &Client{protocol: protocol.NewProtocol(protocol.VersionLegacy, conn)}
 
 	return client, nil
 }

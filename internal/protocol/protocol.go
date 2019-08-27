@@ -13,16 +13,17 @@ import (
 
 // Protocol sends and receive the dqlite message on the wire.
 type Protocol struct {
+	version        uint64        // Protocol version
 	conn           net.Conn      // Underlying network connection.
 	contextTimeout time.Duration // Default context timeout.
 	closeCh        chan struct{} // Stops the heartbeat when the connection gets closed
 	mu             sync.Mutex    // Serialize requests
 	netErr         error         // A network error occurred
-	version        uint64        // Protocol version
 }
 
-func NewProtocol(conn net.Conn) *Protocol {
+func NewProtocol(version uint64, conn net.Conn) *Protocol {
 	protocol := &Protocol{
+		version:        version,
 		conn:           conn,
 		closeCh:        make(chan struct{}),
 		contextTimeout: 5 * time.Second,
