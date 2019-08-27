@@ -109,6 +109,11 @@ func (c *Client) Dump(ctx context.Context, dbname string) ([]File, error) {
 	return dump, nil
 }
 
+// Close the client.
+func (c *Client) Close() error {
+	return c.protocol.Close()
+}
+
 // Create a client options object with sane defaults.
 func defaultOptions() *options {
 	return &options{

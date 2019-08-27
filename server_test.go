@@ -7,81 +7,13 @@ import (
 	"net"
 	"os"
 	"testing"
-	"time"
 
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	dqlite "github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/internal/logging"
-	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestNode_Dump(t *testing.T) {
-	server, cleanup := newNode(t)
-	defer cleanup()
-
-	store := newStore(t, "1")
-	config := protocol.Config{
-		Dial:           dialFunc,
-		AttemptTimeout: 100 * time.Millisecond,
-		RetryStrategies: []strategy.Strategy{
-			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
-		},
-	}
-
-	log := func(l logging.Level, format string, a ...interface{}) {
-		format = fmt.Sprintf("%s: %s", l.String(), format)
-		t.Logf(format, a...)
-	}
-
-	connector := protocol.NewConnector(0, store, config, log)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	c, err := connector.Connect(ctx)
-	require.NoError(t, err)
-	defer c.Close()
-
-	// Open a database and create a test table.
-	request := protocol.Message{}
-	request.Init(4096)
-
-	response := protocol.Message{}
-	response.Init(4096)
-
-	protocol.EncodeOpen(&request, "test.db", 0, "volatile")
-
-	err = c.Call(ctx, &request, &response)
-	require.NoError(t, err)
-
-	db, err := protocol.DecodeDb(&response)
-	require.NoError(t, err)
-
-	request.Reset()
-	response.Reset()
-
-	protocol.EncodeExecSQL(&request, uint64(db), "CREATE TABLE foo (n INT)", nil)
-
-	err = c.Call(ctx, &request, &response)
-	require.NoError(t, err)
-
-	request.Reset()
-	response.Reset()
-
-	files, err := server.Dump(ctx, "test.db")
-	require.NoError(t, err)
-
-	require.Len(t, files, 2)
-	assert.Equal(t, "test.db", files[0].Name)
-	assert.Equal(t, 4096, len(files[0].Data))
-
-	assert.Equal(t, "test.db-wal", files[1].Name)
-	assert.Equal(t, 8272, len(files[1].Data))
-}
 
 func TestNode_Leader(t *testing.T) {
 	server, cleanup := newNode(t)

@@ -83,6 +83,11 @@ func NewNode(info client.NodeInfo, dir string, options ...NodeOption) (*Node, er
 	return s, nil
 }
 
+// BindAddress returns the network address the node is listening to.
+func (s *Node) BindAddress() string {
+	return s.server.GetBindAddress()
+}
+
 // Cluster returns information about all servers in the cluster.
 func (s *Node) Cluster(ctx context.Context) ([]client.NodeInfo, error) {
 	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
@@ -219,48 +224,6 @@ type serverOptions struct {
 	Log         client.LogFunc
 	DialFunc    client.DialFunc
 	BindAddress string
-}
-
-type File struct {
-	Name string
-	Data []byte
-}
-
-func (s *Node) Dump(ctx context.Context, filename string) ([]File, error) {
-	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to dqlite task")
-	}
-	defer c.Close()
-
-	request := protocol.Message{}
-	request.Init(16)
-	response := protocol.Message{}
-	response.Init(512)
-
-	protocol.EncodeDump(&request, filename)
-
-	if err := c.Call(ctx, &request, &response); err != nil {
-		return nil, errors.Wrap(err, "failed to send dump request")
-	}
-
-	files, err := protocol.DecodeFiles(&response)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse files response")
-	}
-	defer files.Close()
-
-	dump := make([]File, 0)
-
-	for {
-		name, data := files.Next()
-		if name == "" {
-			break
-		}
-		dump = append(dump, File{Name: name, Data: data})
-	}
-
-	return dump, nil
 }
 
 // Close the server, releasing all resources it created.
