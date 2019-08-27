@@ -19,33 +19,26 @@ type Node struct {
 	bindAddress string
 }
 
-// NodeOption can be used to tweak node parameters.
-type NodeOption func(*serverOptions)
+// Option can be used to tweak node parameters.
+type Option func(*options)
 
-// WithNodeLogFunc sets a custom log function for the server.
-func WithNodeLogFunc(log client.LogFunc) NodeOption {
-	return func(options *serverOptions) {
-		options.Log = log
-	}
-}
-
-// WithNodeDialFunc sets a custom dial function for the server.
-func WithNodeDialFunc(dial client.DialFunc) NodeOption {
-	return func(options *serverOptions) {
+// WithDialFunc sets a custom dial function for the server.
+func WithDialFunc(dial client.DialFunc) Option {
+	return func(options *options) {
 		options.DialFunc = dial
 	}
 }
 
 // WithBindAddress sets a custom bind address for the server.
-func WithNodeBindAddress(address string) NodeOption {
-	return func(options *serverOptions) {
+func WithBindAddress(address string) Option {
+	return func(options *options) {
 		options.BindAddress = address
 	}
 }
 
-// NewNode creates a new Node instance.
-func NewNode(info client.NodeInfo, dir string, options ...NodeOption) (*Node, error) {
-	o := defaultNodeOptions()
+// New creates a new Node instance.
+func New(info client.NodeInfo, dir string, options ...Option) (*Node, error) {
+	o := defaultOptions()
 
 	for _, option := range options {
 		option(o)
@@ -68,7 +61,6 @@ func NewNode(info client.NodeInfo, dir string, options ...NodeOption) (*Node, er
 		return nil, err
 	}
 	s := &Node{
-		log:         o.Log,
 		server:      server,
 		acceptCh:    make(chan error, 1),
 		id:          info.ID,
@@ -90,7 +82,7 @@ func (s *Node) Start() error {
 }
 
 // Hold configuration options for a dqlite server.
-type serverOptions struct {
+type options struct {
 	Log         client.LogFunc
 	DialFunc    client.DialFunc
 	BindAddress string
@@ -108,10 +100,9 @@ func (s *Node) Close() error {
 	return nil
 }
 
-// Create a serverOptions object with sane defaults.
-func defaultNodeOptions() *serverOptions {
-	return &serverOptions{
-		Log:      client.DefaultLogFunc,
+// Create a options object with sane defaults.
+func defaultOptions() *options {
+	return &options{
 		DialFunc: client.DefaultDialFunc,
 	}
 }

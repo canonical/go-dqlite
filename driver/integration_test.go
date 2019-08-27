@@ -178,9 +178,8 @@ func newNodes(t *testing.T, infos []client.NodeInfo) ([]*dqlite.Node, func()) {
 
 	for i, info := range infos {
 		dir, dirCleanup := newDir(t)
-		server, err := dqlite.NewNode(
-			info, dir, dqlite.WithNodeDialFunc(dialFunc),
-			dqlite.WithNodeLogFunc(logging.Test(t)))
+		server, err := dqlite.New(
+			info, dir, dqlite.WithDialFunc(dialFunc))
 		require.NoError(t, err)
 
 		cleanups = append(cleanups, func() {

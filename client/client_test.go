@@ -105,7 +105,7 @@ func newNode(t *testing.T) (*dqlite.Node, func()) {
 	dir, dirCleanup := newDir(t)
 
 	info := client.NodeInfo{ID: uint64(1), Address: "1"}
-	node, err := dqlite.NewNode(info, dir, dqlite.WithNodeBindAddress("@"))
+	node, err := dqlite.New(info, dir, dqlite.WithBindAddress("@"))
 	require.NoError(t, err)
 
 	err = node.Start()

@@ -8,7 +8,6 @@ import (
 
 	dqlite "github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
-	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,8 +22,7 @@ func TestMembership(t *testing.T) {
 		info := client.NodeInfo{ID: id, Address: address}
 		dir, cleanup := newDir(t)
 		defer cleanup()
-		node, err := dqlite.NewNode(
-			info, dir, dqlite.WithNodeBindAddress(address), dqlite.WithNodeLogFunc(logging.Test(t)))
+		node, err := dqlite.New(info, dir, dqlite.WithBindAddress(address))
 		require.NoError(t, err)
 		nodes[i] = node
 		infos[i].ID = id
