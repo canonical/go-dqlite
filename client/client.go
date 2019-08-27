@@ -17,14 +17,9 @@ type Client struct {
 	conn *protocol.Conn
 }
 
-// File contains details about a database file.
-type File struct {
-	Name string
-	Data []byte
-}
-
-// Connect to a dqlite instance.
-func Connect(ctx context.Context, dial DialFunc, address string) (*Client, error) {
+// New creates a new client connected to the dqlite node with the given
+// address.
+func New(ctx context.Context, dial DialFunc, address string) (*Client, error) {
 	// Establish the connection.
 	conn, err := dial(ctx, address)
 	if err != nil {
@@ -51,13 +46,23 @@ func Connect(ctx context.Context, dial DialFunc, address string) (*Client, error
 	return client, nil
 }
 
-func (c *Client) Dump(ctx context.Context, filename string) ([]File, error) {
+// File holds the content of a single database file.
+type File struct {
+	Name string
+	Data []byte
+}
+
+// Dump the content of the database with the given name. Two files will be
+// returned, the first is the main database file (which has the same name as
+// the database), the second is the WAL file (which has the same name as the
+// database plus the suffix "-wal").
+func (c *Client) Dump(ctx context.Context, dbname string) ([]File, error) {
 	request := protocol.Message{}
 	request.Init(16)
 	response := protocol.Message{}
 	response.Init(512)
 
-	protocol.EncodeDump(&request, filename)
+	protocol.EncodeDump(&request, dbname)
 
 	if err := c.conn.Call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send dump request")
