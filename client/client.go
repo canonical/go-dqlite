@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	"net"
+	"strings"
 
 	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/pkg/errors"
@@ -17,11 +19,31 @@ type Client struct {
 	protocol *protocol.Protocol
 }
 
+// Option that can be used to tweak client parameters.
+type Option func(*options)
+
+type options struct {
+	DialFunc DialFunc
+}
+
+// WithServerDialFunc sets a custom dial function for creating the client
+// network connection.
+func WithDialFunc(dial DialFunc) Option {
+	return func(options *options) {
+		options.DialFunc = dial
+	}
+}
+
 // New creates a new client connected to the dqlite node with the given
 // address.
-func New(ctx context.Context, dial DialFunc, address string) (*Client, error) {
+func New(ctx context.Context, address string, options ...Option) (*Client, error) {
+	o := defaultOptions()
+
+	for _, option := range options {
+		option(o)
+	}
 	// Establish the connection.
-	conn, err := dial(ctx, address)
+	conn, err := o.DialFunc(ctx, address)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to establish network connection")
 	}
@@ -85,4 +107,18 @@ func (c *Client) Dump(ctx context.Context, dbname string) ([]File, error) {
 	}
 
 	return dump, nil
+}
+
+// Create a client options object with sane defaults.
+func defaultOptions() *options {
+	return &options{
+		DialFunc: defaultDialFunc,
+	}
+}
+
+func defaultDialFunc(ctx context.Context, address string) (net.Conn, error) {
+	if strings.HasPrefix(address, "@") {
+		return protocol.UnixDial(ctx, address)
+	}
+	return protocol.TCPDial(ctx, address)
 }
