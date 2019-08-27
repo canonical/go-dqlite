@@ -44,14 +44,15 @@ const (
 
 // Response types.
 const (
-	ResponseFailure = 0
-	ResponseServer  = 1
-	ResponseWelcome = 2
-	ResponseServers = 3
-	ResponseDb      = 4
-	ResponseStmt    = 5
-	ResponseResult  = 6
-	ResponseRows    = 7
-	ResponseEmpty   = 8
-	ResponseFiles   = 9
+	ResponseFailure      = 0
+	ResponseServer       = 1
+	ResponseServerLegacy = 1
+	ResponseWelcome      = 2
+	ResponseServers      = 3
+	ResponseDb           = 4
+	ResponseStmt         = 5
+	ResponseResult       = 6
+	ResponseRows         = 7
+	ResponseEmpty        = 8
+	ResponseFiles        = 9
 )

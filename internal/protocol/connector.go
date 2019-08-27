@@ -207,7 +207,7 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 		return nil, "", errors.Wrap(err, "failed to send Leader request")
 	}
 
-	leader, err := DecodeServer(&response)
+	_, leader, err := DecodeServerCompat(protocol, &response)
 	if err != nil {
 		protocol.Close()
 		return nil, "", errors.Wrap(err, "failed to parse Server response")

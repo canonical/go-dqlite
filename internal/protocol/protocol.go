@@ -325,3 +325,16 @@ func (p *Protocol) heartbeat() {
 	}
 }
 */
+
+// DecodeServerCompat handles also pre-1.0 legacy server messages.
+func DecodeServerCompat(protocol *Protocol, response *Message) (uint64, string, error) {
+	if protocol.version == VersionLegacy {
+		address, err := DecodeServerLegacy(response)
+		if err != nil {
+			return 0, "", err
+		}
+		return 0, address, nil
+
+	}
+	return DecodeServer(response)
+}
