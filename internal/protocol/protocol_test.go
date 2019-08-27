@@ -1,47 +1,47 @@
-package client_test
+package protocol_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/internal/client"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// func TestClient_Heartbeat(t *testing.T) {
-// 	c, cleanup := newClient(t)
+// func TestProtocol_Heartbeat(t *testing.T) {
+// 	c, cleanup := newProtocol(t)
 // 	defer cleanup()
 
 // 	request, response := newMessagePair(512, 512)
 
-// 	client.EncodeHeartbeat(&request, uint64(time.Now().Unix()))
+// 	protocol.EncodeHeartbeat(&request, uint64(time.Now().Unix()))
 
-// 	makeClientCall(t, c, &request, &response)
+// 	makeCall(t, c, &request, &response)
 
-// 	servers, err := client.DecodeServers(&response)
+// 	servers, err := protocol.DecodeNodes(&response)
 // 	require.NoError(t, err)
 
 // 	assert.Len(t, servers, 2)
-// 	assert.Equal(t, client.Servers{
+// 	assert.Equal(t, client.Nodes{
 // 		{ID: uint64(1), Address: "1.2.3.4:666"},
 // 		{ID: uint64(2), Address: "5.6.7.8:666"}},
 // 		servers)
 // }
 
 // Test sending a request that needs to be written into the dynamic buffer.
-func TestClient_RequestWithDynamicBuffer(t *testing.T) {
-	c, cleanup := newClient(t)
+func TestProtocol_RequestWithDynamicBuffer(t *testing.T) {
+	p, cleanup := newProtocol(t)
 	defer cleanup()
 
 	request, response := newMessagePair(64, 64)
 
-	client.EncodeOpen(&request, "test.db", 0, "test-0")
+	protocol.EncodeOpen(&request, "test.db", 0, "test-0")
 
-	makeClientCall(t, c, &request, &response)
+	makeCall(t, p, &request, &response)
 
-	id, err := client.DecodeDb(&response)
+	id, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
 
 	request.Reset()
@@ -53,32 +53,32 @@ CREATE TABLE bar (n INT);
 CREATE TABLE egg (n INT);
 CREATE TABLE baz (n INT);
 `
-	client.EncodeExecSQL(&request, uint64(id), sql, nil)
+	protocol.EncodeExecSQL(&request, uint64(id), sql, nil)
 
-	makeClientCall(t, c, &request, &response)
+	makeCall(t, p, &request, &response)
 }
 
-func TestClient_Prepare(t *testing.T) {
-	c, cleanup := newClient(t)
+func TestProtocol_Prepare(t *testing.T) {
+	c, cleanup := newProtocol(t)
 	defer cleanup()
 
 	request, response := newMessagePair(64, 64)
 
-	client.EncodeOpen(&request, "test.db", 0, "test-0")
+	protocol.EncodeOpen(&request, "test.db", 0, "test-0")
 
-	makeClientCall(t, c, &request, &response)
+	makeCall(t, c, &request, &response)
 
-	db, err := client.DecodeDb(&response)
+	db, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
 
 	request.Reset()
 	response.Reset()
 
-	client.EncodePrepare(&request, uint64(db), "CREATE TABLE test (n INT)")
+	protocol.EncodePrepare(&request, uint64(db), "CREATE TABLE test (n INT)")
 
-	makeClientCall(t, c, &request, &response)
+	makeCall(t, c, &request, &response)
 
-	_, stmt, params, err := client.DecodeStmt(&response)
+	_, stmt, params, err := protocol.DecodeStmt(&response)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint32(0), stmt)
@@ -86,8 +86,8 @@ func TestClient_Prepare(t *testing.T) {
 }
 
 /*
-func TestClient_Exec(t *testing.T) {
-	client, cleanup := newClient(t)
+func TestProtocol_Exec(t *testing.T) {
+	client, cleanup := newProtocol(t)
 	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -103,8 +103,8 @@ func TestClient_Exec(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestClient_Query(t *testing.T) {
-	client, cleanup := newClient(t)
+func TestProtocol_Query(t *testing.T) {
+	client, cleanup := newProtocol(t)
 	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -146,10 +146,10 @@ func TestClient_Query(t *testing.T) {
 }
 */
 
-func newClient(t *testing.T) (*client.Client, func()) {
+func newProtocol(t *testing.T) (*protocol.Protocol, func()) {
 	t.Helper()
 
-	address, serverCleanup := newServer(t, 0)
+	address, serverCleanup := newNode(t, 0)
 
 	store := newStore(t, []string{address})
 
@@ -171,20 +171,20 @@ func newClient(t *testing.T) (*client.Client, func()) {
 }
 
 // Perform a client call.
-func makeClientCall(t *testing.T, c *client.Client, request, response *client.Message) {
+func makeCall(t *testing.T, p *protocol.Protocol, request, response *protocol.Message) {
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 
-	err := c.Call(ctx, request, response)
+	err := p.Call(ctx, request, response)
 	require.NoError(t, err)
 }
 
 // Return a new message pair to be used as request and response.
-func newMessagePair(size1, size2 int) (client.Message, client.Message) {
-	message1 := client.Message{}
+func newMessagePair(size1, size2 int) (protocol.Message, protocol.Message) {
+	message1 := protocol.Message{}
 	message1.Init(size1)
 
-	message2 := client.Message{}
+	message2 := protocol.Message{}
 	message2.Init(size2)
 
 	return message1, message2

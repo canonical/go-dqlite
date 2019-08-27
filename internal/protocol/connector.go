@@ -1,44 +1,38 @@
-package client
+package protocol
 
 import (
 	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"time"
+	"net"
 
 	"github.com/Rican7/retry"
-	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/pkg/errors"
 )
 
+// DialFunc is a function that can be used to establish a network connection.
+type DialFunc func(context.Context, string) (net.Conn, error)
+
 // Connector is in charge of creating a dqlite SQL client connected to the
 // current leader of a cluster.
 type Connector struct {
-	id       uint64       // Client ID to use when registering against the server.
-	store    ServerStore  // Used to get and update current cluster servers.
-	config   Config       // Connection parameters.
-	log      logging.Func // Logging function.
-	protocol []byte       // Protocol version
+	id     uint64       // Conn ID to use when registering against the server.
+	store  NodeStore    // Used to get and update current cluster servers.
+	config Config       // Connection parameters.
+	log    logging.Func // Logging function.
 }
 
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
-func NewConnector(id uint64, store ServerStore, config Config, log logging.Func) *Connector {
+func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *Connector {
 	connector := &Connector{
-		id:       id,
-		store:    store,
-		config:   config,
-		log:      log,
-		protocol: make([]byte, 8),
+		id:     id,
+		store:  store,
+		config: config,
+		log:    log,
 	}
-
-	// Latest protocol version.
-	binary.LittleEndian.PutUint64(
-		connector.protocol,
-		bindings.ProtocolVersion,
-	)
 
 	return connector
 }
@@ -46,8 +40,8 @@ func NewConnector(id uint64, store ServerStore, config Config, log logging.Func)
 // Connect finds the leader server and returns a connection to it.
 //
 // If the connector is stopped before a leader is found, nil is returned.
-func (c *Connector) Connect(ctx context.Context) (*Client, error) {
-	var client *Client
+func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
+	var protocol *Protocol
 
 	// The retry strategy should be configured to retry indefinitely, until
 	// the given context is done.
@@ -65,7 +59,7 @@ func (c *Connector) Connect(ctx context.Context) (*Client, error) {
 		}
 
 		var err error
-		client, err = c.connectAttemptAll(ctx, log)
+		protocol, err = c.connectAttemptAll(ctx, log)
 		if err != nil {
 			log(logging.Debug, "connection failed err=%v", err)
 			return err
@@ -84,12 +78,12 @@ func (c *Connector) Connect(ctx context.Context) (*Client, error) {
 		return nil, ErrNoAvailableLeader
 	}
 
-	return client, nil
+	return protocol, nil
 }
 
 // Make a single attempt to establish a connection to the leader server trying
 // all addresses available in the store.
-func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Client, error) {
+func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
 	servers, err := c.store.Get(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get cluster servers")
@@ -105,16 +99,21 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 		ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
 		defer cancel()
 
-		conn, leader, err := c.connectAttemptOne(ctx, server.Address)
+		version := VersionOne
+		protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
+		if err == errBadProtocol {
+			version = VersionLegacy
+			protocol, leader, err = c.connectAttemptOne(ctx, server.Address, version)
+		}
 		if err != nil {
 			// This server is unavailable, try with the next target.
 			log(logging.Debug, "server connection failed err=%v", err)
 			continue
 		}
-		if conn != nil {
+		if protocol != nil {
 			// We found the leader
 			log(logging.Info, "connected")
-			return conn, nil
+			return protocol, nil
 		}
 		if leader == "" {
 			// This server does not know who the current leader is,
@@ -126,28 +125,28 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 		// server is the leader, let's close the connection to this
 		// server and try with the suggested one.
 		//logger = logger.With(zap.String("leader", leader))
-		conn, leader, err = c.connectAttemptOne(ctx, leader)
+		protocol, leader, err = c.connectAttemptOne(ctx, leader, version)
 		if err != nil {
 			// The leader reported by the previous server is
 			// unavailable, try with the next target.
 			//logger.Info("leader server connection failed", zap.String("err", err.Error()))
 			continue
 		}
-		if conn == nil {
+		if protocol == nil {
 			// The leader reported by the target server does not consider itself
 			// the leader, try with the next target.
 			//logger.Info("reported leader server is not the leader")
 			continue
 		}
 		log(logging.Info, "connected")
-		return conn, nil
+		return protocol, nil
 	}
 
 	return nil, ErrNoAvailableLeader
 }
 
 // Connect establishes a connection with a dqlite node.
-func Connect(ctx context.Context, dial bindings.DialFunc, address string, store ServerStore, log logging.Func) (*Client, error) {
+func Connect(ctx context.Context, dial DialFunc, address string, version uint64) (*Protocol, error) {
 	// Establish the connection.
 	conn, err := dial(ctx, address)
 	if err != nil {
@@ -156,7 +155,7 @@ func Connect(ctx context.Context, dial bindings.DialFunc, address string, store 
 
 	// Latest protocol version.
 	protocol := make([]byte, 8)
-	binary.LittleEndian.PutUint64(protocol, bindings.ProtocolVersion)
+	binary.LittleEndian.PutUint64(protocol, version)
 
 	// Perform the protocol handshake.
 	n, err := conn.Write(protocol)
@@ -169,7 +168,7 @@ func Connect(ctx context.Context, dial bindings.DialFunc, address string, store 
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
-	return newClient(conn, address, store, log), nil
+	return NewProtocol(version, conn), nil
 }
 
 // Connect to the given dqlite server and check if it's the leader.
@@ -181,8 +180,8 @@ func Connect(ctx context.Context, dial bindings.DialFunc, address string, store 
 // - Target not leader and leader known:     -> nil, leader, nil
 // - Target is the leader:                   -> server, "", nil
 //
-func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Client, string, error) {
-	client, err := Connect(ctx, c.config.Dial, address, c.store, c.log)
+func (c *Connector) connectAttemptOne(ctx context.Context, address string, version uint64) (*Protocol, string, error) {
+	protocol, err := Connect(ctx, c.config.Dial, address, version)
 	if err != nil {
 		return nil, "", err
 	}
@@ -195,21 +194,28 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Cli
 
 	EncodeLeader(&request)
 
-	if err := client.Call(ctx, &request, &response); err != nil {
-		client.Close()
+	if err := protocol.Call(ctx, &request, &response); err != nil {
+		protocol.Close()
+		cause := errors.Cause(err)
+		// Best-effort detection of a pre-1.0 dqlite node: when sent
+		// version 1 it should close the connection immediately.
+		if _, ok := cause.(*net.OpError); ok || cause == io.EOF {
+			return nil, "", errBadProtocol
+		}
+
 		return nil, "", errors.Wrap(err, "failed to send Leader request")
 	}
 
-	leader, err := DecodeServer(&response)
+	_, leader, err := DecodeNodeCompat(protocol, &response)
 	if err != nil {
-		client.Close()
-		return nil, "", errors.Wrap(err, "failed to parse Server response")
+		protocol.Close()
+		return nil, "", errors.Wrap(err, "failed to parse Node response")
 	}
 
 	switch leader {
 	case "":
 		// Currently this server does not know about any leader.
-		client.Close()
+		protocol.Close()
 		return nil, "", nil
 	case address:
 		// This server is the leader, register ourselves and return.
@@ -218,26 +224,27 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Cli
 
 		EncodeClient(&request, c.id)
 
-		if err := client.Call(ctx, &request, &response); err != nil {
-			client.Close()
-			return nil, "", errors.Wrap(err, "failed to send Client request")
+		if err := protocol.Call(ctx, &request, &response); err != nil {
+			protocol.Close()
+			return nil, "", errors.Wrap(err, "failed to send Conn request")
 		}
 
-		heartbeatTimeout, err := DecodeWelcome(&response)
+		_, err := DecodeWelcome(&response)
 		if err != nil {
-			client.Close()
+			protocol.Close()
 			return nil, "", errors.Wrap(err, "failed to parse Welcome response")
 		}
 
-		client.heartbeatTimeout = time.Duration(heartbeatTimeout) * time.Millisecond
-
 		// TODO: enable heartbeat
-		//go client.heartbeat()
+		// protocol.heartbeatTimeout = time.Duration(heartbeatTimeout) * time.Millisecond
+		//go protocol.heartbeat()
 
-		return client, "", nil
+		return protocol, "", nil
 	default:
 		// This server claims to know who the current leader is.
-		client.Close()
+		protocol.Close()
 		return nil, leader, nil
 	}
 }
+
+var errBadProtocol = fmt.Errorf("bad protocol")

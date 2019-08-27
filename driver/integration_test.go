@@ -1,4 +1,4 @@
-package dqlite_test
+package driver_test
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"time"
 
 	dqlite "github.com/canonical/go-dqlite"
+	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/go-dqlite/driver"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,59 +134,28 @@ func TestIntegration_LargeQuery(t *testing.T) {
 	require.NoError(t, db.Close())
 }
 
-func TestMembership(t *testing.T) {
-	n := 3
-	servers := make([]*dqlite.Server, n)
-	var leaderInfo dqlite.ServerInfo
-
-	for i := range servers {
-		id := uint64(i + 1)
-		info := dqlite.ServerInfo{ID: id, Address: fmt.Sprintf("%d", id)}
-		dir, cleanup := newDir(t)
-		defer cleanup()
-		server, err := dqlite.NewServer(
-			info, dir, dqlite.WithServerDialFunc(dialFunc), dqlite.WithServerLogFunc(logging.Test(t)))
-		require.NoError(t, err)
-		servers[i] = server
-		if i == 0 {
-			leaderInfo = info
-		}
-		err = server.Start()
-		require.NoError(t, err)
-		defer server.Close()
-	}
-
-	store := dqlite.NewInmemServerStore()
-	store.Set(context.Background(), []dqlite.ServerInfo{leaderInfo})
-	server := servers[1]
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	err := server.Join(ctx, store, dialFunc)
-	require.NoError(t, err)
-}
-
 func dialFunc(ctx context.Context, address string) (net.Conn, error) {
 	return net.Dial("unix", fmt.Sprintf("@dqlite-%s", address))
 }
 
-func newDB(t *testing.T) (*sql.DB, []*dqlite.Server, func()) {
+func newDB(t *testing.T) (*sql.DB, []*dqlite.Node, func()) {
 	n := 3
 
-	infos := make([]dqlite.ServerInfo, n)
+	infos := make([]client.NodeInfo, n)
 	for i := range infos {
 		infos[i].ID = uint64(i + 1)
 		infos[i].Address = fmt.Sprintf("%d", infos[i].ID)
 	}
 
-	servers, cleanup := newServers(t, infos)
+	servers, cleanup := newNodes(t, infos)
 
-	store, err := dqlite.DefaultServerStore(":memory:")
+	store, err := client.DefaultNodeStore(":memory:")
 	require.NoError(t, err)
 
 	require.NoError(t, store.Set(context.Background(), infos))
 
 	log := logging.Test(t)
-	driver, err := dqlite.NewDriver(store, dqlite.WithDialFunc(dialFunc), dqlite.WithLogFunc(log))
+	driver, err := driver.New(store, driver.WithDialFunc(dialFunc), driver.WithLogFunc(log))
 	require.NoError(t, err)
 
 	driverName := fmt.Sprintf("dqlite-integration-test-%d", driversCount)
@@ -198,18 +169,17 @@ func newDB(t *testing.T) (*sql.DB, []*dqlite.Server, func()) {
 	return db, servers, cleanup
 }
 
-func newServers(t *testing.T, infos []dqlite.ServerInfo) ([]*dqlite.Server, func()) {
+func newNodes(t *testing.T, infos []client.NodeInfo) ([]*dqlite.Node, func()) {
 	t.Helper()
 
 	n := len(infos)
-	servers := make([]*dqlite.Server, n)
+	servers := make([]*dqlite.Node, n)
 	cleanups := make([]func(), 0)
 
 	for i, info := range infos {
 		dir, dirCleanup := newDir(t)
-		server, err := dqlite.NewServer(
-			info, dir, dqlite.WithServerDialFunc(dialFunc),
-			dqlite.WithServerLogFunc(logging.Test(t)))
+		server, err := dqlite.New(
+			info, dir, dqlite.WithDialFunc(dialFunc))
 		require.NoError(t, err)
 
 		cleanups = append(cleanups, func() {

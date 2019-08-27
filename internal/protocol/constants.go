@@ -1,7 +1,10 @@
-package bindings
+package protocol
 
-// ProtocolVersion is the latest dqlite server protocol version.
-const ProtocolVersion = uint64(0x86104dd760433fe5)
+// VersionOne is version 1 of the server protocol.
+const VersionOne = uint64(1)
+
+// VersionLegacy is the pre 1.0 dqlite server protocol version.
+const VersionLegacy = uint64(0x86104dd760433fe5)
 
 // SQLite datatype codes
 const (
@@ -17,14 +20,6 @@ const (
 	UnixTime = 9
 	ISO8601  = 10
 	Boolean  = 11
-)
-
-// Logging levels.
-const (
-	LogDebug = 0
-	LogInfo  = 1
-	LogWarn  = 2
-	LogError = 3
 )
 
 // Request types.
@@ -49,14 +44,15 @@ const (
 
 // Response types.
 const (
-	ResponseFailure = 0
-	ResponseServer  = 1
-	ResponseWelcome = 2
-	ResponseServers = 3
-	ResponseDb      = 4
-	ResponseStmt    = 5
-	ResponseResult  = 6
-	ResponseRows    = 7
-	ResponseEmpty   = 8
-	ResponseFiles   = 9
+	ResponseFailure    = 0
+	ResponseNode       = 1
+	ResponseNodeLegacy = 1
+	ResponseWelcome    = 2
+	ResponseNodes      = 3
+	ResponseDb         = 4
+	ResponseStmt       = 5
+	ResponseResult     = 6
+	ResponseRows       = 7
+	ResponseEmpty      = 8
+	ResponseFiles      = 9
 )

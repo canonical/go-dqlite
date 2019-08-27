@@ -1,4 +1,4 @@
-package client
+package protocol
 
 import (
 	"bytes"
@@ -9,17 +9,15 @@ import (
 	"math"
 	"strings"
 	"time"
-
-	"github.com/canonical/go-dqlite/internal/bindings"
 )
 
 // NamedValues is a type alias of a slice of driver.NamedValue. It's used by
 // schema.sh to generate encoding logic for statement parameters.
 type NamedValues = []driver.NamedValue
 
-// Servers is a type alias of a slice of bindings.ServerInfo. It's used by
-// schema.sh to generate decoding logic for the heartbeat response.
-type Servers []bindings.ServerInfo
+// Nodes is a type alias of a slice of NodeInfo. It's used by schema.sh to
+// generate decoding logic for the heartbeat response.
+type Nodes []NodeInfo
 
 // Message holds data about a single request or response.
 type Message struct {
@@ -178,19 +176,19 @@ func (m *Message) putNamedValues(values NamedValues) {
 
 		switch values[i].Value.(type) {
 		case int64:
-			m.putUint8(bindings.Integer)
+			m.putUint8(Integer)
 		case float64:
-			m.putUint8(bindings.Float)
+			m.putUint8(Float)
 		case bool:
-			m.putUint8(bindings.Boolean)
+			m.putUint8(Boolean)
 		case []byte:
-			m.putUint8(bindings.Blob)
+			m.putUint8(Blob)
 		case string:
-			m.putUint8(bindings.Text)
+			m.putUint8(Text)
 		case nil:
-			m.putUint8(bindings.Null)
+			m.putUint8(Null)
 		case time.Time:
-			m.putUint8(bindings.ISO8601)
+			m.putUint8(ISO8601)
 		default:
 			panic("unsupported value type")
 		}
@@ -420,9 +418,9 @@ func (m *Message) getFloat64() float64 {
 }
 
 // Decode a list of server objects from the message body.
-func (m *Message) getServers() Servers {
+func (m *Message) getNodes() Nodes {
 	n := m.getUint64()
-	servers := make(Servers, n)
+	servers := make(Nodes, n)
 
 	for i := 0; i < int(n); i++ {
 		servers[i].ID = m.getUint64()
@@ -551,21 +549,21 @@ func (r *Rows) Next(dest []driver.Value) error {
 
 	for i := range types {
 		switch types[i] {
-		case bindings.Integer:
+		case Integer:
 			dest[i] = r.message.getInt64()
-		case bindings.Float:
+		case Float:
 			dest[i] = r.message.getFloat64()
-		case bindings.Blob:
+		case Blob:
 			dest[i] = r.message.getBlob()
-		case bindings.Text:
+		case Text:
 			dest[i] = r.message.getString()
-		case bindings.Null:
+		case Null:
 			r.message.getUint64()
 			dest[i] = nil
-		case bindings.UnixTime:
+		case UnixTime:
 			timestamp := time.Unix(r.message.getInt64(), 0)
 			dest[i] = timestamp
-		case bindings.ISO8601:
+		case ISO8601:
 			value := r.message.getString()
 			if value == "" {
 				dest[i] = time.Time{}
@@ -586,7 +584,7 @@ func (r *Rows) Next(dest []driver.Value) error {
 			}
 			t = t.In(time.Local)
 			dest[i] = t
-		case bindings.Boolean:
+		case Boolean:
 			dest[i] = r.message.getInt64() != 0
 		default:
 			panic("unknown data type")

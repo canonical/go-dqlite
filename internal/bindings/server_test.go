@@ -5,40 +5,66 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/canonical/go-dqlite/internal/bindings"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestServer_Create(t *testing.T) {
-	_, cleanup := newServer(t)
+func TestNode_Create(t *testing.T) {
+	_, cleanup := newNode(t)
 	defer cleanup()
 }
 
-func TestServer_Leader(t *testing.T) {
-	_, cleanup := newServer(t)
+func TestNode_Start(t *testing.T) {
+	dir, cleanup := newDir(t)
+	defer cleanup()
+
+	server, err := bindings.NewNode(1, "1", dir)
+	require.NoError(t, err)
+	defer server.Close()
+
+	err = server.SetBindAddress("@")
+	require.NoError(t, err)
+
+	err = server.Start()
+	require.NoError(t, err)
+
+	conn, err := net.Dial("unix", server.GetBindAddress())
+	require.NoError(t, err)
+	conn.Close()
+
+	assert.True(t, strings.HasPrefix(server.GetBindAddress(), "@"))
+
+	err = server.Stop()
+	require.NoError(t, err)
+}
+
+func TestNode_Leader(t *testing.T) {
+	_, cleanup := newNode(t)
 	defer cleanup()
 
 	conn := newClient(t)
 
 	// Make a Leader request
-	buf := makeClientRequest(t, conn, bindings.RequestLeader)
+	buf := makeClientRequest(t, conn, protocol.RequestLeader)
 	assert.Equal(t, uint8(1), buf[0])
 
 	require.NoError(t, conn.Close())
 }
 
-// func TestServer_Heartbeat(t *testing.T) {
-// 	server, cleanup := newServer(t)
+// func TestNode_Heartbeat(t *testing.T) {
+// 	server, cleanup := newNode(t)
 // 	defer cleanup()
 
 // 	listener, cleanup := newListener(t)
 // 	defer cleanup()
 
-// 	cleanup = runServer(t, server, listener)
+// 	cleanup = runNode(t, server, listener)
 // 	defer cleanup()
 
 // 	conn := newClient(t, listener)
@@ -49,8 +75,8 @@ func TestServer_Leader(t *testing.T) {
 // 	require.NoError(t, conn.Close())
 // }
 
-// func TestServer_ConcurrentHandleAndClose(t *testing.T) {
-// 	server, cleanup := newServer(t)
+// func TestNode_ConcurrentHandleAndClose(t *testing.T) {
+// 	server, cleanup := newNode(t)
 // 	defer cleanup()
 
 // 	listener, cleanup := newListener(t)
@@ -74,13 +100,13 @@ func TestServer_Leader(t *testing.T) {
 // 	assert.NoError(t, <-acceptCh)
 // }
 
-// Create a new Server object for tests.
-func newServer(t *testing.T) (*bindings.Server, func()) {
+// Create a new Node object for tests.
+func newNode(t *testing.T) (*bindings.Node, func()) {
 	t.Helper()
 
 	dir, dirCleanup := newDir(t)
 
-	server, err := bindings.NewServer(1, "1", dir)
+	server, err := bindings.NewNode(1, "1", dir)
 	require.NoError(t, err)
 
 	err = server.SetBindAddress("@test")
@@ -105,7 +131,7 @@ func newClient(t *testing.T) net.Conn {
 	require.NoError(t, err)
 
 	// Handshake
-	err = binary.Write(conn, binary.LittleEndian, bindings.ProtocolVersion)
+	err = binary.Write(conn, binary.LittleEndian, protocol.VersionLegacy)
 	require.NoError(t, err)
 
 	return conn

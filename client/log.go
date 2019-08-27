@@ -1,4 +1,4 @@
-package dqlite
+package client
 
 import (
 	"fmt"
@@ -22,12 +22,9 @@ const (
 	LogError = logging.Error
 )
 
-// Create a LogFunc with reasonable defaults.
-func defaultLogFunc() LogFunc {
+// DefaultLogFunc emits messages using the stdlib's logger.
+func DefaultLogFunc(l LogLevel, format string, a ...interface{}) {
 	logger := log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
-
-	return func(l LogLevel, format string, a ...interface{}) {
-		format = fmt.Sprintf("[%s]: %s", l.String(), format)
-		logger.Printf(format, a...)
-	}
+	format = fmt.Sprintf("[%s]: %s", l.String(), format)
+	logger.Printf(format, a...)
 }

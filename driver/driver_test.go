@@ -12,14 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dqlite_test
+package driver_test
 
 import (
+	"context"
 	"database/sql/driver"
 	"io"
+	"io/ioutil"
+	"os"
 	"testing"
 
 	dqlite "github.com/canonical/go-dqlite"
+	"github.com/canonical/go-dqlite/client"
+	dqlitedriver "github.com/canonical/go-dqlite/driver"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -313,19 +318,70 @@ INSERT INTO test (n,t) VALUES (3,'b');
 	assert.NoError(t, conn.Close())
 }
 
-func newDriver(t *testing.T) (*dqlite.Driver, func()) {
+func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 	t.Helper()
 
-	_, cleanup := newServer(t)
+	_, cleanup := newNode(t)
 
 	store := newStore(t, "1")
 
 	log := logging.Test(t)
 
-	driver, err := dqlite.NewDriver(store, dqlite.WithDialFunc(dialFunc), dqlite.WithLogFunc(log))
+	driver, err := dqlitedriver.New(store, dqlitedriver.WithDialFunc(dialFunc), dqlitedriver.WithLogFunc(log))
 	require.NoError(t, err)
 
 	return driver, cleanup
+}
+
+// Create a new in-memory server store populated with the given addresses.
+func newStore(t *testing.T, address string) *client.DatabaseNodeStore {
+	t.Helper()
+
+	store, err := client.DefaultNodeStore(":memory:")
+	require.NoError(t, err)
+
+	server := client.NodeInfo{Address: address}
+	require.NoError(t, store.Set(context.Background(), []client.NodeInfo{server}))
+
+	return store
+}
+
+func newNode(t *testing.T) (*dqlite.Node, func()) {
+	t.Helper()
+	dir, dirCleanup := newDir(t)
+
+	info := client.NodeInfo{ID: uint64(1), Address: "1"}
+	server, err := dqlite.New(info, dir)
+	require.NoError(t, err)
+
+	err = server.Start()
+	require.NoError(t, err)
+
+	cleanup := func() {
+		require.NoError(t, server.Close())
+		dirCleanup()
+	}
+
+	return server, cleanup
+}
+
+// Return a new temporary directory.
+func newDir(t *testing.T) (string, func()) {
+	t.Helper()
+
+	dir, err := ioutil.TempDir("", "dqlite-replication-test-")
+	assert.NoError(t, err)
+
+	cleanup := func() {
+		_, err := os.Stat(dir)
+		if err != nil {
+			assert.True(t, os.IsNotExist(err))
+		} else {
+			assert.NoError(t, os.RemoveAll(dir))
+		}
+	}
+
+	return dir, cleanup
 }
 
 /*
@@ -436,7 +492,7 @@ func TestDriver_OpenError(t *testing.T) {
 
 	registry := dqlite.NewRegistry(dir)
 	fsm := dqlite.NewFSM(registry)
-	raft, cleanup := rafttest.Server(t, fsm)
+	raft, cleanup := rafttest.Node(t, fsm)
 	defer cleanup()
 	config := dqlite.DriverConfig{}
 
@@ -518,11 +574,11 @@ func TestDriver_Leader(t *testing.T) {
 }
 
 // Return the addresses of all current raft servers.
-func TestDriver_Servers(t *testing.T) {
+func TestDriver_Nodes(t *testing.T) {
 	driver, cleanup := newDriver(t)
 	defer cleanup()
 
-	servers, err := driver.Servers()
+	servers, err := driver.Nodes()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"0"}, servers)
 }
@@ -605,7 +661,7 @@ func newDriverWithConfig(t *testing.T, config dqlite.DriverConfig) (*dqlite.Driv
 
 	registry := dqlite.NewRegistry(dir)
 	fsm := dqlite.NewFSM(registry)
-	raft, raftCleanup := rafttest.Server(t, fsm)
+	raft, raftCleanup := rafttest.Node(t, fsm)
 
 	driver, err := dqlite.NewDriver(registry, raft, config)
 	require.NoError(t, err)

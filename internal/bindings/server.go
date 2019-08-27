@@ -31,17 +31,17 @@ static int dupCloexec(int oldfd) {
 }
 
 // C to Go trampoline for custom connect function.
-int connectWithDial(uintptr_t handle, unsigned id, char *address, int *fd);
+int connectWithDial(uintptr_t handle, char *address, int *fd);
 
 // Wrapper to call the Go trampoline.
-static int connectTrampoline(void *data, unsigned id, const char *address, int *fd) {
+static int connectTrampoline(void *data, const char *address, int *fd) {
         uintptr_t handle = (uintptr_t)(data);
-        return connectWithDial(handle, id, (char*)address, fd);
+        return connectWithDial(handle, (char*)address, fd);
 }
 
 // Configure a custom connect function.
-static int configConnectFunc(dqlite_task *t, uintptr_t handle) {
-        return dqlite_task_set_connect_func(t, connectTrampoline, (void*)handle);
+static int configConnectFunc(dqlite_node *t, uintptr_t handle) {
+        return dqlite_node_set_connect_func(t, connectTrampoline, (void*)handle);
 }
 
 static int initializeSQLite()
@@ -67,19 +67,12 @@ import (
 	"sync"
 	"time"
 	"unsafe"
+
+	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
-// ServerInfo is the Go equivalent of dqlite_server.
-type ServerInfo struct {
-	ID      uint64
-	Address string
-}
-
-// Server is a Go wrapper arround dqlite_server.
-type Server C.dqlite_task
-
-// DialFunc is a function that can be used to establish a network connection.
-type DialFunc func(context.Context, string) (net.Conn, error)
+// Node is a Go wrapper arround dqlite_server.
+type Node C.dqlite_node
 
 // Init initializes dqlite global state.
 func Init() error {
@@ -96,9 +89,9 @@ func Init() error {
 	return nil
 }
 
-// NewServer creates a new Server instance.
-func NewServer(id uint, address string, dir string) (*Server, error) {
-	var server *C.dqlite_task
+// NewNode creates a new Node instance.
+func NewNode(id uint, address string, dir string) (*Node, error) {
+	var server *C.dqlite_node
 	cid := C.unsigned(id)
 
 	caddress := C.CString(address)
@@ -107,15 +100,15 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 	cdir := C.CString(dir)
 	defer C.free(unsafe.Pointer(cdir))
 
-	if rc := C.dqlite_task_create(cid, caddress, cdir, &server); rc != 0 {
+	if rc := C.dqlite_node_create(cid, caddress, cdir, &server); rc != 0 {
 		return nil, fmt.Errorf("failed to create task object")
 	}
 
-	return (*Server)(unsafe.Pointer(server)), nil
+	return (*Node)(unsafe.Pointer(server)), nil
 }
 
-func (s *Server) SetDialFunc(dial DialFunc) error {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
+func (s *Node) SetDialFunc(dial protocol.DialFunc) error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	connectLock.Lock()
 	defer connectLock.Unlock()
 	connectIndex++
@@ -126,36 +119,41 @@ func (s *Server) SetDialFunc(dial DialFunc) error {
 	return nil
 }
 
-func (s *Server) SetBindAddress(address string) error {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
+func (s *Node) SetBindAddress(address string) error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	caddress := C.CString(address)
 	defer C.free(unsafe.Pointer(caddress))
-	if rc := C.dqlite_task_set_bind_address(server, caddress); rc != 0 {
+	if rc := C.dqlite_node_set_bind_address(server, caddress); rc != 0 {
 		return fmt.Errorf("failed to set bind address")
 	}
 	return nil
 }
 
-func (s *Server) Start() error {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	if rc := C.dqlite_task_start(server); rc != 0 {
+func (s *Node) GetBindAddress() string {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	return C.GoString(C.dqlite_node_get_bind_address(server))
+}
+
+func (s *Node) Start() error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	if rc := C.dqlite_node_start(server); rc != 0 {
 		return fmt.Errorf("failed to start task")
 	}
 	return nil
 }
 
-func (s *Server) Stop() error {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	if rc := C.dqlite_task_stop(server); rc != 0 {
+func (s *Node) Stop() error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	if rc := C.dqlite_node_stop(server); rc != 0 {
 		return fmt.Errorf("task stopped with error code %d", rc)
 	}
 	return nil
 }
 
 // Close the server releasing all used resources.
-func (s *Server) Close() {
-	server := (*C.dqlite_task)(unsafe.Pointer(s))
-	C.dqlite_task_destroy(server)
+func (s *Node) Close() {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	C.dqlite_node_destroy(server)
 }
 
 // Extract the underlying socket from a connection.
@@ -186,15 +184,14 @@ type fileConn interface {
 }
 
 //export connectWithDial
-func connectWithDial(handle C.uintptr_t, id C.unsigned, address *C.char, fd *C.int) C.int {
+func connectWithDial(handle C.uintptr_t, address *C.char, fd *C.int) C.int {
 	connectLock.Lock()
 	defer connectLock.Unlock()
 	dial := connectRegistry[handle]
 	// TODO: make timeout customizable.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	info := ServerInfo{ID: uint64(id), Address: C.GoString(address)}
-	conn, err := dial(ctx, info.Address)
+	conn, err := dial(ctx, C.GoString(address))
 	if err != nil {
 		return C.RAFT_NOCONNECTION
 	}
@@ -207,12 +204,12 @@ func connectWithDial(handle C.uintptr_t, id C.unsigned, address *C.char, fd *C.i
 }
 
 // Use handles to avoid passing Go pointers to C.
-var connectRegistry = make(map[C.uintptr_t]DialFunc)
+var connectRegistry = make(map[C.uintptr_t]protocol.DialFunc)
 var connectIndex C.uintptr_t = 100
 var connectLock = sync.Mutex{}
 
-// ErrServerStopped is returned by Server.Handle() is the server was stopped.
-var ErrServerStopped = fmt.Errorf("server was stopped")
+// ErrNodeStopped is returned by Node.Handle() is the server was stopped.
+var ErrNodeStopped = fmt.Errorf("server was stopped")
 
 // To compare bool values.
 var cfalse C.bool

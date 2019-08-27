@@ -1,4 +1,4 @@
-package client
+package protocol
 
 // Buffer for reading responses or writing requests.
 type buffer struct {
