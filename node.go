@@ -19,6 +19,9 @@ type Node struct {
 	bindAddress string
 }
 
+// NodeInfo is a convenience alias for client.NodeInfo.
+type NodeInfo = client.NodeInfo
+
 // Option can be used to tweak node parameters.
 type Option func(*options)
 
@@ -37,7 +40,7 @@ func WithBindAddress(address string) Option {
 }
 
 // New creates a new Node instance.
-func New(info client.NodeInfo, dir string, options ...Option) (*Node, error) {
+func New(info NodeInfo, dir string, options ...Option) (*Node, error) {
 	o := defaultOptions()
 
 	for _, option := range options {
