@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Conn connecting to a dqlite server and speaking the dqlite wire protocol.
-type Conn struct {
+// Protocol sends and receive the dqlite message on the wire.
+type Protocol struct {
 	conn           net.Conn      // Underlying network connection.
 	contextTimeout time.Duration // Default context timeout.
 	closeCh        chan struct{} // Stops the heartbeat when the connection gets closed
@@ -20,49 +20,48 @@ type Conn struct {
 	netErr         error         // A network error occurred
 }
 
-func NewConn(conn net.Conn) *Conn {
-	//logger.With(zap.String("target", address)
-	client := &Conn{
+func NewProtocol(conn net.Conn) *Protocol {
+	protocol := &Protocol{
 		conn:           conn,
 		closeCh:        make(chan struct{}),
 		contextTimeout: 5 * time.Second,
 	}
 
-	return client
+	return protocol
 }
 
 // SetContextTimeout sets the default context timeout when no deadline is
 // provided.
-func (c *Conn) SetContextTimeout(timeout time.Duration) {
-	c.contextTimeout = timeout
+func (p *Protocol) SetContextTimeout(timeout time.Duration) {
+	p.contextTimeout = timeout
 }
 
 // Call invokes a dqlite RPC, sending a request message and receiving a
 // response message.
-func (c *Conn) Call(ctx context.Context, request, response *Message) (err error) {
+func (p *Protocol) Call(ctx context.Context, request, response *Message) (err error) {
 	// We need to take a lock since the dqlite server currently does not
 	// support concurrent requests.
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if c.netErr != nil {
-		return c.netErr
+	if p.netErr != nil {
+		return p.netErr
 	}
 
 	// Honor the ctx deadline, if present, or use a default.
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		deadline = time.Now().Add(c.contextTimeout)
+		deadline = time.Now().Add(p.contextTimeout)
 	}
 
-	c.conn.SetDeadline(deadline)
+	p.conn.SetDeadline(deadline)
 
-	if err = c.send(request); err != nil {
+	if err = p.send(request); err != nil {
 		err = errors.Wrap(err, "failed to send request")
 		goto err
 	}
 
-	if err = c.recv(response); err != nil {
+	if err = p.recv(response); err != nil {
 		err = errors.Wrap(err, "failed to receive response")
 		goto err
 	}
@@ -72,41 +71,41 @@ func (c *Conn) Call(ctx context.Context, request, response *Message) (err error)
 err:
 	switch errors.Cause(err).(type) {
 	case *net.OpError:
-		c.netErr = err
+		p.netErr = err
 	}
 	return
 }
 
 // More is used when a request maps to multiple responses.
-func (c *Conn) More(ctx context.Context, response *Message) error {
-	return c.recv(response)
+func (p *Protocol) More(ctx context.Context, response *Message) error {
+	return p.recv(response)
 }
 
 // Interrupt sends an interrupt request and awaits for the server's empty
 // response.
-func (c *Conn) Interrupt(ctx context.Context, request *Message, response *Message) error {
+func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Message) error {
 	// We need to take a lock since the dqlite server currently does not
 	// support concurrent requests.
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	// Honor the ctx deadline, if present, or use a default.
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(2 * time.Second)
 	}
-	c.conn.SetDeadline(deadline)
+	p.conn.SetDeadline(deadline)
 
 	defer request.Reset()
 
 	EncodeInterrupt(request, 0)
 
-	if err := c.send(request); err != nil {
+	if err := p.send(request); err != nil {
 		return errors.Wrap(err, "failed to send interrupt request")
 	}
 
 	for {
-		if err := c.recv(response); err != nil {
+		if err := p.recv(response); err != nil {
 			response.Reset()
 			return errors.Wrap(err, "failed to receive response")
 		}
@@ -123,25 +122,25 @@ func (c *Conn) Interrupt(ctx context.Context, request *Message, response *Messag
 }
 
 // Close the client connection.
-func (c *Conn) Close() error {
-	close(c.closeCh)
-	return c.conn.Close()
+func (p *Protocol) Close() error {
+	close(p.closeCh)
+	return p.conn.Close()
 }
 
-func (c *Conn) send(req *Message) error {
-	if err := c.sendHeader(req); err != nil {
+func (p *Protocol) send(req *Message) error {
+	if err := p.sendHeader(req); err != nil {
 		return errors.Wrap(err, "failed to send header")
 	}
 
-	if err := c.sendBody(req); err != nil {
+	if err := p.sendBody(req); err != nil {
 		return errors.Wrap(err, "failed to send body")
 	}
 
 	return nil
 }
 
-func (c *Conn) sendHeader(req *Message) error {
-	n, err := c.conn.Write(req.header[:])
+func (p *Protocol) sendHeader(req *Message) error {
+	n, err := p.conn.Write(req.header[:])
 	if err != nil {
 		return errors.Wrap(err, "failed to send header")
 	}
@@ -153,9 +152,9 @@ func (c *Conn) sendHeader(req *Message) error {
 	return nil
 }
 
-func (c *Conn) sendBody(req *Message) error {
+func (p *Protocol) sendBody(req *Message) error {
 	buf := req.body1.Bytes[:req.body1.Offset]
-	n, err := c.conn.Write(buf)
+	n, err := p.conn.Write(buf)
 	if err != nil {
 		return errors.Wrap(err, "failed to send static body")
 	}
@@ -169,7 +168,7 @@ func (c *Conn) sendBody(req *Message) error {
 	}
 
 	buf = req.body2.Bytes[:req.body2.Offset]
-	n, err = c.conn.Write(buf)
+	n, err = p.conn.Write(buf)
 	if err != nil {
 		return errors.Wrap(err, "failed to send dynamic body")
 	}
@@ -181,20 +180,20 @@ func (c *Conn) sendBody(req *Message) error {
 	return nil
 }
 
-func (c *Conn) recv(res *Message) error {
-	if err := c.recvHeader(res); err != nil {
+func (p *Protocol) recv(res *Message) error {
+	if err := p.recvHeader(res); err != nil {
 		return errors.Wrap(err, "failed to receive header")
 	}
 
-	if err := c.recvBody(res); err != nil {
+	if err := p.recvBody(res); err != nil {
 		return errors.Wrap(err, "failed to receive body")
 	}
 
 	return nil
 }
 
-func (c *Conn) recvHeader(res *Message) error {
-	if err := c.recvPeek(res.header); err != nil {
+func (p *Protocol) recvHeader(res *Message) error {
+	if err := p.recvPeek(res.header); err != nil {
 		return errors.Wrap(err, "failed to receive header")
 	}
 
@@ -206,7 +205,7 @@ func (c *Conn) recvHeader(res *Message) error {
 	return nil
 }
 
-func (c *Conn) recvBody(res *Message) error {
+func (p *Protocol) recvBody(res *Message) error {
 	n := int(res.words) * messageWordSize
 	n1 := n
 	n2 := 0
@@ -219,7 +218,7 @@ func (c *Conn) recvBody(res *Message) error {
 
 	buf := res.body1.Bytes[:n1]
 
-	if err := c.recvPeek(buf); err != nil {
+	if err := p.recvPeek(buf); err != nil {
 		return errors.Wrap(err, "failed to read body")
 	}
 
@@ -227,7 +226,7 @@ func (c *Conn) recvBody(res *Message) error {
 		res.body2.Bytes = make([]byte, n2)
 		res.body2.Offset = 0
 		buf = res.body2.Bytes
-		if err := c.recvPeek(buf); err != nil {
+		if err := p.recvPeek(buf); err != nil {
 			return errors.Wrap(err, "failed to read body")
 		}
 	}
@@ -236,9 +235,9 @@ func (c *Conn) recvBody(res *Message) error {
 }
 
 // Read until buf is full.
-func (c *Conn) recvPeek(buf []byte) error {
+func (p *Protocol) recvPeek(buf []byte) error {
 	for offset := 0; offset < len(buf); {
-		n, err := c.recvFill(buf[offset:])
+		n, err := p.recvFill(buf[offset:])
 		if err != nil {
 			return err
 		}
@@ -249,12 +248,12 @@ func (c *Conn) recvPeek(buf []byte) error {
 }
 
 // Try to fill buf, but perform at most one read.
-func (c *Conn) recvFill(buf []byte) (int, error) {
+func (p *Protocol) recvFill(buf []byte) (int, error) {
 	// Read new data: try a limited number of times.
 	//
 	// This technique is copied from bufio.Reader.
 	for i := messageMaxConsecutiveEmptyReads; i > 0; i-- {
-		n, err := c.conn.Read(buf)
+		n, err := p.conn.Read(buf)
 		if n < 0 {
 			panic(errNegativeRead)
 		}
@@ -269,7 +268,7 @@ func (c *Conn) recvFill(buf []byte) (int, error) {
 }
 
 /*
-func (c *Conn) heartbeat() {
+func (p *Protocol) heartbeat() {
 	request := Message{}
 	request.Init(16)
 	response := Message{}

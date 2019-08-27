@@ -10,15 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// func TestClient_Heartbeat(t *testing.T) {
-// 	c, cleanup := newClient(t)
+// func TestProtocol_Heartbeat(t *testing.T) {
+// 	c, cleanup := newProtocol(t)
 // 	defer cleanup()
 
 // 	request, response := newMessagePair(512, 512)
 
 // 	protocol.EncodeHeartbeat(&request, uint64(time.Now().Unix()))
 
-// 	makeClientCall(t, c, &request, &response)
+// 	makeCall(t, c, &request, &response)
 
 // 	servers, err := protocol.DecodeServers(&response)
 // 	require.NoError(t, err)
@@ -31,15 +31,15 @@ import (
 // }
 
 // Test sending a request that needs to be written into the dynamic buffer.
-func TestClient_RequestWithDynamicBuffer(t *testing.T) {
-	c, cleanup := newClient(t)
+func TestProtocol_RequestWithDynamicBuffer(t *testing.T) {
+	p, cleanup := newProtocol(t)
 	defer cleanup()
 
 	request, response := newMessagePair(64, 64)
 
 	protocol.EncodeOpen(&request, "test.db", 0, "test-0")
 
-	makeClientCall(t, c, &request, &response)
+	makeCall(t, p, &request, &response)
 
 	id, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
@@ -55,18 +55,18 @@ CREATE TABLE baz (n INT);
 `
 	protocol.EncodeExecSQL(&request, uint64(id), sql, nil)
 
-	makeClientCall(t, c, &request, &response)
+	makeCall(t, p, &request, &response)
 }
 
-func TestClient_Prepare(t *testing.T) {
-	c, cleanup := newClient(t)
+func TestProtocol_Prepare(t *testing.T) {
+	c, cleanup := newProtocol(t)
 	defer cleanup()
 
 	request, response := newMessagePair(64, 64)
 
 	protocol.EncodeOpen(&request, "test.db", 0, "test-0")
 
-	makeClientCall(t, c, &request, &response)
+	makeCall(t, c, &request, &response)
 
 	db, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestClient_Prepare(t *testing.T) {
 
 	protocol.EncodePrepare(&request, uint64(db), "CREATE TABLE test (n INT)")
 
-	makeClientCall(t, c, &request, &response)
+	makeCall(t, c, &request, &response)
 
 	_, stmt, params, err := protocol.DecodeStmt(&response)
 	require.NoError(t, err)
@@ -86,8 +86,8 @@ func TestClient_Prepare(t *testing.T) {
 }
 
 /*
-func TestClient_Exec(t *testing.T) {
-	client, cleanup := newClient(t)
+func TestProtocol_Exec(t *testing.T) {
+	client, cleanup := newProtocol(t)
 	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -103,8 +103,8 @@ func TestClient_Exec(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestClient_Query(t *testing.T) {
-	client, cleanup := newClient(t)
+func TestProtocol_Query(t *testing.T) {
+	client, cleanup := newProtocol(t)
 	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -146,7 +146,7 @@ func TestClient_Query(t *testing.T) {
 }
 */
 
-func newClient(t *testing.T) (*protocol.Conn, func()) {
+func newProtocol(t *testing.T) (*protocol.Protocol, func()) {
 	t.Helper()
 
 	address, serverCleanup := newServer(t, 0)
@@ -171,11 +171,11 @@ func newClient(t *testing.T) (*protocol.Conn, func()) {
 }
 
 // Perform a client call.
-func makeClientCall(t *testing.T, c *protocol.Conn, request, response *protocol.Message) {
+func makeCall(t *testing.T, p *protocol.Protocol, request, response *protocol.Message) {
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 
-	err := c.Call(ctx, request, response)
+	err := p.Call(ctx, request, response)
 	require.NoError(t, err)
 }
 

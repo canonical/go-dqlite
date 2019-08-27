@@ -202,11 +202,11 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	}
 
 	var err error
-	conn.client, err = connector.Connect(ctx)
+	conn.protocol, err = connector.Connect(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create dqlite connection")
 	}
-	conn.client.SetContextTimeout(d.contextTimeout)
+	conn.protocol.SetContextTimeout(d.contextTimeout)
 
 	conn.request.Init(4096)
 	conn.response.Init(4096)
@@ -216,14 +216,14 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 
 	protocol.EncodeOpen(&conn.request, uri, 0, "volatile")
 
-	if err := conn.client.Call(ctx, &conn.request, &conn.response); err != nil {
-		conn.client.Close()
+	if err := conn.protocol.Call(ctx, &conn.request, &conn.response); err != nil {
+		conn.protocol.Close()
 		return nil, errors.Wrap(err, "failed to open database")
 	}
 
 	conn.id, err = protocol.DecodeDb(&conn.response)
 	if err != nil {
-		conn.client.Close()
+		conn.protocol.Close()
 		return nil, errors.Wrap(err, "failed to open database")
 	}
 
@@ -243,7 +243,7 @@ var ErrNoAvailableLeader = protocol.ErrNoAvailableLeader
 // Conn implements the sql.Conn interface.
 type Conn struct {
 	log            LogFunc
-	client         *protocol.Conn
+	protocol       *protocol.Protocol
 	request        protocol.Message
 	response       protocol.Message
 	id             uint32 // Database ID.
@@ -258,14 +258,14 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 	defer c.response.Reset()
 
 	stmt := &Stmt{
-		client:   c.client,
+		protocol: c.protocol,
 		request:  &c.request,
 		response: &c.response,
 	}
 
 	protocol.EncodePrepare(&c.request, uint64(c.id), query)
 
-	if err := c.client.Call(ctx, &c.request, &c.response); err != nil {
+	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
 		return nil, driverError(err)
 	}
 
@@ -290,7 +290,7 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 
 	protocol.EncodeExecSQL(&c.request, uint64(c.id), query, args)
 
-	if err := c.client.Call(ctx, &c.request, &c.response); err != nil {
+	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
 		return nil, driverError(err)
 	}
 
@@ -313,7 +313,7 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 
 	protocol.EncodeQuerySQL(&c.request, uint64(c.id), query, args)
 
-	if err := c.client.Call(ctx, &c.request, &c.response); err != nil {
+	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
 		c.response.Reset()
 		return nil, driverError(err)
 	}
@@ -324,7 +324,7 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 		return nil, driverError(err)
 	}
 
-	return &Rows{ctx: ctx, request: &c.request, response: &c.response, client: c.client, rows: rows}, nil
+	return &Rows{ctx: ctx, request: &c.request, response: &c.response, protocol: c.protocol, rows: rows}, nil
 }
 
 // Exec is an optional interface that may be implemented by a Conn.
@@ -339,7 +339,7 @@ func (c *Conn) Exec(query string, args []driver.Value) (driver.Result, error) {
 // Close when there's a surplus of idle connections, it shouldn't be necessary
 // for drivers to do their own connection caching.
 func (c *Conn) Close() error {
-	return c.client.Close()
+	return c.protocol.Close()
 }
 
 // BeginTx starts and returns a new transaction.  If the context is canceled by
@@ -405,7 +405,7 @@ func (tx *Tx) Rollback() error {
 // Stmt is a prepared statement. It is bound to a Conn and not
 // used by multiple goroutines concurrently.
 type Stmt struct {
-	client   *protocol.Conn
+	protocol *protocol.Protocol
 	request  *protocol.Message
 	response *protocol.Message
 	db       uint32
@@ -422,7 +422,7 @@ func (s *Stmt) Close() error {
 
 	ctx := context.Background()
 
-	if err := s.client.Call(ctx, s.request, s.response); err != nil {
+	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
 		return driverError(err)
 	}
 
@@ -448,7 +448,7 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 
 	protocol.EncodeExec(s.request, s.db, s.id, args)
 
-	if err := s.client.Call(ctx, s.request, s.response); err != nil {
+	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
 		return nil, driverError(err)
 	}
 
@@ -478,7 +478,7 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 
 	protocol.EncodeQuery(s.request, s.db, s.id, args)
 
-	if err := s.client.Call(ctx, s.request, s.response); err != nil {
+	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
 		s.response.Reset()
 		return nil, driverError(err)
 	}
@@ -489,7 +489,7 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 		return nil, driverError(err)
 	}
 
-	return &Rows{ctx: ctx, request: s.request, response: s.response, client: s.client, rows: rows}, nil
+	return &Rows{ctx: ctx, request: s.request, response: s.response, protocol: s.protocol, rows: rows}, nil
 }
 
 // Query executes a query that may return rows, such as a
@@ -518,7 +518,7 @@ func (r *Result) RowsAffected() (int64, error) {
 // Rows is an iterator over an executed query's results.
 type Rows struct {
 	ctx      context.Context
-	client   *protocol.Conn
+	protocol *protocol.Protocol
 	request  *protocol.Message
 	response *protocol.Message
 	rows     protocol.Rows
@@ -550,7 +550,7 @@ func (r *Rows) Close() error {
 
 	// Let's issue an interrupt request and wait until we get an empty
 	// response, signalling that the query was interrupted.
-	if err := r.client.Interrupt(r.ctx, r.request, r.response); err != nil {
+	if err := r.protocol.Interrupt(r.ctx, r.request, r.response); err != nil {
 		return driverError(err)
 	}
 
@@ -567,7 +567,7 @@ func (r *Rows) Next(dest []driver.Value) error {
 
 	if err == protocol.ErrRowsPart {
 		r.rows.Close()
-		if err := r.client.More(r.ctx, r.response); err != nil {
+		if err := r.protocol.More(r.ctx, r.response); err != nil {
 			return driverError(err)
 		}
 		rows, err := protocol.DecodeRows(r.response)
@@ -589,7 +589,7 @@ func (r *Rows) Next(dest []driver.Value) error {
 func (r *Rows) ColumnTypeScanType(i int) reflect.Type {
 	// column := sql.NewColumn(r.rows, i)
 
-	// typ, err := r.client.ColumnTypeScanType(context.Background(), column)
+	// typ, err := r.protocol.ColumnTypeScanType(context.Background(), column)
 	// if err != nil {
 	// 	return nil
 	// }
@@ -602,7 +602,7 @@ func (r *Rows) ColumnTypeScanType(i int) reflect.Type {
 func (r *Rows) ColumnTypeDatabaseTypeName(i int) string {
 	// column := sql.NewColumn(r.rows, i)
 
-	// typeName, err := r.client.ColumnTypeDatabaseTypeName(context.Background(), column)
+	// typeName, err := r.protocol.ColumnTypeDatabaseTypeName(context.Background(), column)
 	// if err != nil {
 	// 	return ""
 	// }

@@ -48,8 +48,8 @@ func NewConnector(id uint64, store ServerStore, config Config, log logging.Func)
 // Connect finds the leader server and returns a connection to it.
 //
 // If the connector is stopped before a leader is found, nil is returned.
-func (c *Connector) Connect(ctx context.Context) (*Conn, error) {
-	var client *Conn
+func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
+	var protocol *Protocol
 
 	// The retry strategy should be configured to retry indefinitely, until
 	// the given context is done.
@@ -67,7 +67,7 @@ func (c *Connector) Connect(ctx context.Context) (*Conn, error) {
 		}
 
 		var err error
-		client, err = c.connectAttemptAll(ctx, log)
+		protocol, err = c.connectAttemptAll(ctx, log)
 		if err != nil {
 			log(logging.Debug, "connection failed err=%v", err)
 			return err
@@ -86,12 +86,12 @@ func (c *Connector) Connect(ctx context.Context) (*Conn, error) {
 		return nil, ErrNoAvailableLeader
 	}
 
-	return client, nil
+	return protocol, nil
 }
 
 // Make a single attempt to establish a connection to the leader server trying
 // all addresses available in the store.
-func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Conn, error) {
+func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
 	servers, err := c.store.Get(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get cluster servers")
@@ -107,16 +107,16 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 		ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
 		defer cancel()
 
-		conn, leader, err := c.connectAttemptOne(ctx, server.Address)
+		protocol, leader, err := c.connectAttemptOne(ctx, server.Address)
 		if err != nil {
 			// This server is unavailable, try with the next target.
 			log(logging.Debug, "server connection failed err=%v", err)
 			continue
 		}
-		if conn != nil {
+		if protocol != nil {
 			// We found the leader
 			log(logging.Info, "connected")
-			return conn, nil
+			return protocol, nil
 		}
 		if leader == "" {
 			// This server does not know who the current leader is,
@@ -128,28 +128,28 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*C
 		// server is the leader, let's close the connection to this
 		// server and try with the suggested one.
 		//logger = logger.With(zap.String("leader", leader))
-		conn, leader, err = c.connectAttemptOne(ctx, leader)
+		protocol, leader, err = c.connectAttemptOne(ctx, leader)
 		if err != nil {
 			// The leader reported by the previous server is
 			// unavailable, try with the next target.
 			//logger.Info("leader server connection failed", zap.String("err", err.Error()))
 			continue
 		}
-		if conn == nil {
+		if protocol == nil {
 			// The leader reported by the target server does not consider itself
 			// the leader, try with the next target.
 			//logger.Info("reported leader server is not the leader")
 			continue
 		}
 		log(logging.Info, "connected")
-		return conn, nil
+		return protocol, nil
 	}
 
 	return nil, ErrNoAvailableLeader
 }
 
 // Connect establishes a connection with a dqlite node.
-func Connect(ctx context.Context, dial DialFunc, address string) (*Conn, error) {
+func Connect(ctx context.Context, dial DialFunc, address string) (*Protocol, error) {
 	// Establish the connection.
 	conn, err := dial(ctx, address)
 	if err != nil {
@@ -171,7 +171,7 @@ func Connect(ctx context.Context, dial DialFunc, address string) (*Conn, error) 
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
-	return NewConn(conn), nil
+	return NewProtocol(conn), nil
 }
 
 // Connect to the given dqlite server and check if it's the leader.
@@ -183,8 +183,8 @@ func Connect(ctx context.Context, dial DialFunc, address string) (*Conn, error) 
 // - Target not leader and leader known:     -> nil, leader, nil
 // - Target is the leader:                   -> server, "", nil
 //
-func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Conn, string, error) {
-	client, err := Connect(ctx, c.config.Dial, address)
+func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Protocol, string, error) {
+	protocol, err := Connect(ctx, c.config.Dial, address)
 	if err != nil {
 		return nil, "", err
 	}
@@ -197,21 +197,21 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Con
 
 	EncodeLeader(&request)
 
-	if err := client.Call(ctx, &request, &response); err != nil {
-		client.Close()
+	if err := protocol.Call(ctx, &request, &response); err != nil {
+		protocol.Close()
 		return nil, "", errors.Wrap(err, "failed to send Leader request")
 	}
 
 	leader, err := DecodeServer(&response)
 	if err != nil {
-		client.Close()
+		protocol.Close()
 		return nil, "", errors.Wrap(err, "failed to parse Server response")
 	}
 
 	switch leader {
 	case "":
 		// Currently this server does not know about any leader.
-		client.Close()
+		protocol.Close()
 		return nil, "", nil
 	case address:
 		// This server is the leader, register ourselves and return.
@@ -220,25 +220,25 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Con
 
 		EncodeClient(&request, c.id)
 
-		if err := client.Call(ctx, &request, &response); err != nil {
-			client.Close()
+		if err := protocol.Call(ctx, &request, &response); err != nil {
+			protocol.Close()
 			return nil, "", errors.Wrap(err, "failed to send Conn request")
 		}
 
 		_, err := DecodeWelcome(&response)
 		if err != nil {
-			client.Close()
+			protocol.Close()
 			return nil, "", errors.Wrap(err, "failed to parse Welcome response")
 		}
 
 		// TODO: enable heartbeat
-		// client.heartbeatTimeout = time.Duration(heartbeatTimeout) * time.Millisecond
-		//go client.heartbeat()
+		// protocol.heartbeatTimeout = time.Duration(heartbeatTimeout) * time.Millisecond
+		//go protocol.heartbeat()
 
-		return client, "", nil
+		return protocol, "", nil
 	default:
 		// This server claims to know who the current leader is.
-		client.Close()
+		protocol.Close()
 		return nil, leader, nil
 	}
 }

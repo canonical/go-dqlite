@@ -14,7 +14,7 @@ type DialFunc protocol.DialFunc
 
 // Client speaks the dqlite wire protocol.
 type Client struct {
-	conn *protocol.Conn
+	protocol *protocol.Protocol
 }
 
 // New creates a new client connected to the dqlite node with the given
@@ -41,7 +41,7 @@ func New(ctx context.Context, dial DialFunc, address string) (*Client, error) {
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
-	client := &Client{conn: protocol.NewConn(conn)}
+	client := &Client{protocol: protocol.NewProtocol(conn)}
 
 	return client, nil
 }
@@ -64,7 +64,7 @@ func (c *Client) Dump(ctx context.Context, dbname string) ([]File, error) {
 
 	protocol.EncodeDump(&request, dbname)
 
-	if err := c.conn.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send dump request")
 	}
 
