@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 
 	"github.com/Rican7/retry"
 	"github.com/canonical/go-dqlite/internal/logging"
@@ -103,7 +102,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		version := VersionOne
 		protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
 		if err == errBadProtocol {
-			version := VersionLegacy
+			version = VersionLegacy
 			protocol, leader, err = c.connectAttemptOne(ctx, server.Address, version)
 		}
 		if err != nil {
@@ -200,7 +199,7 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 		cause := errors.Cause(err)
 		// Best-effort detection of a pre-1.0 dqlite node: when sent
 		// version 1 it should close the connection immediately.
-		if err, ok := cause.(*net.OpError); ok && strings.Contains(err.Error(), "connection reset by peer") {
+		if _, ok := cause.(*net.OpError); ok || cause == io.EOF {
 			return nil, "", errBadProtocol
 		}
 
