@@ -7,13 +7,11 @@ import (
 
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
+	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/pkg/errors"
 )
-
-// ServerInfo holds information about a single server.
-type ServerInfo = protocol.ServerInfo
 
 // Server implements the dqlite network protocol.
 type Server struct {
@@ -36,7 +34,7 @@ func WithServerLogFunc(log LogFunc) ServerOption {
 }
 
 // WithServerDialFunc sets a custom dial function for the server.
-func WithServerDialFunc(dial DialFunc) ServerOption {
+func WithServerDialFunc(dial client.DialFunc) ServerOption {
 	return func(options *serverOptions) {
 		options.DialFunc = dial
 	}
@@ -50,7 +48,7 @@ func WithServerBindAddress(address string) ServerOption {
 }
 
 // NewServer creates a new Server instance.
-func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, error) {
+func NewServer(info client.ServerInfo, dir string, options ...ServerOption) (*Server, error) {
 	o := defaultServerOptions()
 
 	for _, option := range options {
@@ -86,7 +84,7 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 }
 
 // Cluster returns information about all servers in the cluster.
-func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
+func (s *Server) Cluster(ctx context.Context) ([]client.ServerInfo, error) {
 	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
@@ -113,7 +111,7 @@ func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
 }
 
 // Leader returns information about the current leader, if any.
-func (s *Server) Leader(ctx context.Context) (*ServerInfo, error) {
+func (s *Server) Leader(ctx context.Context) (*client.ServerInfo, error) {
 	p, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionOne)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
@@ -136,7 +134,7 @@ func (s *Server) Leader(ctx context.Context) (*ServerInfo, error) {
 		return nil, errors.Wrap(err, "failed to parse Server response")
 	}
 
-	info := &ServerInfo{ID: id, Address: address}
+	info := &client.ServerInfo{ID: id, Address: address}
 
 	return info, nil
 }
@@ -147,7 +145,7 @@ func (s *Server) Start() error {
 }
 
 // Join a cluster.
-func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) error {
+func (s *Server) Join(ctx context.Context, store client.ServerStore, dial client.DialFunc) error {
 	if dial == nil {
 		dial = protocol.TCPDial
 	}
@@ -185,7 +183,7 @@ func (s *Server) Join(ctx context.Context, store ServerStore, dial DialFunc) err
 }
 
 // Leave a cluster.
-func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) error {
+func Leave(ctx context.Context, id uint64, store client.ServerStore, dial client.DialFunc) error {
 	if dial == nil {
 		dial = protocol.TCPDial
 	}
@@ -218,8 +216,8 @@ func Leave(ctx context.Context, id uint64, store ServerStore, dial DialFunc) err
 
 // Hold configuration options for a dqlite server.
 type serverOptions struct {
-	Log         LogFunc
-	DialFunc    DialFunc
+	Log         client.LogFunc
+	DialFunc    client.DialFunc
 	BindAddress string
 }
 

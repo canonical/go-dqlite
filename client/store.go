@@ -1,4 +1,4 @@
-package dqlite
+package client
 
 import (
 	"context"
@@ -19,6 +19,9 @@ import (
 // by querying the leader server about changes in the cluster (such as servers
 // being added or removed).
 type ServerStore = protocol.ServerStore
+
+// ServerInfo holds information about a single server.
+type ServerInfo = protocol.ServerInfo
 
 // InmemServerStore keeps the list of target gRPC SQL servers in memory.
 type InmemServerStore = protocol.InmemServerStore

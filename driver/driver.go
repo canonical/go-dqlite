@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dqlite
+package driver
 
 import (
 	"context"
@@ -26,18 +26,19 @@ import (
 	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
 
+	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
 // Driver perform queries against a dqlite server.
 type Driver struct {
-	log               LogFunc         // Log function to use
-	store             ServerStore     // Holds addresses of dqlite servers
-	context           context.Context // Global cancellation context
-	connectionTimeout time.Duration   // Max time to wait for a new connection
-	contextTimeout    time.Duration   // Default client context timeout.
-	clientConfig      protocol.Config // Configuration for dqlite client instances
+	log               client.LogFunc     // Log function to use
+	store             client.ServerStore // Holds addresses of dqlite servers
+	context           context.Context    // Global cancellation context
+	connectionTimeout time.Duration      // Max time to wait for a new connection
+	contextTimeout    time.Duration      // Default client context timeout.
+	clientConfig      protocol.Config    // Configuration for dqlite client instances
 }
 
 // DriverError is returned in case of database errors.
@@ -47,7 +48,7 @@ type DriverError = bindings.Error
 type DriverOption func(*driverOptions)
 
 // WithLogFunc sets a custom logging function.
-func WithLogFunc(log LogFunc) DriverOption {
+func WithLogFunc(log client.LogFunc) DriverOption {
 	return func(options *driverOptions) {
 		options.Log = log
 	}
@@ -111,7 +112,7 @@ func WithContext(context context.Context) DriverOption {
 
 // NewDriver creates a new dqlite driver, which also implements the
 // driver.Driver interface.
-func NewDriver(store ServerStore, options ...DriverOption) (*Driver, error) {
+func NewDriver(store client.ServerStore, options ...DriverOption) (*Driver, error) {
 	o := defaultDriverOptions()
 
 	for _, option := range options {
@@ -140,7 +141,7 @@ func NewDriver(store ServerStore, options ...DriverOption) (*Driver, error) {
 
 // Hold configuration options for a dqlite driver.
 type driverOptions struct {
-	Log                     LogFunc
+	Log                     client.LogFunc
 	Dial                    protocol.DialFunc
 	ConnectionTimeout       time.Duration
 	ContextTimeout          time.Duration
@@ -152,7 +153,7 @@ type driverOptions struct {
 // Create a driverOptions object with sane defaults.
 func defaultDriverOptions() *driverOptions {
 	return &driverOptions{
-		Log:                     defaultLogFunc(),
+		Log:                     client.DefaultLogFunc(),
 		Dial:                    protocol.TCPDial,
 		ConnectionTimeout:       15 * time.Second,
 		ContextTimeout:          2 * time.Second,
@@ -242,7 +243,7 @@ var ErrNoAvailableLeader = protocol.ErrNoAvailableLeader
 
 // Conn implements the sql.Conn interface.
 type Conn struct {
-	log            LogFunc
+	log            client.LogFunc
 	protocol       *protocol.Protocol
 	request        protocol.Message
 	response       protocol.Message

@@ -12,14 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dqlite_test
+package driver_test
 
 import (
+	"context"
 	"database/sql/driver"
 	"io"
+	"io/ioutil"
+	"os"
 	"testing"
 
 	dqlite "github.com/canonical/go-dqlite"
+	"github.com/canonical/go-dqlite/client"
+	dqlitedriver "github.com/canonical/go-dqlite/driver"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -313,7 +318,7 @@ INSERT INTO test (n,t) VALUES (3,'b');
 	assert.NoError(t, conn.Close())
 }
 
-func newDriver(t *testing.T) (*dqlite.Driver, func()) {
+func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 	t.Helper()
 
 	_, cleanup := newServer(t)
@@ -322,10 +327,61 @@ func newDriver(t *testing.T) (*dqlite.Driver, func()) {
 
 	log := logging.Test(t)
 
-	driver, err := dqlite.NewDriver(store, dqlite.WithDialFunc(dialFunc), dqlite.WithLogFunc(log))
+	driver, err := dqlitedriver.NewDriver(store, dqlitedriver.WithDialFunc(dialFunc), dqlitedriver.WithLogFunc(log))
 	require.NoError(t, err)
 
 	return driver, cleanup
+}
+
+// Create a new in-memory server store populated with the given addresses.
+func newStore(t *testing.T, address string) *client.DatabaseServerStore {
+	t.Helper()
+
+	store, err := client.DefaultServerStore(":memory:")
+	require.NoError(t, err)
+
+	server := client.ServerInfo{Address: address}
+	require.NoError(t, store.Set(context.Background(), []client.ServerInfo{server}))
+
+	return store
+}
+
+func newServer(t *testing.T) (*dqlite.Server, func()) {
+	t.Helper()
+	dir, dirCleanup := newDir(t)
+
+	info := client.ServerInfo{ID: uint64(1), Address: "1"}
+	server, err := dqlite.NewServer(info, dir, dqlite.WithServerLogFunc(logging.Test(t)))
+	require.NoError(t, err)
+
+	err = server.Start()
+	require.NoError(t, err)
+
+	cleanup := func() {
+		require.NoError(t, server.Close())
+		dirCleanup()
+	}
+
+	return server, cleanup
+}
+
+// Return a new temporary directory.
+func newDir(t *testing.T) (string, func()) {
+	t.Helper()
+
+	dir, err := ioutil.TempDir("", "dqlite-replication-test-")
+	assert.NoError(t, err)
+
+	cleanup := func() {
+		_, err := os.Stat(dir)
+		if err != nil {
+			assert.True(t, os.IsNotExist(err))
+		} else {
+			assert.NoError(t, os.RemoveAll(dir))
+		}
+	}
+
+	return dir, cleanup
 }
 
 /*

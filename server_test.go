@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
 	dqlite "github.com/canonical/go-dqlite"
+	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/stretchr/testify/assert"
@@ -105,23 +107,27 @@ func TestServer_Cluster(t *testing.T) {
 }
 
 // Create a new in-memory server store populated with the given addresses.
-func newStore(t *testing.T, address string) *dqlite.DatabaseServerStore {
+func newStore(t *testing.T, address string) *client.DatabaseServerStore {
 	t.Helper()
 
-	store, err := dqlite.DefaultServerStore(":memory:")
+	store, err := client.DefaultServerStore(":memory:")
 	require.NoError(t, err)
 
-	server := dqlite.ServerInfo{Address: address}
-	require.NoError(t, store.Set(context.Background(), []dqlite.ServerInfo{server}))
+	server := client.ServerInfo{Address: address}
+	require.NoError(t, store.Set(context.Background(), []client.ServerInfo{server}))
 
 	return store
+}
+
+func dialFunc(ctx context.Context, address string) (net.Conn, error) {
+	return net.Dial("unix", fmt.Sprintf("@dqlite-%s", address))
 }
 
 func newServer(t *testing.T) (*dqlite.Server, func()) {
 	t.Helper()
 	dir, dirCleanup := newDir(t)
 
-	info := dqlite.ServerInfo{ID: uint64(1), Address: "1"}
+	info := client.ServerInfo{ID: uint64(1), Address: "1"}
 	server, err := dqlite.NewServer(info, dir, dqlite.WithServerLogFunc(logging.Test(t)))
 	require.NoError(t, err)
 
