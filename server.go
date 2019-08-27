@@ -113,10 +113,10 @@ func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
 }
 
 // Leader returns information about the current leader, if any.
-func (s *Server) LeaderAddress(ctx context.Context) (string, error) {
-	p, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
+func (s *Server) Leader(ctx context.Context) (*ServerInfo, error) {
+	p, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionOne)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to connect to dqlite task")
+		return nil, errors.Wrap(err, "failed to connect to dqlite task")
 	}
 	defer p.Close()
 
@@ -128,15 +128,17 @@ func (s *Server) LeaderAddress(ctx context.Context) (string, error) {
 	protocol.EncodeLeader(&request)
 
 	if err := p.Call(ctx, &request, &response); err != nil {
-		return "", errors.Wrap(err, "failed to send Leader request")
+		return nil, errors.Wrap(err, "failed to send Leader request")
 	}
 
-	_, leader, err := protocol.DecodeServerCompat(p, &response)
+	id, address, err := protocol.DecodeServer(&response)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to parse Server response")
+		return nil, errors.Wrap(err, "failed to parse Server response")
 	}
 
-	return leader, nil
+	info := &ServerInfo{ID: id, Address: address}
+
+	return info, nil
 }
 
 // Start serving requests.

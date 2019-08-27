@@ -12,7 +12,7 @@ import (
 )
 
 // DialFunc is a function that can be used to establish a network connection.
-type DialFunc protocol.DialFunc
+type DialFunc = protocol.DialFunc
 
 // Client speaks the dqlite wire protocol.
 type Client struct {

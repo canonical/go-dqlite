@@ -81,14 +81,15 @@ func TestServer_Dump(t *testing.T) {
 	assert.Equal(t, 8272, len(files[1].Data))
 }
 
-func TestServer_LeaderAddress(t *testing.T) {
+func TestServer_Leader(t *testing.T) {
 	server, cleanup := newServer(t)
 	defer cleanup()
 
-	leader, err := server.LeaderAddress(context.Background())
+	leader, err := server.Leader(context.Background())
 	require.NoError(t, err)
 
-	assert.Equal(t, "1", leader)
+	assert.Equal(t, leader.ID, uint64(1))
+	assert.Equal(t, leader.Address, "1")
 }
 
 func TestServer_Cluster(t *testing.T) {
