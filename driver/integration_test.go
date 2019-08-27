@@ -186,7 +186,7 @@ func newDB(t *testing.T) (*sql.DB, []*dqlite.Server, func()) {
 	require.NoError(t, store.Set(context.Background(), infos))
 
 	log := logging.Test(t)
-	driver, err := driver.NewDriver(store, driver.WithDialFunc(dialFunc), driver.WithLogFunc(log))
+	driver, err := driver.New(store, driver.WithDialFunc(dialFunc), driver.WithLogFunc(log))
 	require.NoError(t, err)
 
 	driverName := fmt.Sprintf("dqlite-integration-test-%d", driversCount)

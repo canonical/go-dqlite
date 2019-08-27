@@ -41,25 +41,25 @@ type Driver struct {
 	clientConfig      protocol.Config    // Configuration for dqlite client instances
 }
 
-// DriverError is returned in case of database errors.
-type DriverError = bindings.Error
+// Error is returned in case of database errors.
+type Error = bindings.Error
 
-// DriverOption can be used to tweak driver parameters.
-type DriverOption func(*driverOptions)
+// Option can be used to tweak driver parameters.
+type Option func(*options)
 
 // WithLogFunc sets a custom logging function.
-func WithLogFunc(log client.LogFunc) DriverOption {
-	return func(options *driverOptions) {
+func WithLogFunc(log client.LogFunc) Option {
+	return func(options *options) {
 		options.Log = log
 	}
 }
 
 // DialFunc is a function that can be used to establish a network connection.
-type DialFunc protocol.DialFunc
+type DialFunc = protocol.DialFunc
 
 // WithDialFunc sets a custom dial function.
-func WithDialFunc(dial DialFunc) DriverOption {
-	return func(options *driverOptions) {
+func WithDialFunc(dial DialFunc) Option {
+	return func(options *options) {
 		options.Dial = protocol.DialFunc(dial)
 	}
 }
@@ -67,8 +67,8 @@ func WithDialFunc(dial DialFunc) DriverOption {
 // WithConnectionTimeout sets the connection timeout.
 //
 // If not used, the default is 5 seconds.
-func WithConnectionTimeout(timeout time.Duration) DriverOption {
-	return func(options *driverOptions) {
+func WithConnectionTimeout(timeout time.Duration) Option {
+	return func(options *options) {
 		options.ConnectionTimeout = timeout
 	}
 }
@@ -77,8 +77,8 @@ func WithConnectionTimeout(timeout time.Duration) DriverOption {
 // deadline is provided.
 //
 // If not used, the default is 5 seconds.
-func WithContextTimeout(timeout time.Duration) DriverOption {
-	return func(options *driverOptions) {
+func WithContextTimeout(timeout time.Duration) Option {
+	return func(options *options) {
 		options.ContextTimeout = timeout
 	}
 }
@@ -87,8 +87,8 @@ func WithContextTimeout(timeout time.Duration) DriverOption {
 // failed connection attempts.
 //
 // If not used, the default is 50 milliseconds.
-func WithConnectionBackoffFactor(factor time.Duration) DriverOption {
-	return func(options *driverOptions) {
+func WithConnectionBackoffFactor(factor time.Duration) Option {
+	return func(options *options) {
 		options.ConnectionBackoffFactor = factor
 	}
 }
@@ -97,23 +97,23 @@ func WithConnectionBackoffFactor(factor time.Duration) DriverOption {
 // (regardless of the backoff factor) for retrying failed connection attempts.
 //
 // If not used, the default is 1 second.
-func WithConnectionBackoffCap(cap time.Duration) DriverOption {
-	return func(options *driverOptions) {
+func WithConnectionBackoffCap(cap time.Duration) Option {
+	return func(options *options) {
 		options.ConnectionBackoffCap = cap
 	}
 }
 
 // WithContext sets a global cancellation context.
-func WithContext(context context.Context) DriverOption {
-	return func(options *driverOptions) {
+func WithContext(context context.Context) Option {
+	return func(options *options) {
 		options.Context = context
 	}
 }
 
 // NewDriver creates a new dqlite driver, which also implements the
 // driver.Driver interface.
-func NewDriver(store client.ServerStore, options ...DriverOption) (*Driver, error) {
-	o := defaultDriverOptions()
+func New(store client.ServerStore, options ...Option) (*Driver, error) {
+	o := defaultOptions()
 
 	for _, option := range options {
 		option(o)
@@ -140,7 +140,7 @@ func NewDriver(store client.ServerStore, options ...DriverOption) (*Driver, erro
 }
 
 // Hold configuration options for a dqlite driver.
-type driverOptions struct {
+type options struct {
 	Log                     client.LogFunc
 	Dial                    protocol.DialFunc
 	ConnectionTimeout       time.Duration
@@ -150,9 +150,9 @@ type driverOptions struct {
 	Context                 context.Context
 }
 
-// Create a driverOptions object with sane defaults.
-func defaultDriverOptions() *driverOptions {
-	return &driverOptions{
+// Create a options object with sane defaults.
+func defaultOptions() *options {
+	return &options{
 		Log:                     client.DefaultLogFunc(),
 		Dial:                    protocol.TCPDial,
 		ConnectionTimeout:       15 * time.Second,
@@ -635,7 +635,7 @@ func driverError(err error) error {
 		case bindings.ErrIoErrLeadershipLost:
 			return driver.ErrBadConn
 		default:
-			return DriverError{
+			return Error{
 				Code:    int(err.Code),
 				Message: err.Description,
 			}

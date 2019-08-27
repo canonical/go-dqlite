@@ -327,7 +327,7 @@ func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 
 	log := logging.Test(t)
 
-	driver, err := dqlitedriver.NewDriver(store, dqlitedriver.WithDialFunc(dialFunc), dqlitedriver.WithLogFunc(log))
+	driver, err := dqlitedriver.New(store, dqlitedriver.WithDialFunc(dialFunc), dqlitedriver.WithLogFunc(log))
 	require.NoError(t, err)
 
 	return driver, cleanup
