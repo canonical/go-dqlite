@@ -87,7 +87,7 @@ func NewServer(info ServerInfo, dir string, options ...ServerOption) (*Server, e
 
 // Cluster returns information about all servers in the cluster.
 func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
-	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress)
+	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
 	}
@@ -114,7 +114,7 @@ func (s *Server) Cluster(ctx context.Context) ([]ServerInfo, error) {
 
 // Leader returns information about the current leader, if any.
 func (s *Server) LeaderAddress(ctx context.Context) (string, error) {
-	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress)
+	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to connect to dqlite task")
 	}
@@ -227,7 +227,7 @@ type File struct {
 }
 
 func (s *Server) Dump(ctx context.Context, filename string) ([]File, error) {
-	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress)
+	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
 	}

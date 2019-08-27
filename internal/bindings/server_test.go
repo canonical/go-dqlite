@@ -131,7 +131,7 @@ func newClient(t *testing.T) net.Conn {
 	require.NoError(t, err)
 
 	// Handshake
-	err = binary.Write(conn, binary.LittleEndian, protocol.ProtocolVersion)
+	err = binary.Write(conn, binary.LittleEndian, protocol.VersionLegacy)
 	require.NoError(t, err)
 
 	return conn

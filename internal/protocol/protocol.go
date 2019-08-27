@@ -18,6 +18,7 @@ type Protocol struct {
 	closeCh        chan struct{} // Stops the heartbeat when the connection gets closed
 	mu             sync.Mutex    // Serialize requests
 	netErr         error         // A network error occurred
+	version        uint64        // Protocol version
 }
 
 func NewProtocol(conn net.Conn) *Protocol {

@@ -1,7 +1,10 @@
 package protocol
 
-// ProtocolVersion is the latest dqlite server protocol version.
-const ProtocolVersion = uint64(0x86104dd760433fe5)
+// VersionOne is version 1 of the server protocol.
+const VersionOne = uint64(1)
+
+// VersionLegacy is the pre 1.0 dqlite server protocol version.
+const VersionLegacy = uint64(0x86104dd760433fe5)
 
 // SQLite datatype codes
 const (

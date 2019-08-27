@@ -18,29 +18,21 @@ type DialFunc func(context.Context, string) (net.Conn, error)
 // Connector is in charge of creating a dqlite SQL client connected to the
 // current leader of a cluster.
 type Connector struct {
-	id       uint64       // Conn ID to use when registering against the server.
-	store    ServerStore  // Used to get and update current cluster servers.
-	config   Config       // Connection parameters.
-	log      logging.Func // Logging function.
-	protocol []byte       // Protocol version
+	id     uint64       // Conn ID to use when registering against the server.
+	store  ServerStore  // Used to get and update current cluster servers.
+	config Config       // Connection parameters.
+	log    logging.Func // Logging function.
 }
 
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
 func NewConnector(id uint64, store ServerStore, config Config, log logging.Func) *Connector {
 	connector := &Connector{
-		id:       id,
-		store:    store,
-		config:   config,
-		log:      log,
-		protocol: make([]byte, 8),
+		id:     id,
+		store:  store,
+		config: config,
+		log:    log,
 	}
-
-	// Latest protocol version.
-	binary.LittleEndian.PutUint64(
-		connector.protocol,
-		ProtocolVersion,
-	)
 
 	return connector
 }
@@ -149,7 +141,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 }
 
 // Connect establishes a connection with a dqlite node.
-func Connect(ctx context.Context, dial DialFunc, address string) (*Protocol, error) {
+func Connect(ctx context.Context, dial DialFunc, address string, version uint64) (*Protocol, error) {
 	// Establish the connection.
 	conn, err := dial(ctx, address)
 	if err != nil {
@@ -158,7 +150,7 @@ func Connect(ctx context.Context, dial DialFunc, address string) (*Protocol, err
 
 	// Latest protocol version.
 	protocol := make([]byte, 8)
-	binary.LittleEndian.PutUint64(protocol, ProtocolVersion)
+	binary.LittleEndian.PutUint64(protocol, version)
 
 	// Perform the protocol handshake.
 	n, err := conn.Write(protocol)
@@ -184,7 +176,8 @@ func Connect(ctx context.Context, dial DialFunc, address string) (*Protocol, err
 // - Target is the leader:                   -> server, "", nil
 //
 func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Protocol, string, error) {
-	protocol, err := Connect(ctx, c.config.Dial, address)
+	version := VersionLegacy
+	protocol, err := Connect(ctx, c.config.Dial, address, version)
 	if err != nil {
 		return nil, "", err
 	}

@@ -50,7 +50,7 @@ func New(ctx context.Context, address string, options ...Option) (*Client, error
 
 	// Latest protocol version.
 	proto := make([]byte, 8)
-	binary.LittleEndian.PutUint64(proto, protocol.ProtocolVersion)
+	binary.LittleEndian.PutUint64(proto, protocol.VersionLegacy)
 
 	// Perform the protocol handshake.
 	n, err := conn.Write(proto)

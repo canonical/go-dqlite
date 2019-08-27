@@ -2,6 +2,7 @@ package protocol_test
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
@@ -254,7 +255,7 @@ func newServer(t *testing.T, index int) (string, func()) {
 	id := uint(index + 1)
 	dir, dirCleanup := newDir(t)
 
-	address := "@test"
+	address := fmt.Sprintf("@test-%d", index)
 
 	server, err := bindings.NewServer(id, address, dir)
 	require.NoError(t, err)
