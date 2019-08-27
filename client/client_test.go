@@ -63,6 +63,25 @@ func TestNode_Dump(t *testing.T) {
 	assert.Equal(t, 8272, len(files[1].Data))
 }
 
+func TestNode_Cluster(t *testing.T) {
+	node, cleanup := newNode(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	client, err := client.New(ctx, node.BindAddress())
+	require.NoError(t, err)
+	defer client.Close()
+
+	servers, err := client.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Len(t, servers, 1)
+	assert.Equal(t, servers[0].ID, uint64(1))
+	assert.Equal(t, servers[0].Address, "1")
+}
+
 func newNode(t *testing.T) (*dqlite.Node, func()) {
 	t.Helper()
 	dir, dirCleanup := newDir(t)

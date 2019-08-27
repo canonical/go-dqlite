@@ -88,33 +88,6 @@ func (s *Node) BindAddress() string {
 	return s.server.GetBindAddress()
 }
 
-// Cluster returns information about all servers in the cluster.
-func (s *Node) Cluster(ctx context.Context) ([]client.NodeInfo, error) {
-	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to dqlite task")
-	}
-	defer c.Close()
-
-	request := protocol.Message{}
-	request.Init(16)
-	response := protocol.Message{}
-	response.Init(512)
-
-	protocol.EncodeCluster(&request)
-
-	if err := c.Call(ctx, &request, &response); err != nil {
-		return nil, errors.Wrap(err, "failed to send Cluster request")
-	}
-
-	servers, err := protocol.DecodeNodes(&response)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse Node response")
-	}
-
-	return servers, nil
-}
-
 // Leader returns information about the current leader, if any.
 func (s *Node) Leader(ctx context.Context) (*client.NodeInfo, error) {
 	p, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionOne)

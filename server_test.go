@@ -26,18 +26,6 @@ func TestNode_Leader(t *testing.T) {
 	assert.Equal(t, leader.Address, "1")
 }
 
-func TestNode_Cluster(t *testing.T) {
-	server, cleanup := newNode(t)
-	defer cleanup()
-
-	servers, err := server.Cluster(context.Background())
-	require.NoError(t, err)
-
-	assert.Len(t, servers, 1)
-	assert.Equal(t, servers[0].ID, uint64(1))
-	assert.Equal(t, servers[0].Address, "1")
-}
-
 // Create a new in-memory server store populated with the given addresses.
 func newStore(t *testing.T, address string) *client.DatabaseNodeStore {
 	t.Helper()

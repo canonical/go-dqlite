@@ -68,6 +68,27 @@ func New(ctx context.Context, address string, options ...Option) (*Client, error
 	return client, nil
 }
 
+// Cluster returns information about all nodes in the cluster.
+func (c *Client) Cluster(ctx context.Context) ([]NodeInfo, error) {
+	request := protocol.Message{}
+	request.Init(16)
+	response := protocol.Message{}
+	response.Init(512)
+
+	protocol.EncodeCluster(&request)
+
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to send Cluster request")
+	}
+
+	servers, err := protocol.DecodeNodes(&response)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse Node response")
+	}
+
+	return servers, nil
+}
+
 // File holds the content of a single database file.
 type File struct {
 	Name string
