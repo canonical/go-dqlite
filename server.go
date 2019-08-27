@@ -1,12 +1,8 @@
 package dqlite
 
 import (
-	"context"
 	"fmt"
-	"time"
 
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/protocol"
@@ -91,38 +87,6 @@ func (s *Node) BindAddress() string {
 // Start serving requests.
 func (s *Node) Start() error {
 	return s.server.Start()
-}
-
-// Leave a cluster.
-func Leave(ctx context.Context, id uint64, store client.NodeStore, dial client.DialFunc) error {
-	if dial == nil {
-		dial = protocol.TCPDial
-	}
-	config := protocol.Config{
-		Dial:           protocol.DialFunc(dial),
-		AttemptTimeout: time.Second,
-		RetryStrategies: []strategy.Strategy{
-			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
-	}
-	connector := protocol.NewConnector(0, store, config, client.DefaultLogFunc)
-	c, err := connector.Connect(ctx)
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-
-	request := protocol.Message{}
-	request.Init(4096)
-	response := protocol.Message{}
-	response.Init(4096)
-
-	protocol.EncodeRemove(&request, id)
-
-	if err := c.Call(ctx, &request, &response); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // Hold configuration options for a dqlite server.

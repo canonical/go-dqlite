@@ -184,6 +184,22 @@ func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 	return nil
 }
 
+// Remove a node from the cluster.
+func (c *Client) Remove(ctx context.Context, id uint64) error {
+	request := protocol.Message{}
+	request.Init(4096)
+	response := protocol.Message{}
+	response.Init(4096)
+
+	protocol.EncodeRemove(&request, id)
+
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Close the client.
 func (c *Client) Close() error {
 	return c.protocol.Close()
