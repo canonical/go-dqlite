@@ -19,8 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestServer_Dump(t *testing.T) {
-	server, cleanup := newServer(t)
+func TestNode_Dump(t *testing.T) {
+	server, cleanup := newNode(t)
 	defer cleanup()
 
 	store := newStore(t, "1")
@@ -83,8 +83,8 @@ func TestServer_Dump(t *testing.T) {
 	assert.Equal(t, 8272, len(files[1].Data))
 }
 
-func TestServer_Leader(t *testing.T) {
-	server, cleanup := newServer(t)
+func TestNode_Leader(t *testing.T) {
+	server, cleanup := newNode(t)
 	defer cleanup()
 
 	leader, err := server.Leader(context.Background())
@@ -94,8 +94,8 @@ func TestServer_Leader(t *testing.T) {
 	assert.Equal(t, leader.Address, "1")
 }
 
-func TestServer_Cluster(t *testing.T) {
-	server, cleanup := newServer(t)
+func TestNode_Cluster(t *testing.T) {
+	server, cleanup := newNode(t)
 	defer cleanup()
 
 	servers, err := server.Cluster(context.Background())
@@ -107,14 +107,14 @@ func TestServer_Cluster(t *testing.T) {
 }
 
 // Create a new in-memory server store populated with the given addresses.
-func newStore(t *testing.T, address string) *client.DatabaseServerStore {
+func newStore(t *testing.T, address string) *client.DatabaseNodeStore {
 	t.Helper()
 
-	store, err := client.DefaultServerStore(":memory:")
+	store, err := client.DefaultNodeStore(":memory:")
 	require.NoError(t, err)
 
-	server := client.ServerInfo{Address: address}
-	require.NoError(t, store.Set(context.Background(), []client.ServerInfo{server}))
+	server := client.NodeInfo{Address: address}
+	require.NoError(t, store.Set(context.Background(), []client.NodeInfo{server}))
 
 	return store
 }
@@ -123,12 +123,12 @@ func dialFunc(ctx context.Context, address string) (net.Conn, error) {
 	return net.Dial("unix", fmt.Sprintf("@dqlite-%s", address))
 }
 
-func newServer(t *testing.T) (*dqlite.Server, func()) {
+func newNode(t *testing.T) (*dqlite.Node, func()) {
 	t.Helper()
 	dir, dirCleanup := newDir(t)
 
-	info := client.ServerInfo{ID: uint64(1), Address: "1"}
-	server, err := dqlite.NewServer(info, dir, dqlite.WithServerLogFunc(logging.Test(t)))
+	info := client.NodeInfo{ID: uint64(1), Address: "1"}
+	server, err := dqlite.NewNode(info, dir, dqlite.WithNodeLogFunc(logging.Test(t)))
 	require.NoError(t, err)
 
 	err = server.Start()

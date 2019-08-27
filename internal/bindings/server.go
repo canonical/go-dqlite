@@ -71,8 +71,8 @@ import (
 	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
-// Server is a Go wrapper arround dqlite_server.
-type Server C.dqlite_node
+// Node is a Go wrapper arround dqlite_server.
+type Node C.dqlite_node
 
 // Init initializes dqlite global state.
 func Init() error {
@@ -89,8 +89,8 @@ func Init() error {
 	return nil
 }
 
-// NewServer creates a new Server instance.
-func NewServer(id uint, address string, dir string) (*Server, error) {
+// NewNode creates a new Node instance.
+func NewNode(id uint, address string, dir string) (*Node, error) {
 	var server *C.dqlite_node
 	cid := C.unsigned(id)
 
@@ -104,10 +104,10 @@ func NewServer(id uint, address string, dir string) (*Server, error) {
 		return nil, fmt.Errorf("failed to create task object")
 	}
 
-	return (*Server)(unsafe.Pointer(server)), nil
+	return (*Node)(unsafe.Pointer(server)), nil
 }
 
-func (s *Server) SetDialFunc(dial protocol.DialFunc) error {
+func (s *Node) SetDialFunc(dial protocol.DialFunc) error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	connectLock.Lock()
 	defer connectLock.Unlock()
@@ -119,7 +119,7 @@ func (s *Server) SetDialFunc(dial protocol.DialFunc) error {
 	return nil
 }
 
-func (s *Server) SetBindAddress(address string) error {
+func (s *Node) SetBindAddress(address string) error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	caddress := C.CString(address)
 	defer C.free(unsafe.Pointer(caddress))
@@ -129,12 +129,12 @@ func (s *Server) SetBindAddress(address string) error {
 	return nil
 }
 
-func (s *Server) GetBindAddress() string {
+func (s *Node) GetBindAddress() string {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	return C.GoString(C.dqlite_node_get_bind_address(server))
 }
 
-func (s *Server) Start() error {
+func (s *Node) Start() error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	if rc := C.dqlite_node_start(server); rc != 0 {
 		return fmt.Errorf("failed to start task")
@@ -142,7 +142,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-func (s *Server) Stop() error {
+func (s *Node) Stop() error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	if rc := C.dqlite_node_stop(server); rc != 0 {
 		return fmt.Errorf("task stopped with error code %d", rc)
@@ -151,7 +151,7 @@ func (s *Server) Stop() error {
 }
 
 // Close the server releasing all used resources.
-func (s *Server) Close() {
+func (s *Node) Close() {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	C.dqlite_node_destroy(server)
 }
@@ -208,8 +208,8 @@ var connectRegistry = make(map[C.uintptr_t]protocol.DialFunc)
 var connectIndex C.uintptr_t = 100
 var connectLock = sync.Mutex{}
 
-// ErrServerStopped is returned by Server.Handle() is the server was stopped.
-var ErrServerStopped = fmt.Errorf("server was stopped")
+// ErrNodeStopped is returned by Node.Handle() is the server was stopped.
+var ErrNodeStopped = fmt.Errorf("server was stopped")
 
 // To compare bool values.
 var cfalse C.bool

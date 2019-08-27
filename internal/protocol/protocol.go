@@ -304,8 +304,8 @@ func (p *Protocol) heartbeat() {
 			return
 		}
 
-		//addresses, err := DecodeServers(&response)
-		_, err = DecodeServers(&response)
+		//addresses, err := DecodeNodes(&response)
+		_, err = DecodeNodes(&response)
 		if err != nil {
 			cancel()
 			//c.logger.Error("invalid heartbeat response", zap.Error(err))
@@ -326,15 +326,15 @@ func (p *Protocol) heartbeat() {
 }
 */
 
-// DecodeServerCompat handles also pre-1.0 legacy server messages.
-func DecodeServerCompat(protocol *Protocol, response *Message) (uint64, string, error) {
+// DecodeNodeCompat handles also pre-1.0 legacy server messages.
+func DecodeNodeCompat(protocol *Protocol, response *Message) (uint64, string, error) {
 	if protocol.version == VersionLegacy {
-		address, err := DecodeServerLegacy(response)
+		address, err := DecodeNodeLegacy(response)
 		if err != nil {
 			return 0, "", err
 		}
 		return 0, address, nil
 
 	}
-	return DecodeServer(response)
+	return DecodeNode(response)
 }

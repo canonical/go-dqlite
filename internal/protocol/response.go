@@ -6,7 +6,6 @@ package protocol
 
 import "fmt"
 
-
 // DecodeFailure decodes a Failure response.
 func DecodeFailure(response *Message) (code uint64, message string, err error) {
 	mtype, _ := response.getHeader()
@@ -15,13 +14,13 @@ func DecodeFailure(response *Message) (code uint64, message string, err error) {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
 	if mtype != ResponseFailure {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	code = response.getUint64()
@@ -38,13 +37,13 @@ func DecodeWelcome(response *Message) (heartbeatTimeout uint64, err error) {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
 	if mtype != ResponseWelcome {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	heartbeatTimeout = response.getUint64()
@@ -52,21 +51,21 @@ func DecodeWelcome(response *Message) (heartbeatTimeout uint64, err error) {
 	return
 }
 
-// DecodeServerLegacy decodes a ServerLegacy response.
-func DecodeServerLegacy(response *Message) (address string, err error) {
+// DecodeNodeLegacy decodes a NodeLegacy response.
+func DecodeNodeLegacy(response *Message) (address string, err error) {
 	mtype, _ := response.getHeader()
 
 	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != ResponseServerLegacy {
+	if mtype != ResponseNodeLegacy {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	address = response.getString()
@@ -74,21 +73,21 @@ func DecodeServerLegacy(response *Message) (address string, err error) {
 	return
 }
 
-// DecodeServer decodes a Server response.
-func DecodeServer(response *Message) (id uint64, address string, err error) {
+// DecodeNode decodes a Node response.
+func DecodeNode(response *Message) (id uint64, address string, err error) {
 	mtype, _ := response.getHeader()
 
 	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != ResponseServer {
+	if mtype != ResponseNode {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	id = response.getUint64()
@@ -97,24 +96,24 @@ func DecodeServer(response *Message) (id uint64, address string, err error) {
 	return
 }
 
-// DecodeServers decodes a Servers response.
-func DecodeServers(response *Message) (servers Servers, err error) {
+// DecodeNodes decodes a Nodes response.
+func DecodeNodes(response *Message) (servers Nodes, err error) {
 	mtype, _ := response.getHeader()
 
 	if mtype == ResponseFailure {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
-	if mtype != ResponseServers {
+	if mtype != ResponseNodes {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
-	servers = response.getServers()
+	servers = response.getNodes()
 
 	return
 }
@@ -127,13 +126,13 @@ func DecodeDb(response *Message) (id uint32, err error) {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
 	if mtype != ResponseDb {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	id = response.getUint32()
@@ -150,13 +149,13 @@ func DecodeStmt(response *Message) (db uint32, id uint32, params uint64, err err
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
 	if mtype != ResponseStmt {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	db = response.getUint32()
@@ -174,13 +173,13 @@ func DecodeEmpty(response *Message) (err error) {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
 	if mtype != ResponseEmpty {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	response.getUint64()
@@ -196,13 +195,13 @@ func DecodeResult(response *Message) (result Result, err error) {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
 	if mtype != ResponseResult {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	result = response.getResult()
@@ -218,13 +217,13 @@ func DecodeRows(response *Message) (rows Rows, err error) {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
 	if mtype != ResponseRows {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	rows = response.getRows()
@@ -240,13 +239,13 @@ func DecodeFiles(response *Message) (files Files, err error) {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
 	if mtype != ResponseFiles {
 		err = fmt.Errorf("unexpected response type %d", mtype)
-                return
+		return
 	}
 
 	files = response.getFiles()

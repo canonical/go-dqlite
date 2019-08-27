@@ -321,7 +321,7 @@ INSERT INTO test (n,t) VALUES (3,'b');
 func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 	t.Helper()
 
-	_, cleanup := newServer(t)
+	_, cleanup := newNode(t)
 
 	store := newStore(t, "1")
 
@@ -334,24 +334,24 @@ func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 }
 
 // Create a new in-memory server store populated with the given addresses.
-func newStore(t *testing.T, address string) *client.DatabaseServerStore {
+func newStore(t *testing.T, address string) *client.DatabaseNodeStore {
 	t.Helper()
 
-	store, err := client.DefaultServerStore(":memory:")
+	store, err := client.DefaultNodeStore(":memory:")
 	require.NoError(t, err)
 
-	server := client.ServerInfo{Address: address}
-	require.NoError(t, store.Set(context.Background(), []client.ServerInfo{server}))
+	server := client.NodeInfo{Address: address}
+	require.NoError(t, store.Set(context.Background(), []client.NodeInfo{server}))
 
 	return store
 }
 
-func newServer(t *testing.T) (*dqlite.Server, func()) {
+func newNode(t *testing.T) (*dqlite.Node, func()) {
 	t.Helper()
 	dir, dirCleanup := newDir(t)
 
-	info := client.ServerInfo{ID: uint64(1), Address: "1"}
-	server, err := dqlite.NewServer(info, dir, dqlite.WithServerLogFunc(logging.Test(t)))
+	info := client.NodeInfo{ID: uint64(1), Address: "1"}
+	server, err := dqlite.NewNode(info, dir, dqlite.WithNodeLogFunc(logging.Test(t)))
 	require.NoError(t, err)
 
 	err = server.Start()
@@ -492,7 +492,7 @@ func TestDriver_OpenError(t *testing.T) {
 
 	registry := dqlite.NewRegistry(dir)
 	fsm := dqlite.NewFSM(registry)
-	raft, cleanup := rafttest.Server(t, fsm)
+	raft, cleanup := rafttest.Node(t, fsm)
 	defer cleanup()
 	config := dqlite.DriverConfig{}
 
@@ -574,11 +574,11 @@ func TestDriver_Leader(t *testing.T) {
 }
 
 // Return the addresses of all current raft servers.
-func TestDriver_Servers(t *testing.T) {
+func TestDriver_Nodes(t *testing.T) {
 	driver, cleanup := newDriver(t)
 	defer cleanup()
 
-	servers, err := driver.Servers()
+	servers, err := driver.Nodes()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"0"}, servers)
 }
@@ -661,7 +661,7 @@ func newDriverWithConfig(t *testing.T, config dqlite.DriverConfig) (*dqlite.Driv
 
 	registry := dqlite.NewRegistry(dir)
 	fsm := dqlite.NewFSM(registry)
-	raft, raftCleanup := rafttest.Server(t, fsm)
+	raft, raftCleanup := rafttest.Node(t, fsm)
 
 	driver, err := dqlite.NewDriver(registry, raft, config)
 	require.NoError(t, err)

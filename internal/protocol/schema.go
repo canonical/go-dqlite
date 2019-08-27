@@ -22,9 +22,9 @@ package protocol
 //go:generate ./schema.sh --response init
 //go:generate ./schema.sh --response Failure  code:uint64 message:string
 //go:generate ./schema.sh --response Welcome  heartbeatTimeout:uint64
-//go:generate ./schema.sh --response ServerLegacy  address:string
-//go:generate ./schema.sh --response Server   id:uint64 address:string
-//go:generate ./schema.sh --response Servers  servers:Servers
+//go:generate ./schema.sh --response NodeLegacy  address:string
+//go:generate ./schema.sh --response Node   id:uint64 address:string
+//go:generate ./schema.sh --response Nodes  servers:Nodes
 //go:generate ./schema.sh --response Db       id:uint32 unused:uint32
 //go:generate ./schema.sh --response Stmt     db:uint32 id:uint32 params:uint64
 //go:generate ./schema.sh --response Empty    unused:uint64

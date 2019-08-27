@@ -19,14 +19,14 @@ type DialFunc func(context.Context, string) (net.Conn, error)
 // current leader of a cluster.
 type Connector struct {
 	id     uint64       // Conn ID to use when registering against the server.
-	store  ServerStore  // Used to get and update current cluster servers.
+	store  NodeStore    // Used to get and update current cluster servers.
 	config Config       // Connection parameters.
 	log    logging.Func // Logging function.
 }
 
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
-func NewConnector(id uint64, store ServerStore, config Config, log logging.Func) *Connector {
+func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *Connector {
 	connector := &Connector{
 		id:     id,
 		store:  store,
@@ -206,10 +206,10 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 		return nil, "", errors.Wrap(err, "failed to send Leader request")
 	}
 
-	_, leader, err := DecodeServerCompat(protocol, &response)
+	_, leader, err := DecodeNodeCompat(protocol, &response)
 	if err != nil {
 		protocol.Close()
-		return nil, "", errors.Wrap(err, "failed to parse Server response")
+		return nil, "", errors.Wrap(err, "failed to parse Node response")
 	}
 
 	switch leader {

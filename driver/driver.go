@@ -33,12 +33,12 @@ import (
 
 // Driver perform queries against a dqlite server.
 type Driver struct {
-	log               client.LogFunc     // Log function to use
-	store             client.ServerStore // Holds addresses of dqlite servers
-	context           context.Context    // Global cancellation context
-	connectionTimeout time.Duration      // Max time to wait for a new connection
-	contextTimeout    time.Duration      // Default client context timeout.
-	clientConfig      protocol.Config    // Configuration for dqlite client instances
+	log               client.LogFunc   // Log function to use
+	store             client.NodeStore // Holds addresses of dqlite servers
+	context           context.Context  // Global cancellation context
+	connectionTimeout time.Duration    // Max time to wait for a new connection
+	contextTimeout    time.Duration    // Default client context timeout.
+	clientConfig      protocol.Config  // Configuration for dqlite client instances
 }
 
 // Error is returned in case of database errors.
@@ -47,6 +47,15 @@ type Error = bindings.Error
 // Option can be used to tweak driver parameters.
 type Option func(*options)
 
+// NodeStore is a convenience alias of client.NodeStore.
+type NodeStore = client.NodeStore
+
+// NodeInfo is a convenience alias of client.NodeInfo.
+type NodeInfo = client.NodeInfo
+
+// DefaultNodeStore is a convenience alias of client.DefaultNodeStore.
+var DefaultNodeStore = client.DefaultNodeStore
+
 // WithLogFunc sets a custom logging function.
 func WithLogFunc(log client.LogFunc) Option {
 	return func(options *options) {
@@ -54,7 +63,8 @@ func WithLogFunc(log client.LogFunc) Option {
 	}
 }
 
-// DialFunc is a function that can be used to establish a network connection.
+// DialFunc is a function that can be used to establish a network connection
+// with a dqlite node.
 type DialFunc = protocol.DialFunc
 
 // WithDialFunc sets a custom dial function.
@@ -70,16 +80,6 @@ func WithDialFunc(dial DialFunc) Option {
 func WithConnectionTimeout(timeout time.Duration) Option {
 	return func(options *options) {
 		options.ConnectionTimeout = timeout
-	}
-}
-
-// WithContextTimeout sets the default client context timeout when no context
-// deadline is provided.
-//
-// If not used, the default is 5 seconds.
-func WithContextTimeout(timeout time.Duration) Option {
-	return func(options *options) {
-		options.ContextTimeout = timeout
 	}
 }
 
@@ -110,9 +110,19 @@ func WithContext(context context.Context) Option {
 	}
 }
 
+// WithContextTimeout sets the default client context timeout when no context
+// deadline is provided.
+//
+// If not used, the default is 5 seconds.
+func WithContextTimeout(timeout time.Duration) Option {
+	return func(options *options) {
+		options.ContextTimeout = timeout
+	}
+}
+
 // NewDriver creates a new dqlite driver, which also implements the
 // driver.Driver interface.
-func New(store client.ServerStore, options ...Option) (*Driver, error) {
+func New(store client.NodeStore, options ...Option) (*Driver, error) {
 	o := defaultOptions()
 
 	for _, option := range options {

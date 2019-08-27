@@ -136,16 +136,16 @@ func TestIntegration_LargeQuery(t *testing.T) {
 
 func TestMembership(t *testing.T) {
 	n := 3
-	servers := make([]*dqlite.Server, n)
-	var leaderInfo client.ServerInfo
+	servers := make([]*dqlite.Node, n)
+	var leaderInfo client.NodeInfo
 
 	for i := range servers {
 		id := uint64(i + 1)
-		info := client.ServerInfo{ID: id, Address: fmt.Sprintf("%d", id)}
+		info := client.NodeInfo{ID: id, Address: fmt.Sprintf("%d", id)}
 		dir, cleanup := newDir(t)
 		defer cleanup()
-		server, err := dqlite.NewServer(
-			info, dir, dqlite.WithServerDialFunc(dialFunc), dqlite.WithServerLogFunc(logging.Test(t)))
+		server, err := dqlite.NewNode(
+			info, dir, dqlite.WithNodeDialFunc(dialFunc), dqlite.WithNodeLogFunc(logging.Test(t)))
 		require.NoError(t, err)
 		servers[i] = server
 		if i == 0 {
@@ -156,8 +156,8 @@ func TestMembership(t *testing.T) {
 		defer server.Close()
 	}
 
-	store := client.NewInmemServerStore()
-	store.Set(context.Background(), []client.ServerInfo{leaderInfo})
+	store := client.NewInmemNodeStore()
+	store.Set(context.Background(), []client.NodeInfo{leaderInfo})
 	server := servers[1]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -169,18 +169,18 @@ func dialFunc(ctx context.Context, address string) (net.Conn, error) {
 	return net.Dial("unix", fmt.Sprintf("@dqlite-%s", address))
 }
 
-func newDB(t *testing.T) (*sql.DB, []*dqlite.Server, func()) {
+func newDB(t *testing.T) (*sql.DB, []*dqlite.Node, func()) {
 	n := 3
 
-	infos := make([]client.ServerInfo, n)
+	infos := make([]client.NodeInfo, n)
 	for i := range infos {
 		infos[i].ID = uint64(i + 1)
 		infos[i].Address = fmt.Sprintf("%d", infos[i].ID)
 	}
 
-	servers, cleanup := newServers(t, infos)
+	servers, cleanup := newNodes(t, infos)
 
-	store, err := client.DefaultServerStore(":memory:")
+	store, err := client.DefaultNodeStore(":memory:")
 	require.NoError(t, err)
 
 	require.NoError(t, store.Set(context.Background(), infos))
@@ -200,18 +200,18 @@ func newDB(t *testing.T) (*sql.DB, []*dqlite.Server, func()) {
 	return db, servers, cleanup
 }
 
-func newServers(t *testing.T, infos []client.ServerInfo) ([]*dqlite.Server, func()) {
+func newNodes(t *testing.T, infos []client.NodeInfo) ([]*dqlite.Node, func()) {
 	t.Helper()
 
 	n := len(infos)
-	servers := make([]*dqlite.Server, n)
+	servers := make([]*dqlite.Node, n)
 	cleanups := make([]func(), 0)
 
 	for i, info := range infos {
 		dir, dirCleanup := newDir(t)
-		server, err := dqlite.NewServer(
-			info, dir, dqlite.WithServerDialFunc(dialFunc),
-			dqlite.WithServerLogFunc(logging.Test(t)))
+		server, err := dqlite.NewNode(
+			info, dir, dqlite.WithNodeDialFunc(dialFunc),
+			dqlite.WithNodeLogFunc(logging.Test(t)))
 		require.NoError(t, err)
 
 		cleanups = append(cleanups, func() {

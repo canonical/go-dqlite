@@ -11,38 +11,33 @@ import (
 	_ "github.com/mattn/go-sqlite3" // Go SQLite bindings
 )
 
-// ServerStore is used by a dqlite client to get an initial list of candidate
-// dqlite server addresses that it can dial in order to find a leader dqlite
-// server to use.
-//
-// Once connected, the client periodically updates the addresses in the store
-// by querying the leader server about changes in the cluster (such as servers
-// being added or removed).
-type ServerStore = protocol.ServerStore
+// NodeStore is used by a dqlite client to get an initial list of candidate
+// dqlite nodes that it can dial in order to find a leader dqlite node to use.
+type NodeStore = protocol.NodeStore
 
-// ServerInfo holds information about a single server.
-type ServerInfo = protocol.ServerInfo
+// NodeInfo holds information about a single server.
+type NodeInfo = protocol.NodeInfo
 
-// InmemServerStore keeps the list of target gRPC SQL servers in memory.
-type InmemServerStore = protocol.InmemServerStore
+// InmemNodeStore keeps the list of target dqlite nodes in memory.
+type InmemNodeStore = protocol.InmemNodeStore
 
-// NewInmemServerStore creates ServerStore which stores its data in-memory.
-var NewInmemServerStore = protocol.NewInmemServerStore
+// NewInmemNodeStore creates NodeStore which stores its data in-memory.
+var NewInmemNodeStore = protocol.NewInmemNodeStore
 
-// DatabaseServerStore persists a list addresses of dqlite servers in a SQL table.
-type DatabaseServerStore struct {
+// DatabaseNodeStore persists a list addresses of dqlite nodes in a SQL table.
+type DatabaseNodeStore struct {
 	db     *sql.DB // Database handle to use.
 	schema string  // Name of the schema holding the servers table.
 	table  string  // Name of the servers table.
 	column string  // Column name in the servers table holding the server address.
 }
 
-// DefaultServerStore creates a new ServerStore using the given filename to
+// DefaultNodeStore creates a new NodeStore using the given filename to
 // open a SQLite database, with default names for the schema, table and column
 // parameters.
 //
 // It also creates the table if it doesn't exist yet.
-func DefaultServerStore(filename string) (*DatabaseServerStore, error) {
+func DefaultNodeStore(filename string) (*DatabaseNodeStore, error) {
 	// Open the database.
 	db, err := sql.Open("sqlite3", filename)
 	if err != nil {
@@ -59,14 +54,14 @@ func DefaultServerStore(filename string) (*DatabaseServerStore, error) {
 		return nil, errors.Wrap(err, "failed to create servers table")
 	}
 
-	store := NewServerStore(db, "main", "servers", "address")
+	store := NewNodeStore(db, "main", "servers", "address")
 
 	return store, nil
 }
 
-// NewServerStore creates a new ServerStore.
-func NewServerStore(db *sql.DB, schema, table, column string) *DatabaseServerStore {
-	return &DatabaseServerStore{
+// NewNodeStore creates a new NodeStore.
+func NewNodeStore(db *sql.DB, schema, table, column string) *DatabaseNodeStore {
+	return &DatabaseNodeStore{
 		db:     db,
 		schema: schema,
 		table:  table,
@@ -75,7 +70,7 @@ func NewServerStore(db *sql.DB, schema, table, column string) *DatabaseServerSto
 }
 
 // Get the current servers.
-func (d *DatabaseServerStore) Get(ctx context.Context) ([]ServerInfo, error) {
+func (d *DatabaseNodeStore) Get(ctx context.Context) ([]NodeInfo, error) {
 	tx, err := d.db.Begin()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to begin transaction")
@@ -89,14 +84,14 @@ func (d *DatabaseServerStore) Get(ctx context.Context) ([]ServerInfo, error) {
 	}
 	defer rows.Close()
 
-	servers := make([]ServerInfo, 0)
+	servers := make([]NodeInfo, 0)
 	for rows.Next() {
 		var address string
 		err := rows.Scan(&address)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to fetch server address")
 		}
-		servers = append(servers, ServerInfo{ID: 1, Address: address})
+		servers = append(servers, NodeInfo{ID: 1, Address: address})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, errors.Wrap(err, "result set failure")
@@ -106,7 +101,7 @@ func (d *DatabaseServerStore) Get(ctx context.Context) ([]ServerInfo, error) {
 }
 
 // Set the servers addresses.
-func (d *DatabaseServerStore) Set(ctx context.Context, servers []ServerInfo) error {
+func (d *DatabaseNodeStore) Set(ctx context.Context, servers []NodeInfo) error {
 	tx, err := d.db.Begin()
 	if err != nil {
 		return errors.Wrap(err, "failed to begin transaction")

@@ -13,49 +13,49 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Server implements the dqlite network protocol.
-type Server struct {
-	log         LogFunc          // Logger
-	server      *bindings.Server // Low-level C implementation
-	acceptCh    chan error       // Receives connection handling errors
+// Node implements the dqlite network protocol.
+type Node struct {
+	log         LogFunc        // Logger
+	server      *bindings.Node // Low-level C implementation
+	acceptCh    chan error     // Receives connection handling errors
 	id          uint64
 	address     string
 	bindAddress string
 }
 
-// ServerOption can be used to tweak server parameters.
-type ServerOption func(*serverOptions)
+// NodeOption can be used to tweak server parameters.
+type NodeOption func(*serverOptions)
 
-// WithServerLogFunc sets a custom log function for the server.
-func WithServerLogFunc(log LogFunc) ServerOption {
+// WithNodeLogFunc sets a custom log function for the server.
+func WithNodeLogFunc(log LogFunc) NodeOption {
 	return func(options *serverOptions) {
 		options.Log = log
 	}
 }
 
-// WithServerDialFunc sets a custom dial function for the server.
-func WithServerDialFunc(dial client.DialFunc) ServerOption {
+// WithNodeDialFunc sets a custom dial function for the server.
+func WithNodeDialFunc(dial client.DialFunc) NodeOption {
 	return func(options *serverOptions) {
 		options.DialFunc = dial
 	}
 }
 
 // WithBindAddress sets a custom bind address for the server.
-func WithServerBindAddress(address string) ServerOption {
+func WithNodeBindAddress(address string) NodeOption {
 	return func(options *serverOptions) {
 		options.BindAddress = address
 	}
 }
 
-// NewServer creates a new Server instance.
-func NewServer(info client.ServerInfo, dir string, options ...ServerOption) (*Server, error) {
-	o := defaultServerOptions()
+// NewNode creates a new Node instance.
+func NewNode(info client.NodeInfo, dir string, options ...NodeOption) (*Node, error) {
+	o := defaultNodeOptions()
 
 	for _, option := range options {
 		option(o)
 	}
 
-	server, err := bindings.NewServer(uint(info.ID), info.Address, dir)
+	server, err := bindings.NewNode(uint(info.ID), info.Address, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func NewServer(info client.ServerInfo, dir string, options ...ServerOption) (*Se
 	if err := server.SetBindAddress(bindAddress); err != nil {
 		return nil, err
 	}
-	s := &Server{
+	s := &Node{
 		log:         o.Log,
 		server:      server,
 		acceptCh:    make(chan error, 1),
@@ -84,7 +84,7 @@ func NewServer(info client.ServerInfo, dir string, options ...ServerOption) (*Se
 }
 
 // Cluster returns information about all servers in the cluster.
-func (s *Server) Cluster(ctx context.Context) ([]client.ServerInfo, error) {
+func (s *Node) Cluster(ctx context.Context) ([]client.NodeInfo, error) {
 	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
@@ -102,16 +102,16 @@ func (s *Server) Cluster(ctx context.Context) ([]client.ServerInfo, error) {
 		return nil, errors.Wrap(err, "failed to send Cluster request")
 	}
 
-	servers, err := protocol.DecodeServers(&response)
+	servers, err := protocol.DecodeNodes(&response)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse Server response")
+		return nil, errors.Wrap(err, "failed to parse Node response")
 	}
 
 	return servers, nil
 }
 
 // Leader returns information about the current leader, if any.
-func (s *Server) Leader(ctx context.Context) (*client.ServerInfo, error) {
+func (s *Node) Leader(ctx context.Context) (*client.NodeInfo, error) {
 	p, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionOne)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
@@ -129,23 +129,23 @@ func (s *Server) Leader(ctx context.Context) (*client.ServerInfo, error) {
 		return nil, errors.Wrap(err, "failed to send Leader request")
 	}
 
-	id, address, err := protocol.DecodeServer(&response)
+	id, address, err := protocol.DecodeNode(&response)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse Server response")
+		return nil, errors.Wrap(err, "failed to parse Node response")
 	}
 
-	info := &client.ServerInfo{ID: id, Address: address}
+	info := &client.NodeInfo{ID: id, Address: address}
 
 	return info, nil
 }
 
 // Start serving requests.
-func (s *Server) Start() error {
+func (s *Node) Start() error {
 	return s.server.Start()
 }
 
 // Join a cluster.
-func (s *Server) Join(ctx context.Context, store client.ServerStore, dial client.DialFunc) error {
+func (s *Node) Join(ctx context.Context, store client.NodeStore, dial client.DialFunc) error {
 	if dial == nil {
 		dial = protocol.TCPDial
 	}
@@ -183,7 +183,7 @@ func (s *Server) Join(ctx context.Context, store client.ServerStore, dial client
 }
 
 // Leave a cluster.
-func Leave(ctx context.Context, id uint64, store client.ServerStore, dial client.DialFunc) error {
+func Leave(ctx context.Context, id uint64, store client.NodeStore, dial client.DialFunc) error {
 	if dial == nil {
 		dial = protocol.TCPDial
 	}
@@ -226,7 +226,7 @@ type File struct {
 	Data []byte
 }
 
-func (s *Server) Dump(ctx context.Context, filename string) ([]File, error) {
+func (s *Node) Dump(ctx context.Context, filename string) ([]File, error) {
 	c, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionLegacy)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to connect to dqlite task")
@@ -264,7 +264,7 @@ func (s *Server) Dump(ctx context.Context, filename string) ([]File, error) {
 }
 
 // Close the server, releasing all resources it created.
-func (s *Server) Close() error {
+func (s *Node) Close() error {
 	// Send a stop signal to the dqlite event loop.
 	if err := s.server.Stop(); err != nil {
 		return errors.Wrap(err, "server failed to stop")
@@ -276,7 +276,7 @@ func (s *Server) Close() error {
 }
 
 // Create a serverOptions object with sane defaults.
-func defaultServerOptions() *serverOptions {
+func defaultNodeOptions() *serverOptions {
 	return &serverOptions{
 		Log: defaultLogFunc(),
 	}

@@ -26,8 +26,8 @@ type options struct {
 	DialFunc DialFunc
 }
 
-// WithServerDialFunc sets a custom dial function for creating the client
-// network connection.
+// WithDialFunc sets a custom dial function for creating the client network
+// connection.
 func WithDialFunc(dial DialFunc) Option {
 	return func(options *options) {
 		options.DialFunc = dial

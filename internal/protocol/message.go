@@ -15,9 +15,9 @@ import (
 // schema.sh to generate encoding logic for statement parameters.
 type NamedValues = []driver.NamedValue
 
-// Servers is a type alias of a slice of ServerInfo. It's used by schema.sh to
+// Nodes is a type alias of a slice of NodeInfo. It's used by schema.sh to
 // generate decoding logic for the heartbeat response.
-type Servers []ServerInfo
+type Nodes []NodeInfo
 
 // Message holds data about a single request or response.
 type Message struct {
@@ -418,9 +418,9 @@ func (m *Message) getFloat64() float64 {
 }
 
 // Decode a list of server objects from the message body.
-func (m *Message) getServers() Servers {
+func (m *Message) getNodes() Nodes {
 	n := m.getUint64()
-	servers := make(Servers, n)
+	servers := make(Nodes, n)
 
 	for i := 0; i < int(n); i++ {
 		servers[i].ID = m.getUint64()

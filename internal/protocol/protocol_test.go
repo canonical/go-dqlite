@@ -20,11 +20,11 @@ import (
 
 // 	makeCall(t, c, &request, &response)
 
-// 	servers, err := protocol.DecodeServers(&response)
+// 	servers, err := protocol.DecodeNodes(&response)
 // 	require.NoError(t, err)
 
 // 	assert.Len(t, servers, 2)
-// 	assert.Equal(t, client.Servers{
+// 	assert.Equal(t, client.Nodes{
 // 		{ID: uint64(1), Address: "1.2.3.4:666"},
 // 		{ID: uint64(2), Address: "5.6.7.8:666"}},
 // 		servers)
@@ -149,7 +149,7 @@ func TestProtocol_Query(t *testing.T) {
 func newProtocol(t *testing.T) (*protocol.Protocol, func()) {
 	t.Helper()
 
-	address, serverCleanup := newServer(t, 0)
+	address, serverCleanup := newNode(t, 0)
 
 	store := newStore(t, []string{address})
 
