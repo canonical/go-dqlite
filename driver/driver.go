@@ -163,8 +163,8 @@ type options struct {
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		Log:                     client.DefaultLogFunc(),
-		Dial:                    protocol.TCPDial,
+		Log:                     client.DefaultLogFunc,
+		Dial:                    client.DefaultDialFunc,
 		ConnectionTimeout:       15 * time.Second,
 		ContextTimeout:          2 * time.Second,
 		ConnectionBackoffFactor: 50 * time.Millisecond,

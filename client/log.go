@@ -22,13 +22,9 @@ const (
 	LogError = logging.Error
 )
 
-// DefaultLogFunc creates a LogFunc that emits messages using the stdlib's
-// logger.
-func DefaultLogFunc() LogFunc {
+// DefaultLogFunc emits messages using the stdlib's logger.
+func DefaultLogFunc(l LogLevel, format string, a ...interface{}) {
 	logger := log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
-
-	return func(l LogLevel, format string, a ...interface{}) {
-		format = fmt.Sprintf("[%s]: %s", l.String(), format)
-		logger.Printf(format, a...)
-	}
+	format = fmt.Sprintf("[%s]: %s", l.String(), format)
+	logger.Printf(format, a...)
 }

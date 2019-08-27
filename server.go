@@ -93,44 +93,6 @@ func (s *Node) Start() error {
 	return s.server.Start()
 }
 
-// Join a cluster.
-func (s *Node) Join(ctx context.Context, store client.NodeStore, dial client.DialFunc) error {
-	if dial == nil {
-		dial = protocol.TCPDial
-	}
-	config := protocol.Config{
-		Dial:           protocol.DialFunc(dial),
-		AttemptTimeout: time.Second,
-		RetryStrategies: []strategy.Strategy{
-			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
-	}
-	connector := protocol.NewConnector(0, store, config, s.log)
-	c, err := connector.Connect(ctx)
-	if err != nil {
-		return err
-	}
-	defer c.Close()
-
-	request := protocol.Message{}
-	request.Init(4096)
-	response := protocol.Message{}
-	response.Init(4096)
-
-	protocol.EncodeJoin(&request, s.id, s.address)
-
-	if err := c.Call(ctx, &request, &response); err != nil {
-		return err
-	}
-
-	protocol.EncodePromote(&request, s.id)
-
-	if err := c.Call(ctx, &request, &response); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // Leave a cluster.
 func Leave(ctx context.Context, id uint64, store client.NodeStore, dial client.DialFunc) error {
 	if dial == nil {
@@ -142,7 +104,7 @@ func Leave(ctx context.Context, id uint64, store client.NodeStore, dial client.D
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
 	}
-	connector := protocol.NewConnector(0, store, config, client.DefaultLogFunc())
+	connector := protocol.NewConnector(0, store, config, client.DefaultLogFunc)
 	c, err := connector.Connect(ctx)
 	if err != nil {
 		return err
@@ -185,6 +147,7 @@ func (s *Node) Close() error {
 // Create a serverOptions object with sane defaults.
 func defaultNodeOptions() *serverOptions {
 	return &serverOptions{
-		Log: client.DefaultLogFunc(),
+		Log:      client.DefaultLogFunc,
+		DialFunc: client.DefaultDialFunc,
 	}
 }

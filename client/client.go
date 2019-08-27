@@ -24,6 +24,7 @@ type Option func(*options)
 
 type options struct {
 	DialFunc DialFunc
+	LogFunc  LogFunc
 }
 
 // WithDialFunc sets a custom dial function for creating the client network
@@ -31,6 +32,14 @@ type options struct {
 func WithDialFunc(dial DialFunc) Option {
 	return func(options *options) {
 		options.DialFunc = dial
+	}
+}
+
+// WithLogFunc sets a custom log function.
+// connection.
+func WithLogFunc(log LogFunc) Option {
+	return func(options *options) {
+		options.LogFunc = log
 	}
 }
 
@@ -63,7 +72,7 @@ func New(ctx context.Context, address string, options ...Option) (*Client, error
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
-	client := &Client{protocol: protocol.NewProtocol(protocol.VersionLegacy, conn)}
+	client := &Client{protocol: protocol.NewProtocol(protocol.VersionOne, conn)}
 
 	return client, nil
 }
@@ -153,6 +162,28 @@ func (c *Client) Dump(ctx context.Context, dbname string) ([]File, error) {
 	return dump, nil
 }
 
+// Add a node to a cluster.
+func (c *Client) Add(ctx context.Context, node NodeInfo) error {
+	request := protocol.Message{}
+	request.Init(4096)
+	response := protocol.Message{}
+	response.Init(4096)
+
+	protocol.EncodeJoin(&request, node.ID, node.Address)
+
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	protocol.EncodePromote(&request, node.ID)
+
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Close the client.
 func (c *Client) Close() error {
 	return c.protocol.Close()
@@ -161,11 +192,12 @@ func (c *Client) Close() error {
 // Create a client options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		DialFunc: defaultDialFunc,
+		DialFunc: DefaultDialFunc,
+		LogFunc:  DefaultLogFunc,
 	}
 }
 
-func defaultDialFunc(ctx context.Context, address string) (net.Conn, error) {
+func DefaultDialFunc(ctx context.Context, address string) (net.Conn, error) {
 	if strings.HasPrefix(address, "@") {
 		return protocol.UnixDial(ctx, address)
 	}

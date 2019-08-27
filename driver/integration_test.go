@@ -134,37 +134,6 @@ func TestIntegration_LargeQuery(t *testing.T) {
 	require.NoError(t, db.Close())
 }
 
-func TestMembership(t *testing.T) {
-	n := 3
-	servers := make([]*dqlite.Node, n)
-	var leaderInfo client.NodeInfo
-
-	for i := range servers {
-		id := uint64(i + 1)
-		info := client.NodeInfo{ID: id, Address: fmt.Sprintf("%d", id)}
-		dir, cleanup := newDir(t)
-		defer cleanup()
-		server, err := dqlite.NewNode(
-			info, dir, dqlite.WithNodeDialFunc(dialFunc), dqlite.WithNodeLogFunc(logging.Test(t)))
-		require.NoError(t, err)
-		servers[i] = server
-		if i == 0 {
-			leaderInfo = info
-		}
-		err = server.Start()
-		require.NoError(t, err)
-		defer server.Close()
-	}
-
-	store := client.NewInmemNodeStore()
-	store.Set(context.Background(), []client.NodeInfo{leaderInfo})
-	server := servers[1]
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	err := server.Join(ctx, store, dialFunc)
-	require.NoError(t, err)
-}
-
 func dialFunc(ctx context.Context, address string) (net.Conn, error) {
 	return net.Dial("unix", fmt.Sprintf("@dqlite-%s", address))
 }
