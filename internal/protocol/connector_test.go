@@ -254,12 +254,7 @@ func newServer(t *testing.T, index int) (string, func()) {
 	id := uint(index + 1)
 	dir, dirCleanup := newDir(t)
 
-	listener, err := net.Listen("unix", "")
-	require.NoError(t, err)
-
-	address := listener.Addr().String()
-
-	listener.Close()
+	address := "@test"
 
 	server, err := bindings.NewServer(id, address, dir)
 	require.NoError(t, err)
