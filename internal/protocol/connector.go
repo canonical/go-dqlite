@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	"github.com/Rican7/retry"
 	"github.com/canonical/go-dqlite/internal/logging"
@@ -99,7 +100,12 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
 		defer cancel()
 
-		protocol, leader, err := c.connectAttemptOne(ctx, server.Address)
+		version := VersionOne
+		protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
+		if err == errBadProtocol {
+			version := VersionLegacy
+			protocol, leader, err = c.connectAttemptOne(ctx, server.Address, version)
+		}
 		if err != nil {
 			// This server is unavailable, try with the next target.
 			log(logging.Debug, "server connection failed err=%v", err)
@@ -120,7 +126,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		// server is the leader, let's close the connection to this
 		// server and try with the suggested one.
 		//logger = logger.With(zap.String("leader", leader))
-		protocol, leader, err = c.connectAttemptOne(ctx, leader)
+		protocol, leader, err = c.connectAttemptOne(ctx, leader, version)
 		if err != nil {
 			// The leader reported by the previous server is
 			// unavailable, try with the next target.
@@ -175,8 +181,7 @@ func Connect(ctx context.Context, dial DialFunc, address string, version uint64)
 // - Target not leader and leader known:     -> nil, leader, nil
 // - Target is the leader:                   -> server, "", nil
 //
-func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Protocol, string, error) {
-	version := VersionLegacy
+func (c *Connector) connectAttemptOne(ctx context.Context, address string, version uint64) (*Protocol, string, error) {
 	protocol, err := Connect(ctx, c.config.Dial, address, version)
 	if err != nil {
 		return nil, "", err
@@ -192,6 +197,13 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Pro
 
 	if err := protocol.Call(ctx, &request, &response); err != nil {
 		protocol.Close()
+		cause := errors.Cause(err)
+		// Best-effort detection of a pre-1.0 dqlite node: when sent
+		// version 1 it should close the connection immediately.
+		if err, ok := cause.(*net.OpError); ok && strings.Contains(err.Error(), "connection reset by peer") {
+			return nil, "", errBadProtocol
+		}
+
 		return nil, "", errors.Wrap(err, "failed to send Leader request")
 	}
 
@@ -235,3 +247,5 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string) (*Pro
 		return nil, leader, nil
 	}
 }
+
+var errBadProtocol = fmt.Errorf("bad protocol")
