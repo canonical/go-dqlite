@@ -15,17 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNode_Leader(t *testing.T) {
-	server, cleanup := newNode(t)
-	defer cleanup()
-
-	leader, err := server.Leader(context.Background())
-	require.NoError(t, err)
-
-	assert.Equal(t, leader.ID, uint64(1))
-	assert.Equal(t, leader.Address, "1")
-}
-
 // Create a new in-memory server store populated with the given addresses.
 func newStore(t *testing.T, address string) *client.DatabaseNodeStore {
 	t.Helper()

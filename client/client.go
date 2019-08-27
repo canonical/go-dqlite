@@ -50,7 +50,7 @@ func New(ctx context.Context, address string, options ...Option) (*Client, error
 
 	// Latest protocol version.
 	proto := make([]byte, 8)
-	binary.LittleEndian.PutUint64(proto, protocol.VersionLegacy)
+	binary.LittleEndian.PutUint64(proto, protocol.VersionOne)
 
 	// Perform the protocol handshake.
 	n, err := conn.Write(proto)
@@ -66,6 +66,29 @@ func New(ctx context.Context, address string, options ...Option) (*Client, error
 	client := &Client{protocol: protocol.NewProtocol(protocol.VersionLegacy, conn)}
 
 	return client, nil
+}
+
+// Leader returns information about the current leader, if any.
+func (c *Client) Leader(ctx context.Context) (*NodeInfo, error) {
+	request := protocol.Message{}
+	request.Init(16)
+	response := protocol.Message{}
+	response.Init(512)
+
+	protocol.EncodeLeader(&request)
+
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+		return nil, errors.Wrap(err, "failed to send Leader request")
+	}
+
+	id, address, err := protocol.DecodeNode(&response)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse Node response")
+	}
+
+	info := &NodeInfo{ID: id, Address: address}
+
+	return info, nil
 }
 
 // Cluster returns information about all nodes in the cluster.

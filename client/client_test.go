@@ -14,7 +14,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNode_Dump(t *testing.T) {
+func TestClient_Leader(t *testing.T) {
+	node, cleanup := newNode(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	client, err := client.New(ctx, node.BindAddress())
+	require.NoError(t, err)
+	defer client.Close()
+
+	leader, err := client.Leader(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, leader.ID, uint64(1))
+	assert.Equal(t, leader.Address, "1")
+}
+
+func TestClient_Dump(t *testing.T) {
 	node, cleanup := newNode(t)
 	defer cleanup()
 
@@ -63,7 +81,7 @@ func TestNode_Dump(t *testing.T) {
 	assert.Equal(t, 8272, len(files[1].Data))
 }
 
-func TestNode_Cluster(t *testing.T) {
+func TestClient_Cluster(t *testing.T) {
 	node, cleanup := newNode(t)
 	defer cleanup()
 

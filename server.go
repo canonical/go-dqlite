@@ -88,35 +88,6 @@ func (s *Node) BindAddress() string {
 	return s.server.GetBindAddress()
 }
 
-// Leader returns information about the current leader, if any.
-func (s *Node) Leader(ctx context.Context) (*client.NodeInfo, error) {
-	p, err := protocol.Connect(ctx, protocol.UnixDial, s.bindAddress, protocol.VersionOne)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to dqlite task")
-	}
-	defer p.Close()
-
-	request := protocol.Message{}
-	request.Init(16)
-	response := protocol.Message{}
-	response.Init(512)
-
-	protocol.EncodeLeader(&request)
-
-	if err := p.Call(ctx, &request, &response); err != nil {
-		return nil, errors.Wrap(err, "failed to send Leader request")
-	}
-
-	id, address, err := protocol.DecodeNode(&response)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse Node response")
-	}
-
-	info := &client.NodeInfo{ID: id, Address: address}
-
-	return info, nil
-}
-
 // Start serving requests.
 func (s *Node) Start() error {
 	return s.server.Start()
