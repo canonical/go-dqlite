@@ -13,9 +13,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Node implements the dqlite network protocol.
+// Node runs a dqlite node.
 type Node struct {
-	log         LogFunc        // Logger
+	log         client.LogFunc // Logger
 	server      *bindings.Node // Low-level C implementation
 	acceptCh    chan error     // Receives connection handling errors
 	id          uint64
@@ -23,11 +23,11 @@ type Node struct {
 	bindAddress string
 }
 
-// NodeOption can be used to tweak server parameters.
+// NodeOption can be used to tweak node parameters.
 type NodeOption func(*serverOptions)
 
 // WithNodeLogFunc sets a custom log function for the server.
-func WithNodeLogFunc(log LogFunc) NodeOption {
+func WithNodeLogFunc(log client.LogFunc) NodeOption {
 	return func(options *serverOptions) {
 		options.Log = log
 	}
@@ -193,7 +193,7 @@ func Leave(ctx context.Context, id uint64, store client.NodeStore, dial client.D
 		RetryStrategies: []strategy.Strategy{
 			strategy.Backoff(backoff.BinaryExponential(time.Millisecond))},
 	}
-	connector := protocol.NewConnector(0, store, config, defaultLogFunc())
+	connector := protocol.NewConnector(0, store, config, client.DefaultLogFunc())
 	c, err := connector.Connect(ctx)
 	if err != nil {
 		return err
@@ -278,6 +278,6 @@ func (s *Node) Close() error {
 // Create a serverOptions object with sane defaults.
 func defaultNodeOptions() *serverOptions {
 	return &serverOptions{
-		Log: defaultLogFunc(),
+		Log: client.DefaultLogFunc(),
 	}
 }
