@@ -41,8 +41,8 @@ sudo add-apt-repository -y ppa:dqlite/v1
 sudo apt install dqlite
 ```
 
-or build it from the dqlite C library and its dependencies from source, as
-described [here](https://github.com/canonical/dqlite#build), and then run:
+or build the dqlite C library and its dependencies from source, as described
+[here](https://github.com/canonical/dqlite#build), and then run:
 
 ```
 go install -tags libsqlite3 ./cmd/dqlite-demo
