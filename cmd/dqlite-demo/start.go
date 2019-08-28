@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+	"time"
 
 	dqlite "github.com/canonical/go-dqlite"
 	"github.com/pkg/errors"
@@ -37,7 +38,11 @@ func newStart() *cobra.Command {
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				return errors.Wrapf(err, "can't create %s", dir)
 			}
-			node, err := dqlite.New(uint64(id), address, dir, dqlite.WithBindAddress(address))
+			node, err := dqlite.New(
+				uint64(id), address, dir,
+				dqlite.WithBindAddress(address),
+				dqlite.WithNetworkLatency(20*time.Millisecond),
+			)
 			if err != nil {
 				return errors.Wrap(err, "failed to create node")
 			}

@@ -1,6 +1,8 @@
 package dqlite
 
 import (
+	"time"
+
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/pkg/errors"
@@ -36,6 +38,13 @@ func WithBindAddress(address string) Option {
 	}
 }
 
+// WithNetworkLatency sets the average one-way network latency.
+func WithNetworkLatency(latency time.Duration) Option {
+	return func(options *options) {
+		options.NetworkLatency = uint64(latency.Nanoseconds())
+	}
+}
+
 // New creates a new Node instance.
 func New(id uint64, address string, dir string, options ...Option) (*Node, error) {
 	o := defaultOptions()
@@ -55,6 +64,11 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 	}
 	if o.BindAddress != "" {
 		if err := server.SetBindAddress(o.BindAddress); err != nil {
+			return nil, err
+		}
+	}
+	if o.NetworkLatency != 0 {
+		if err := server.SetNetworkLatency(o.NetworkLatency); err != nil {
 			return nil, err
 		}
 	}
@@ -81,9 +95,10 @@ func (s *Node) Start() error {
 
 // Hold configuration options for a dqlite server.
 type options struct {
-	Log         client.LogFunc
-	DialFunc    client.DialFunc
-	BindAddress string
+	Log            client.LogFunc
+	DialFunc       client.DialFunc
+	BindAddress    string
+	NetworkLatency uint64
 }
 
 // Close the server, releasing all resources it created.
