@@ -14,6 +14,8 @@ package bindings
 
 #define EMIT_BUF_LEN 1024
 
+typedef unsigned long long nanoseconds_t;
+
 // Duplicate a file descriptor and prevent it from being cloned into child processes.
 static int dupCloexec(int oldfd) {
 	int newfd = -1;
@@ -125,6 +127,15 @@ func (s *Node) SetBindAddress(address string) error {
 	defer C.free(unsafe.Pointer(caddress))
 	if rc := C.dqlite_node_set_bind_address(server, caddress); rc != 0 {
 		return fmt.Errorf("failed to set bind address")
+	}
+	return nil
+}
+
+func (s *Node) SetNetworkLatency(nanoseconds uint64) error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	cnanoseconds := C.nanoseconds_t(nanoseconds)
+	if rc := C.dqlite_node_set_network_latency(server, cnanoseconds); rc != 0 {
+		return fmt.Errorf("failed to set network latency")
 	}
 	return nil
 }
