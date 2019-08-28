@@ -5,6 +5,14 @@ This repository provides the `go-dqlite` Go package, containing bindings for the
 [dqlite](https://github.com/canonical/canonical/dqlite) C library and a pure-Go
 client for the dqlite wire [protocol](https://github.com/canonical/dqlite/blob/master/doc/protocol.md).
 
+Usage
+-----
+
+The best way to understand how to use the ```go-dqlite``` package is probably by
+looking at the source code of the [demo
+program](https://github.com/canonical/go-dqlite/tree/master/cmd/dqlite-demo) and
+use it as example.
+
 Build
 -----
 
