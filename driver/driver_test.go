@@ -323,11 +323,11 @@ func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 
 	_, cleanup := newNode(t)
 
-	store := newStore(t, "1")
+	store := newStore(t, "@1")
 
 	log := logging.Test(t)
 
-	driver, err := dqlitedriver.New(store, dqlitedriver.WithDialFunc(dialFunc), dqlitedriver.WithLogFunc(log))
+	driver, err := dqlitedriver.New(store, dqlitedriver.WithLogFunc(log))
 	require.NoError(t, err)
 
 	return driver, cleanup
@@ -350,8 +350,7 @@ func newNode(t *testing.T) (*dqlite.Node, func()) {
 	t.Helper()
 	dir, dirCleanup := newDir(t)
 
-	info := client.NodeInfo{ID: uint64(1), Address: "1"}
-	server, err := dqlite.New(info, dir)
+	server, err := dqlite.New(uint64(1), "@1", dir, dqlite.WithBindAddress("@1"))
 	require.NoError(t, err)
 
 	err = server.Start()

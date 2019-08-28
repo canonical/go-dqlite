@@ -252,7 +252,7 @@ func newStore(t *testing.T, addresses []string) protocol.NodeStore {
 func newNode(t *testing.T, index int) (string, func()) {
 	t.Helper()
 
-	id := uint(index + 1)
+	id := uint64(index + 1)
 	dir, dirCleanup := newDir(t)
 
 	address := fmt.Sprintf("@test-%d", index)
