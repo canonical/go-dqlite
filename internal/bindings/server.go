@@ -90,7 +90,7 @@ func Init() error {
 }
 
 // NewNode creates a new Node instance.
-func NewNode(id uint, address string, dir string) (*Node, error) {
+func NewNode(id uint64, address string, dir string) (*Node, error) {
 	var server *C.dqlite_node
 	cid := C.unsigned(id)
 

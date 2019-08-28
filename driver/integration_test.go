@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net"
 	"testing"
 	"time"
 
@@ -134,17 +133,13 @@ func TestIntegration_LargeQuery(t *testing.T) {
 	require.NoError(t, db.Close())
 }
 
-func dialFunc(ctx context.Context, address string) (net.Conn, error) {
-	return net.Dial("unix", fmt.Sprintf("@dqlite-%s", address))
-}
-
 func newDB(t *testing.T) (*sql.DB, []*dqlite.Node, func()) {
 	n := 3
 
 	infos := make([]client.NodeInfo, n)
 	for i := range infos {
 		infos[i].ID = uint64(i + 1)
-		infos[i].Address = fmt.Sprintf("%d", infos[i].ID)
+		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
 	}
 
 	servers, cleanup := newNodes(t, infos)
@@ -155,7 +150,7 @@ func newDB(t *testing.T) (*sql.DB, []*dqlite.Node, func()) {
 	require.NoError(t, store.Set(context.Background(), infos))
 
 	log := logging.Test(t)
-	driver, err := driver.New(store, driver.WithDialFunc(dialFunc), driver.WithLogFunc(log))
+	driver, err := driver.New(store, driver.WithLogFunc(log))
 	require.NoError(t, err)
 
 	driverName := fmt.Sprintf("dqlite-integration-test-%d", driversCount)
@@ -178,8 +173,7 @@ func newNodes(t *testing.T, infos []client.NodeInfo) ([]*dqlite.Node, func()) {
 
 	for i, info := range infos {
 		dir, dirCleanup := newDir(t)
-		server, err := dqlite.New(
-			info, dir, dqlite.WithDialFunc(dialFunc))
+		server, err := dqlite.New(info.ID, info.Address, dir, dqlite.WithBindAddress(info.Address))
 		require.NoError(t, err)
 
 		cleanups = append(cleanups, func() {

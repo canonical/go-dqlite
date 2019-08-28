@@ -1,11 +1,8 @@
 package dqlite
 
 import (
-	"fmt"
-
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/internal/bindings"
-	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/pkg/errors"
 )
 
@@ -18,6 +15,9 @@ type Node struct {
 	address     string
 	bindAddress string
 }
+
+// NodeInfo is a convenience alias for client.NodeInfo.
+type NodeInfo = client.NodeInfo
 
 // Option can be used to tweak node parameters.
 type Option func(*options)
@@ -37,35 +37,33 @@ func WithBindAddress(address string) Option {
 }
 
 // New creates a new Node instance.
-func New(info client.NodeInfo, dir string, options ...Option) (*Node, error) {
+func New(id uint64, address string, dir string, options ...Option) (*Node, error) {
 	o := defaultOptions()
 
 	for _, option := range options {
 		option(o)
 	}
 
-	server, err := bindings.NewNode(uint(info.ID), info.Address, dir)
+	server, err := bindings.NewNode(id, address, dir)
 	if err != nil {
 		return nil, err
 	}
 	if o.DialFunc != nil {
-		if err := server.SetDialFunc(protocol.DialFunc(o.DialFunc)); err != nil {
+		if err := server.SetDialFunc(o.DialFunc); err != nil {
 			return nil, err
 		}
 	}
-	bindAddress := fmt.Sprintf("@dqlite-%d", info.ID)
 	if o.BindAddress != "" {
-		bindAddress = o.BindAddress
-	}
-	if err := server.SetBindAddress(bindAddress); err != nil {
-		return nil, err
+		if err := server.SetBindAddress(o.BindAddress); err != nil {
+			return nil, err
+		}
 	}
 	s := &Node{
 		server:      server,
 		acceptCh:    make(chan error, 1),
-		id:          info.ID,
-		address:     info.Address,
-		bindAddress: bindAddress,
+		id:          id,
+		address:     address,
+		bindAddress: o.BindAddress,
 	}
 
 	return s, nil

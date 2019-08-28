@@ -44,6 +44,28 @@ func TestNode_Start(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestNode_Start_Inet(t *testing.T) {
+	dir, cleanup := newDir(t)
+	defer cleanup()
+
+	server, err := bindings.NewNode(1, "1", dir)
+	require.NoError(t, err)
+	defer server.Close()
+
+	err = server.SetBindAddress("127.0.0.1:9000")
+	require.NoError(t, err)
+
+	err = server.Start()
+	require.NoError(t, err)
+
+	conn, err := net.Dial("tcp", server.GetBindAddress())
+	require.NoError(t, err)
+	conn.Close()
+
+	err = server.Stop()
+	require.NoError(t, err)
+}
+
 func TestNode_Leader(t *testing.T) {
 	_, cleanup := newNode(t)
 	defer cleanup()

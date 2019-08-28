@@ -19,10 +19,9 @@ func TestMembership(t *testing.T) {
 	for i := range nodes {
 		id := uint64(i + 1)
 		address := fmt.Sprintf("@test-%d", id)
-		info := client.NodeInfo{ID: id, Address: address}
 		dir, cleanup := newDir(t)
 		defer cleanup()
-		node, err := dqlite.New(info, dir, dqlite.WithBindAddress(address))
+		node, err := dqlite.New(id, address, dir, dqlite.WithBindAddress(address))
 		require.NoError(t, err)
 		nodes[i] = node
 		infos[i].ID = id
