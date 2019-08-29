@@ -38,7 +38,7 @@ func newUpdate() *cobra.Command {
 			}
 
 			if _, err := db.Exec("INSERT OR REPLACE INTO model(key, value) VALUES(?, ?)", key, value); err != nil {
-				return errors.Wrap(err, "can't create demo table")
+				return errors.Wrap(err, "can't update key")
 			}
 
 			fmt.Println("done")
