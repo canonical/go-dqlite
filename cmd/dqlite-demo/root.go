@@ -22,6 +22,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 	cmd.AddCommand(newAdd())
 	cmd.AddCommand(newUpdate())
 	cmd.AddCommand(newQuery())
+	cmd.AddCommand(newBenchmark())
 
 	return cmd
 }
