@@ -38,7 +38,7 @@ func newAdd() *cobra.Command {
 
 			client, err := getLeader(*cluster)
 			if err != nil {
-				errors.Wrap(err, "can't connect to cluster leader")
+				return errors.Wrap(err, "can't connect to cluster leader")
 			}
 			defer client.Close()
 
