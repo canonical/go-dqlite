@@ -2,7 +2,7 @@ go-dqlite [![Build Status](https://travis-ci.org/canonical/go-dqlite.png)](https
 ======
 
 This repository provides the `go-dqlite` Go package, containing bindings for the
-[dqlite](https://github.com/canonical/canonical/dqlite) C library and a pure-Go
+[dqlite](https://github.com/canonical/dqlite) C library and a pure-Go
 client for the dqlite wire [protocol](https://github.com/canonical/dqlite/blob/master/doc/protocol.md).
 
 Usage
