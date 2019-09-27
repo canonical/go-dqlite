@@ -44,6 +44,14 @@ type Driver struct {
 // Error is returned in case of database errors.
 type Error = bindings.Error
 
+// Error codes. Values here mostly overlap with native SQLite codes.
+const (
+	ErrBusy                = 5
+	errIoErr               = 10
+	errIoErrNotLeader      = errIoErr | 32<<8
+	errIoErrLeadershipLost = errIoErr | (33 << 8)
+)
+
 // Option can be used to tweak driver parameters.
 type Option func(*options)
 
@@ -640,9 +648,9 @@ func driverError(err error) error {
 		return driver.ErrBadConn
 	case protocol.ErrRequest:
 		switch err.Code {
-		case bindings.ErrIoErrNotLeader:
+		case errIoErrNotLeader:
 			fallthrough
-		case bindings.ErrIoErrLeadershipLost:
+		case errIoErrLeadershipLost:
 			return driver.ErrBadConn
 		default:
 			return Error{
