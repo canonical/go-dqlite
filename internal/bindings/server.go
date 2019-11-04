@@ -59,6 +59,16 @@ static int initializeSQLite()
 	return 0;
 }
 
+static dqlite_node_info *makeInfos(int n) {
+	return calloc(n, sizeof(dqlite_node_info));
+}
+
+static void setInfo(dqlite_node_info *infos, unsigned i, unsigned id, const char *address) {
+	dqlite_node_info *info = &infos[i];
+	info->id = id;
+	info->address = address;
+}
+
 */
 import "C"
 import (
@@ -73,7 +83,6 @@ import (
 	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
-// Node is a Go wrapper arround dqlite_server.
 type Node C.dqlite_node
 
 // Init initializes dqlite global state.
@@ -165,6 +174,23 @@ func (s *Node) Stop() error {
 func (s *Node) Close() {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	C.dqlite_node_destroy(server)
+}
+
+func (s *Node) Recover(cluster []protocol.NodeInfo) error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	n := C.int(len(cluster))
+	infos := C.makeInfos(n)
+	defer C.free(unsafe.Pointer(infos))
+	for i, info := range cluster {
+		cid := C.unsigned(info.ID)
+		caddress := C.CString(info.Address)
+		defer C.free(unsafe.Pointer(caddress))
+		C.setInfo(infos, C.unsigned(i), cid, caddress)
+	}
+	if rc := C.dqlite_node_recover(server, infos, n); rc != 0 {
+		return fmt.Errorf("recover failed with error code %d", rc)
+	}
+	return nil
 }
 
 // Extract the underlying socket from a connection.

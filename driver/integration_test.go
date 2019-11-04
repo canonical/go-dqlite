@@ -133,6 +133,69 @@ func TestIntegration_LargeQuery(t *testing.T) {
 	require.NoError(t, db.Close())
 }
 
+// Build a 2-node cluster, kill one node and recover the other.
+func TestIntegration_Recover(t *testing.T) {
+	n := 2
+	infos := make([]client.NodeInfo, n)
+	for i := range infos {
+		infos[i].ID = uint64(i + 1)
+		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
+	}
+	dirs := make([]string, n)
+	nodes := make([]*dqlite.Node, 2)
+	for i, info := range infos {
+		dir, cleanup := newDir(t)
+		defer cleanup()
+		node, err := dqlite.New(info.ID, info.Address, dir, dqlite.WithBindAddress(info.Address))
+		require.NoError(t, err)
+		require.NoError(t, node.Start())
+		nodes[i] = node
+		dirs[i] = dir
+	}
+
+	store, err := client.DefaultNodeStore(":memory:")
+	require.NoError(t, err)
+	require.NoError(t, store.Set(context.Background(), infos))
+
+	log := logging.Test(t)
+	driver, err := driver.New(store, driver.WithLogFunc(log))
+	require.NoError(t, err)
+
+	driverName := registerDriver(driver)
+	db, err := sql.Open(driverName, "test.db")
+	require.NoError(t, err)
+	defer db.Close()
+
+	client, err := client.New(context.Background(), nodes[0].BindAddress())
+	require.NoError(t, err)
+	defer client.Close()
+
+	require.NoError(t, client.Add(context.Background(), infos[1]))
+
+	_, err = db.Exec("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	nodes[0].Close()
+	nodes[1].Close()
+
+	node, err := dqlite.New(1, "@1", dirs[0], dqlite.WithBindAddress("@1"))
+	require.NoError(t, err)
+
+	require.NoError(t, node.Recover(infos[0:1]))
+
+	require.NoError(t, node.Start())
+	defer node.Close()
+
+	// FIXME: this is necessary otherwise the INSERT below fails with "no
+	// such table", because the replication hooks are not triggered and the
+	// barrier is not applied.
+	_, err = db.Exec("CREATE TABLE test2 (n INT)")
+	require.NoError(t, err)
+
+	_, err = db.Exec("INSERT INTO test(n) VALUES(1)")
+	require.NoError(t, err)
+}
+
 func newDB(t *testing.T) (*sql.DB, []*dqlite.Node, func()) {
 	n := 3
 
@@ -162,6 +225,13 @@ func newDB(t *testing.T) (*sql.DB, []*dqlite.Node, func()) {
 	require.NoError(t, err)
 
 	return db, servers, cleanup
+}
+
+func registerDriver(driver *driver.Driver) string {
+	name := fmt.Sprintf("dqlite-integration-test-%d", driversCount)
+	sql.Register(name, driver)
+	driversCount++
+	return name
 }
 
 func newNodes(t *testing.T, infos []client.NodeInfo) ([]*dqlite.Node, func()) {
