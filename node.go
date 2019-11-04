@@ -93,6 +93,11 @@ func (s *Node) Start() error {
 	return s.server.Start()
 }
 
+// Recover a node by forcing a new cluster configuration.
+func (s *Node) Recover(cluster []NodeInfo) error {
+	return s.server.Recover(cluster)
+}
+
 // Hold configuration options for a dqlite server.
 type options struct {
 	Log            client.LogFunc
