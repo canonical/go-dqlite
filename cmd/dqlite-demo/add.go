@@ -55,9 +55,6 @@ func newAdd() *cobra.Command {
 
 	flags := cmd.Flags()
 	flags.StringVarP(&address, "address", "a", "", "address of the node to add (default is 127.0.0.1:918<ID>)")
-	defaultCluster := []string{
-		"127.0.0.1:9181",
-	}
 	cluster = flags.StringSliceP("cluster", "c", defaultCluster, "addresses of existing cluster nodes")
 
 	return cmd

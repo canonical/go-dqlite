@@ -87,5 +87,5 @@ key again we'll notice that the ```query``` command hangs for a bit waiting for
 the failover to occur and for another node to step up as leader:
 
 ```
-kill -TERM %1; sleep 0.1; dqlite-demo query my-key
+kill -TERM %1; sleep 0.1; dqlite-demo query my-key; dqlite-demo cluster
 ```
