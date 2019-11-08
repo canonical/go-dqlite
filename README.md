@@ -37,8 +37,8 @@ Demo
 To see dqlite in action, either install the Debian package from the PPA:
 
 ```bash
-sudo add-apt-repository -y ppa:dqlite/v1
-sudo apt install dqlite
+sudo add-apt-repository -y ppa:dqlite/stable
+sudo apt install dqlite libdqlite-dev
 ```
 
 or build the dqlite C library and its dependencies from source, as described
