@@ -48,11 +48,6 @@ func newUpdate() *cobra.Command {
 	}
 
 	flags := cmd.Flags()
-	defaultCluster := []string{
-		"127.0.0.1:9181",
-		"127.0.0.1:9182",
-		"127.0.0.1:9183",
-	}
 	cluster = flags.StringSliceP("cluster", "c", defaultCluster, "addresses of existing cluster nodes")
 
 	return cmd

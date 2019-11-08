@@ -23,6 +23,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 	cmd.AddCommand(newUpdate())
 	cmd.AddCommand(newQuery())
 	cmd.AddCommand(newBenchmark())
+	cmd.AddCommand(newCluster())
 
 	return cmd
 }
