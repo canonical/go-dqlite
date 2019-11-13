@@ -46,19 +46,6 @@ static int configConnectFunc(dqlite_node *t, uintptr_t handle) {
         return dqlite_node_set_connect_func(t, connectTrampoline, (void*)handle);
 }
 
-static int initializeSQLite()
-{
-	int rc;
-
-	// Configure SQLite for single-thread mode. This is a global config.
-	rc = sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
-	if (rc != SQLITE_OK) {
-		assert(rc == SQLITE_MISUSE);
-		return DQLITE_MISUSE;
-	}
-	return 0;
-}
-
 static dqlite_node_info *makeInfos(int n) {
 	return calloc(n, sizeof(dqlite_node_info));
 }
@@ -67,6 +54,16 @@ static void setInfo(dqlite_node_info *infos, unsigned i, unsigned id, const char
 	dqlite_node_info *info = &infos[i];
 	info->id = id;
 	info->address = address;
+}
+
+static int sqlite3ConfigSingleThread()
+{
+	return sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
+}
+
+static int sqlite3ConfigMultiThread()
+{
+	return sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
 }
 
 */
@@ -85,17 +82,22 @@ import (
 
 type Node C.dqlite_node
 
-// Init initializes dqlite global state.
-func Init() error {
+// Initializes state.
+func init() {
 	// FIXME: ignore SIGPIPE, see https://github.com/joyent/libuv/issues/1254
 	C.signal(C.SIGPIPE, C.SIG_IGN)
-	// Don't enable single thread mode when running tests. TODO: find a
-	// better way to expose this functionality.
-	if os.Getenv("GO_DQLITE_MULTITHREAD") == "1" {
-		return nil
+}
+
+func ConfigSingleThread() error {
+	if rc := C.sqlite3ConfigSingleThread(); rc != 0 {
+		return Error{Code: int(rc)}
 	}
-	if rc := C.initializeSQLite(); rc != 0 {
-		return fmt.Errorf("%d", rc)
+	return nil
+}
+
+func ConfigMultiThread() error {
+	if rc := C.sqlite3ConfigMultiThread(); rc != 0 {
+		return Error{Code: int(rc)}
 	}
 	return nil
 }

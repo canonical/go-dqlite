@@ -301,7 +301,7 @@ func newListener(t *testing.T) net.Listener {
 }
 
 func init() {
-	err := bindings.Init()
+	err := bindings.ConfigSingleThread()
 	if err != nil {
 		panic(errors.Wrap(err, "failed to initialize dqlite"))
 	}
