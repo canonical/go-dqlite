@@ -100,6 +100,14 @@ func TestIntegration_Error(t *testing.T) {
 	}
 }
 
+func TestIntegration_ConfigMultiThread(t *testing.T) {
+	_, _, cleanup := newDB(t)
+	defer cleanup()
+
+	err := dqlite.ConfigMultiThread()
+	assert.EqualError(t, err, "SQLite is already initialized")
+}
+
 func TestIntegration_LargeQuery(t *testing.T) {
 	db, _, cleanup := newDB(t)
 	defer cleanup()

@@ -661,10 +661,3 @@ func driverError(err error) error {
 	}
 	return err
 }
-
-func init() {
-	err := bindings.Init()
-	if err != nil {
-		panic(errors.Wrap(err, "failed to initialize dqlite"))
-	}
-}
