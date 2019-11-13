@@ -11,6 +11,7 @@ import (
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
 	"github.com/canonical/go-dqlite/internal/logging"
+	"github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,6 +79,25 @@ CREATE TABLE test2 (n INT, t DATETIME DEFAULT CURRENT_TIMESTAMP)
 	require.NoError(t, tx.Rollback())
 
 	require.NoError(t, db.Close())
+}
+
+func TestIntegration_Error(t *testing.T) {
+	db, _, cleanup := newDB(t)
+	defer cleanup()
+
+	_, err := db.Exec("CREATE TABLE test (n INT, UNIQUE (n))")
+	require.NoError(t, err)
+
+	_, err = db.Exec("INSERT INTO test (n) VALUES (1)")
+	require.NoError(t, err)
+
+	_, err = db.Exec("INSERT INTO test (n) VALUES (1)")
+	if err, ok := err.(driver.Error); ok {
+		assert.Equal(t, int(sqlite3.ErrConstraintUnique), err.Code)
+		assert.Equal(t, "UNIQUE constraint failed: test.n", err.Message)
+	} else {
+		t.Fatalf("expected diver error, got %+v", err)
+	}
 }
 
 func TestIntegration_LargeQuery(t *testing.T) {
