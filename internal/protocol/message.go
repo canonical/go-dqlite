@@ -503,8 +503,7 @@ type Rows struct {
 	message *Message
 }
 
-// Next returns the next row in the result set.
-func (r *Rows) Next(dest []driver.Value) error {
+func (r *Rows) columnTypes() ([]uint8, error) {
 	types := make([]uint8, len(r.Columns))
 
 	// Each column needs a 4 byte slot to store the column type. The row
@@ -522,12 +521,12 @@ func (r *Rows) Next(dest []driver.Value) error {
 
 		if slot == 0xee {
 			// More rows are available.
-			return ErrRowsPart
+			return nil, ErrRowsPart
 		}
 
 		if slot == 0xff {
 			// Rows EOF marker
-			return io.EOF
+			return nil, io.EOF
 		}
 
 		index := i * 2
@@ -545,6 +544,15 @@ func (r *Rows) Next(dest []driver.Value) error {
 		}
 
 		types[index] = slot >> 4
+	}
+	return types, nil
+}
+
+// Next returns the next row in the result set.
+func (r *Rows) Next(dest []driver.Value) error {
+	types, err := r.columnTypes()
+	if err != nil {
+		return err
 	}
 
 	for i := range types {
@@ -657,4 +665,38 @@ var iso8601Formats = []string{
 	"2006-01-02 15:04",
 	"2006-01-02T15:04",
 	"2006-01-02",
+}
+
+// ColumnTypes returns the column types for the the result set.
+func (r *Rows) ColumnTypes() ([]string, error) {
+	types, err := r.columnTypes()
+	if err != nil {
+		return nil, err
+	}
+	kinds := make([]string, len(r.Columns))
+
+	for i, t := range types {
+		switch t {
+		case Integer:
+			kinds[i] = "INTEGER"
+		case Float:
+			kinds[i] = "FLOAT"
+		case Blob:
+			kinds[i] = "BLOB"
+		case Text:
+			kinds[i] = "TEXT"
+		case Null:
+			kinds[i] = "NULL"
+		case UnixTime:
+			kinds[i] = "TIME"
+		case ISO8601:
+			kinds[i] = "TIME"
+		case Boolean:
+			kinds[i] = "BOOL"
+		default:
+			return nil, fmt.Errorf("unknown data type: %d", t)
+		}
+	}
+
+	return kinds, nil
 }
