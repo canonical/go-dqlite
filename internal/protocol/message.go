@@ -503,7 +503,9 @@ type Rows struct {
 	message *Message
 }
 
-func (r *Rows) columnTypes() ([]uint8, error) {
+// columnTypes returns the row's column types
+// if save is true, it will restore the buffer offset
+func (r *Rows) columnTypes(save bool) ([]uint8, error) {
 	types := make([]uint8, len(r.Columns))
 
 	// Each column needs a 4 byte slot to store the column type. The row
@@ -545,12 +547,15 @@ func (r *Rows) columnTypes() ([]uint8, error) {
 
 		types[index] = slot >> 4
 	}
+	if save {
+	    r.message.bufferForGet().Advance(-headerSize)
+	}
 	return types, nil
 }
 
 // Next returns the next row in the result set.
 func (r *Rows) Next(dest []driver.Value) error {
-	types, err := r.columnTypes()
+	types, err := r.columnTypes(false)
 	if err != nil {
 		return err
 	}
@@ -669,7 +674,7 @@ var iso8601Formats = []string{
 
 // ColumnTypes returns the column types for the the result set.
 func (r *Rows) ColumnTypes() ([]string, error) {
-	types, err := r.columnTypes()
+	types, err := r.columnTypes(true)
 	if err != nil {
 		return nil, err
 	}
