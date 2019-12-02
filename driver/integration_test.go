@@ -296,3 +296,31 @@ func newNodes(t *testing.T, infos []client.NodeInfo) ([]*dqlite.Node, func()) {
 }
 
 var driversCount = 0
+
+func TestIntegration_ColumnTypeName(t *testing.T) {
+	db, _, cleanup := newDB(t)
+	defer cleanup()
+
+	_, err := db.Exec("CREATE TABLE test (n INT, UNIQUE (n))")
+	require.NoError(t, err)
+
+	_, err = db.Exec("INSERT INTO test (n) VALUES (1)")
+	require.NoError(t, err)
+
+	rows, err := db.Query("SELECT n FROM test")
+	require.NoError(t, err)
+	defer rows.Close()
+
+	types, err := rows.ColumnTypes()
+	require.NoError(t, err)
+
+	assert.Equal(t, "INTEGER", types[0].DatabaseTypeName())
+
+	require.True(t, rows.Next())
+	var n int64
+	err = rows.Scan(&n)
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), n)
+}
+
