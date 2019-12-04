@@ -523,11 +523,17 @@ func (r *Rows) columnTypes(save bool) ([]uint8, error) {
 
 		if slot == 0xee {
 			// More rows are available.
+			if save {
+				r.message.bufferForGet().Advance(-(i + 1))
+			}
 			return nil, ErrRowsPart
 		}
 
 		if slot == 0xff {
 			// Rows EOF marker
+			if save {
+				r.message.bufferForGet().Advance(-(i + 1))
+			}
 			return nil, io.EOF
 		}
 
@@ -548,7 +554,7 @@ func (r *Rows) columnTypes(save bool) ([]uint8, error) {
 		types[index] = slot >> 4
 	}
 	if save {
-	    r.message.bufferForGet().Advance(-headerSize)
+		r.message.bufferForGet().Advance(-headerSize)
 	}
 	return types, nil
 }
