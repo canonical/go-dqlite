@@ -114,7 +114,8 @@ func NewNode(id uint64, address string, dir string) (*Node, error) {
 	defer C.free(unsafe.Pointer(cdir))
 
 	if rc := C.dqlite_node_create(cid, caddress, cdir, &server); rc != 0 {
-		return nil, fmt.Errorf("failed to create task object")
+		errmsg := C.GoString(C.dqlite_node_errmsg(server))
+		return nil, fmt.Errorf("%s", errmsg)
 	}
 
 	return (*Node)(unsafe.Pointer(server)), nil
@@ -159,7 +160,8 @@ func (s *Node) GetBindAddress() string {
 func (s *Node) Start() error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	if rc := C.dqlite_node_start(server); rc != 0 {
-		return fmt.Errorf("failed to start task")
+		errmsg := C.GoString(C.dqlite_node_errmsg(server))
+		return fmt.Errorf("%s", errmsg)
 	}
 	return nil
 }
