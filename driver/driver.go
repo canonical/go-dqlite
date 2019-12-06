@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"io"
+	"log"
 	"net"
 	"reflect"
 	"time"
@@ -624,8 +625,14 @@ func (r *Rows) ColumnTypeDatabaseTypeName(i int) string {
 	if r.types == nil {
 		var err error
 		r.types, err = r.rows.ColumnTypes()
-		if err != nil {
-			panic(err)
+		// an error might not matter if we get our types
+		if err != nil && i >= len(r.types) {
+			// a panic here doesn't really help,
+			// as an empty column type is not the end of the world
+			// but we should still inform the user of the failure
+			const msg = "row (%p) error returning column #%d type: %v\n"
+			log.Printf(msg, r, i, err)
+			return ""
 		}
 	}
 	return r.types[i]
