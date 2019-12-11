@@ -190,6 +190,28 @@ func TestIntegration_Recover(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// The db.Ping() method can be used to wait until there is a stable leader.
+func TestIntegration_PingOnlyWorksOnceLeaderElected(t *testing.T) {
+	db, helpers, cleanup := newDB(t, 2)
+	defer cleanup()
+
+	helpers[0].Close()
+
+	// Ping returns an error, since the cluster is not available.
+	assert.Error(t, db.Ping())
+
+	helpers[0].Create()
+	helpers[0].Start()
+
+	// Ping now returns no error, since the cluster is available.
+	assert.NoError(t, db.Ping())
+
+	// If leadership is lost after the first successful call, Ping() still
+	// returns no error.
+	helpers[0].Close()
+	assert.NoError(t, db.Ping())
+}
+
 func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 	infos := make([]client.NodeInfo, n)
 	for i := range infos {
