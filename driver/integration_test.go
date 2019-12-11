@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 )
 
 func TestIntegration_DatabaseSQL(t *testing.T) {
-	db, _, cleanup := newDB(t)
+	db, _, cleanup := newDB(t, 3)
 	defer cleanup()
 
 	tx, err := db.Begin()
@@ -82,7 +83,7 @@ CREATE TABLE test2 (n INT, t DATETIME DEFAULT CURRENT_TIMESTAMP)
 }
 
 func TestIntegration_Error(t *testing.T) {
-	db, _, cleanup := newDB(t)
+	db, _, cleanup := newDB(t, 3)
 	defer cleanup()
 
 	_, err := db.Exec("CREATE TABLE test (n INT, UNIQUE (n))")
@@ -101,7 +102,7 @@ func TestIntegration_Error(t *testing.T) {
 }
 
 func TestIntegration_ConfigMultiThread(t *testing.T) {
-	_, _, cleanup := newDB(t)
+	_, _, cleanup := newDB(t, 1)
 	defer cleanup()
 
 	err := dqlite.ConfigMultiThread()
@@ -109,7 +110,7 @@ func TestIntegration_ConfigMultiThread(t *testing.T) {
 }
 
 func TestIntegration_LargeQuery(t *testing.T) {
-	db, _, cleanup := newDB(t)
+	db, _, cleanup := newDB(t, 3)
 	defer cleanup()
 
 	tx, err := db.Begin()
@@ -163,56 +164,21 @@ func TestIntegration_LargeQuery(t *testing.T) {
 
 // Build a 2-node cluster, kill one node and recover the other.
 func TestIntegration_Recover(t *testing.T) {
-	n := 2
-	infos := make([]client.NodeInfo, n)
-	for i := range infos {
-		infos[i].ID = uint64(i + 1)
-		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
-	}
-	dirs := make([]string, n)
-	nodes := make([]*dqlite.Node, 2)
-	for i, info := range infos {
-		dir, cleanup := newDir(t)
-		defer cleanup()
-		node, err := dqlite.New(info.ID, info.Address, dir, dqlite.WithBindAddress(info.Address))
-		require.NoError(t, err)
-		require.NoError(t, node.Start())
-		nodes[i] = node
-		dirs[i] = dir
-	}
+	db, helpers, cleanup := newDB(t, 2)
+	defer cleanup()
 
-	store, err := client.DefaultNodeStore(":memory:")
-	require.NoError(t, err)
-	require.NoError(t, store.Set(context.Background(), infos))
-
-	log := logging.Test(t)
-	driver, err := driver.New(store, driver.WithLogFunc(log))
+	_, err := db.Exec("CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
-	driverName := registerDriver(driver)
-	db, err := sql.Open(driverName, "test.db")
-	require.NoError(t, err)
-	defer db.Close()
+	helpers[0].Close()
+	helpers[1].Close()
 
-	client, err := client.New(context.Background(), nodes[0].BindAddress())
-	require.NoError(t, err)
-	defer client.Close()
+	helpers[0].Create()
 
-	require.NoError(t, client.Add(context.Background(), infos[1]))
+	infos := []client.NodeInfo{{ID: 1, Address: "@1"}}
+	require.NoError(t, helpers[0].Node.Recover(infos))
 
-	_, err = db.Exec("CREATE TABLE test (n INT)")
-	require.NoError(t, err)
-
-	nodes[0].Close()
-	nodes[1].Close()
-
-	node, err := dqlite.New(1, "@1", dirs[0], dqlite.WithBindAddress("@1"))
-	require.NoError(t, err)
-
-	require.NoError(t, node.Recover(infos[0:1]))
-
-	require.NoError(t, node.Start())
-	defer node.Close()
+	helpers[0].Start()
 
 	// FIXME: this is necessary otherwise the INSERT below fails with "no
 	// such table", because the replication hooks are not triggered and the
@@ -224,16 +190,14 @@ func TestIntegration_Recover(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func newDB(t *testing.T) (*sql.DB, []*dqlite.Node, func()) {
-	n := 3
-
+func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 	infos := make([]client.NodeInfo, n)
 	for i := range infos {
 		infos[i].ID = uint64(i + 1)
 		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
 	}
 
-	servers, cleanup := newNodes(t, infos)
+	helpers, cleanup := newNodeHelpers(t, infos)
 
 	store, err := client.DefaultNodeStore(":memory:")
 	require.NoError(t, err)
@@ -252,7 +216,7 @@ func newDB(t *testing.T) (*sql.DB, []*dqlite.Node, func()) {
 	db, err := sql.Open(driverName, "test.db")
 	require.NoError(t, err)
 
-	return db, servers, cleanup
+	return db, helpers, cleanup
 }
 
 func registerDriver(driver *driver.Driver) string {
@@ -262,43 +226,90 @@ func registerDriver(driver *driver.Driver) string {
 	return name
 }
 
-func newNodes(t *testing.T, infos []client.NodeInfo) ([]*dqlite.Node, func()) {
+type nodeHelper struct {
+	t       *testing.T
+	ID      uint64
+	Address string
+	Dir     string
+	Node    *dqlite.Node
+}
+
+func newNodeHelper(t *testing.T, id uint64, address string) *nodeHelper {
+	h := &nodeHelper{
+		t:       t,
+		ID:      id,
+		Address: address,
+	}
+
+	h.Dir, _ = newDir(t)
+
+	h.Create()
+	h.Start()
+
+	return h
+}
+
+func (h *nodeHelper) Client() *client.Client {
+	client, err := client.New(context.Background(), h.Node.BindAddress())
+	require.NoError(h.t, err)
+	return client
+}
+
+func (h *nodeHelper) Create() {
+	var err error
+	require.Nil(h.t, h.Node)
+	h.Node, err = dqlite.New(h.ID, h.Address, h.Dir, dqlite.WithBindAddress(h.Address))
+	require.NoError(h.t, err)
+}
+
+func (h *nodeHelper) Start() {
+	require.NotNil(h.t, h.Node)
+	require.NoError(h.t, h.Node.Start())
+}
+
+func (h *nodeHelper) Close() {
+	require.NotNil(h.t, h.Node)
+	require.NoError(h.t, h.Node.Close())
+	h.Node = nil
+}
+
+func (h *nodeHelper) cleanup() {
+	if h.Node != nil {
+		h.Close()
+	}
+	require.NoError(h.t, os.RemoveAll(h.Dir))
+}
+
+func newNodeHelpers(t *testing.T, infos []client.NodeInfo) ([]*nodeHelper, func()) {
 	t.Helper()
 
 	n := len(infos)
-	servers := make([]*dqlite.Node, n)
-	cleanups := make([]func(), 0)
+	helpers := make([]*nodeHelper, n)
 
 	for i, info := range infos {
-		dir, dirCleanup := newDir(t)
-		server, err := dqlite.New(info.ID, info.Address, dir, dqlite.WithBindAddress(info.Address))
-		require.NoError(t, err)
+		helpers[i] = newNodeHelper(t, info.ID, info.Address)
 
-		cleanups = append(cleanups, func() {
-			require.NoError(t, server.Close())
-			dirCleanup()
-		})
+		if i > 0 {
+			client := helpers[0].Client()
+			defer client.Close()
 
-		err = server.Start()
-		require.NoError(t, err)
-
-		servers[i] = server
-
-	}
-
-	cleanup := func() {
-		for _, f := range cleanups {
-			f()
+			require.NoError(t, client.Add(context.Background(), infos[i]))
 		}
 	}
 
-	return servers, cleanup
+	cleanup := func() {
+		for _, helper := range helpers {
+			helper.cleanup()
+		}
+	}
+
+	return helpers, cleanup
 }
 
 var driversCount = 0
 
 func TestIntegration_ColumnTypeName(t *testing.T) {
-	db, _, cleanup := newDB(t)
+	db, _, cleanup := newDB(t, 1)
 	defer cleanup()
 
 	_, err := db.Exec("CREATE TABLE test (n INT, UNIQUE (n))")
@@ -323,4 +334,3 @@ func TestIntegration_ColumnTypeName(t *testing.T) {
 
 	assert.Equal(t, int64(1), n)
 }
-
