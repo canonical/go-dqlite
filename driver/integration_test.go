@@ -78,8 +78,6 @@ CREATE TABLE test2 (n INT, t DATETIME DEFAULT CURRENT_TIMESTAMP)
 	require.NoError(t, rows.Close())
 
 	require.NoError(t, tx.Rollback())
-
-	require.NoError(t, db.Close())
 }
 
 func TestIntegration_Error(t *testing.T) {
@@ -158,8 +156,6 @@ func TestIntegration_LargeQuery(t *testing.T) {
 	assert.Equal(t, count, 512)
 
 	require.NoError(t, tx.Rollback())
-
-	require.NoError(t, db.Close())
 }
 
 // Build a 2-node cluster, kill one node and recover the other.
@@ -219,7 +215,7 @@ func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
 	}
 
-	helpers, cleanup := newNodeHelpers(t, infos)
+	helpers, helpersCleanup := newNodeHelpers(t, infos)
 
 	store, err := client.DefaultNodeStore(":memory:")
 	require.NoError(t, err)
@@ -237,6 +233,11 @@ func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 
 	db, err := sql.Open(driverName, "test.db")
 	require.NoError(t, err)
+
+	cleanup := func() {
+		require.NoError(t, db.Close())
+		helpersCleanup()
+	}
 
 	return db, helpers, cleanup
 }
