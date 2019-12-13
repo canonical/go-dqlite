@@ -208,6 +208,28 @@ func TestIntegration_PingOnlyWorksOnceLeaderElected(t *testing.T) {
 	assert.NoError(t, db.Ping())
 }
 
+func TestIntegration_HighAvailability(t *testing.T) {
+	db, helpers, cleanup := newDB(t, 3)
+	defer cleanup()
+
+	_, err := db.Exec("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	// Shutdown all three nodes.
+	helpers[0].Close()
+	helpers[1].Close()
+	helpers[2].Close()
+
+	// Restart two of them.
+	helpers[1].Create()
+	helpers[2].Create()
+	helpers[1].Start()
+	helpers[2].Start()
+
+	_, err = db.Exec("INSERT INTO test(n) VALUES(1)")
+	require.NoError(t, err)
+}
+
 func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 	infos := make([]client.NodeInfo, n)
 	for i := range infos {
