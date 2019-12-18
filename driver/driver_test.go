@@ -318,6 +318,138 @@ INSERT INTO test (n,t) VALUES (3,'b');
 	assert.NoError(t, conn.Close())
 }
 
+func Test_ColumnTypesEmpty(t *testing.T) {
+	t.Skip("this currently fails if the result set is empty, is dqlite skipping the header if empty set?")
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, stmt.Close())
+
+	stmt, err = conn.Prepare("SELECT n FROM test")
+	require.NoError(t, err)
+
+	rows, err := stmt.Query(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+	rowTypes, ok := rows.(driver.RowsColumnTypeDatabaseTypeName)
+	require.True(t, ok)
+
+	typeName := rowTypes.ColumnTypeDatabaseTypeName(0)
+	assert.Equal(t, "INTEGER", typeName)
+
+	require.NoError(t, stmt.Close())
+
+	assert.NoError(t, conn.Close())
+}
+
+func Test_ColumnTypesExists(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, stmt.Close())
+
+	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(-123)")
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	stmt, err = conn.Prepare("SELECT n FROM test")
+	require.NoError(t, err)
+
+	rows, err := stmt.Query(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+	rowTypes, ok := rows.(driver.RowsColumnTypeDatabaseTypeName)
+	require.True(t, ok)
+
+	typeName := rowTypes.ColumnTypeDatabaseTypeName(0)
+	assert.Equal(t, "INTEGER", typeName)
+
+	require.NoError(t, stmt.Close())
+	assert.NoError(t, conn.Close())
+}
+
+// ensure column types data is available
+// even after the last row of the query
+func Test_ColumnTypesEnd(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, stmt.Close())
+
+	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(-123)")
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	stmt, err = conn.Prepare("SELECT n FROM test")
+	require.NoError(t, err)
+
+	rows, err := stmt.Query(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+	rowTypes, ok := rows.(driver.RowsColumnTypeDatabaseTypeName)
+	require.True(t, ok)
+
+	typeName := rowTypes.ColumnTypeDatabaseTypeName(0)
+	assert.Equal(t, "INTEGER", typeName)
+
+	values := make([]driver.Value, 1)
+	require.NoError(t, rows.Next(values))
+
+	assert.Equal(t, int64(-123), values[0])
+
+	require.Equal(t, io.EOF, rows.Next(values))
+
+	// despite EOF we should have types cached
+	typeName = rowTypes.ColumnTypeDatabaseTypeName(0)
+	assert.Equal(t, "INTEGER", typeName)
+
+	require.NoError(t, stmt.Close())
+	assert.NoError(t, conn.Close())
+}
+
 func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 	t.Helper()
 

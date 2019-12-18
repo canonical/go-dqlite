@@ -501,16 +501,25 @@ type Result struct {
 type Rows struct {
 	Columns []string
 	message *Message
+	types   []uint8
 }
 
 // columnTypes returns the row's column types
 // if save is true, it will restore the buffer offset
 func (r *Rows) columnTypes(save bool) ([]uint8, error) {
-	types := make([]uint8, len(r.Columns))
+	// use cached values if possible if not advancing the buffer offset
+	if save && r.types != nil {
+		return r.types, nil
+	}
+	// column types should never change between rows
+	// use cached copy to allow getting types when no more rows
+	if r.types == nil {
+		r.types = make([]uint8, len(r.Columns))
+	}
 
 	// Each column needs a 4 byte slot to store the column type. The row
 	// header must be padded to reach word boundary.
-	headerBits := len(types) * 4
+	headerBits := len(r.types) * 4
 	padBits := 0
 	if trailingBits := (headerBits % messageWordBits); trailingBits != 0 {
 		padBits = (messageWordBits - trailingBits)
@@ -526,7 +535,7 @@ func (r *Rows) columnTypes(save bool) ([]uint8, error) {
 			if save {
 				r.message.bufferForGet().Advance(-(i + 1))
 			}
-			return nil, ErrRowsPart
+			return r.types, ErrRowsPart
 		}
 
 		if slot == 0xff {
@@ -534,29 +543,29 @@ func (r *Rows) columnTypes(save bool) ([]uint8, error) {
 			if save {
 				r.message.bufferForGet().Advance(-(i + 1))
 			}
-			return nil, io.EOF
+			return r.types, io.EOF
 		}
 
 		index := i * 2
 
-		if index >= len(types) {
+		if index >= len(r.types) {
 			continue // This is padding.
 		}
 
-		types[index] = slot & 0x0f
+		r.types[index] = slot & 0x0f
 
 		index++
 
-		if index >= len(types) {
+		if index >= len(r.types) {
 			continue // This is padding byte.
 		}
 
-		types[index] = slot >> 4
+		r.types[index] = slot >> 4
 	}
 	if save {
 		r.message.bufferForGet().Advance(-headerSize)
 	}
-	return types, nil
+	return r.types, nil
 }
 
 // Next returns the next row in the result set.
@@ -681,10 +690,7 @@ var iso8601Formats = []string{
 // ColumnTypes returns the column types for the the result set.
 func (r *Rows) ColumnTypes() ([]string, error) {
 	types, err := r.columnTypes(true)
-	if err != nil {
-		return nil, err
-	}
-	kinds := make([]string, len(r.Columns))
+	kinds := make([]string, len(types))
 
 	for i, t := range types {
 		switch t {
@@ -709,5 +715,5 @@ func (r *Rows) ColumnTypes() ([]string, error) {
 		}
 	}
 
-	return kinds, nil
+	return kinds, err
 }
