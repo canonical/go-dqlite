@@ -88,16 +88,17 @@ func TestClient_Cluster(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	client, err := client.New(ctx, node.BindAddress())
+	cli, err := client.New(ctx, node.BindAddress())
 	require.NoError(t, err)
-	defer client.Close()
+	defer cli.Close()
 
-	servers, err := client.Cluster(context.Background())
+	servers, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
 
 	assert.Len(t, servers, 1)
 	assert.Equal(t, servers[0].ID, uint64(1))
 	assert.Equal(t, servers[0].Address, "1")
+	assert.Equal(t, servers[0].Role, client.Voter)
 }
 
 func newNode(t *testing.T) (*dqlite.Node, func()) {

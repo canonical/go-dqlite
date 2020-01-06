@@ -8,6 +8,7 @@ import (
 type NodeInfo struct {
 	ID      uint64
 	Address string
+	Role    int
 }
 
 // NodeStore is used by a dqlite client to get an initial list of candidate

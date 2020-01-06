@@ -6,6 +6,19 @@ const VersionOne = uint64(1)
 // VersionLegacy is the pre 1.0 dqlite server protocol version.
 const VersionLegacy = uint64(0x86104dd760433fe5)
 
+// Cluster response formats
+const (
+	ClusterFormatV0 = 0
+	ClusterFormatV1 = 1
+)
+
+// Node roles
+const (
+	StandBy = 0
+	Voter   = 1
+	Spare   = 2
+)
+
 // SQLite datatype codes
 const (
 	Integer = 1

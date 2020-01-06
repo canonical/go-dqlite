@@ -124,8 +124,8 @@ func EncodeDump(request *Message, name string) {
 }
 
 // EncodeCluster encodes a Cluster request.
-func EncodeCluster(request *Message) {
-	request.putUint64(0)
+func EncodeCluster(request *Message, format uint64) {
+	request.putUint64(format)
 
 	request.putHeader(RequestCluster)
 }

@@ -107,7 +107,7 @@ func (c *Client) Cluster(ctx context.Context) ([]NodeInfo, error) {
 	response := protocol.Message{}
 	response.Init(512)
 
-	protocol.EncodeCluster(&request)
+	protocol.EncodeCluster(&request, protocol.ClusterFormatV1)
 
 	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send Cluster request")
