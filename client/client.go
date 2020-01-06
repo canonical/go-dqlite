@@ -194,7 +194,16 @@ func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 }
 
 // Assign a role to a node.
-func (c *Client) Assign(ctx context.Context, id uint64, role int) error {
+//
+// Possible roles are:
+//
+// - Voter: the node will replicate data and participate in quorum.
+// - StandBy: the node will replicate data but won't participate in quorum.
+// - Spare: the node won't replicate data and won't participate in quorum.
+//
+// If the target node does not exist or has already the desired role, an error
+// is returned.
+func (c *Client) Assign(ctx context.Context, id uint64, role NodeRole) error {
 	request := protocol.Message{}
 	response := protocol.Message{}
 
@@ -215,6 +224,8 @@ func (c *Client) Assign(ctx context.Context, id uint64, role int) error {
 }
 
 // Transfer leadership from the current leader to another node.
+//
+// This must be invoked one client connected to the current leader.
 func (c *Client) Transfer(ctx context.Context, id uint64) error {
 	request := protocol.Message{}
 	response := protocol.Message{}

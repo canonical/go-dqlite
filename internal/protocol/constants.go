@@ -14,9 +14,9 @@ const (
 
 // Node roles
 const (
-	Voter   = 0
-	StandBy = 1
-	Spare   = 2
+	Voter   = NodeRole(0)
+	StandBy = NodeRole(1)
+	Spare   = NodeRole(2)
 )
 
 // SQLite datatype codes

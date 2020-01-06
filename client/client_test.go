@@ -113,7 +113,7 @@ func TestClient_Transfer(t *testing.T) {
 	require.NoError(t, err)
 	defer cli.Close()
 
-	node2, cleanup := addNode(t, cli, 2)
+	_, cleanup = addNode(t, cli, 2)
 	defer cleanup()
 
 	err = cli.Assign(context.Background(), 2, client.Voter)
@@ -123,14 +123,6 @@ func TestClient_Transfer(t *testing.T) {
 	require.NoError(t, err)
 
 	leader, err := cli.Leader(context.Background())
-	require.NoError(t, err)
-	assert.Equal(t, leader.ID, uint64(2))
-
-	cli, err = client.New(ctx, node2.BindAddress())
-	require.NoError(t, err)
-	defer cli.Close()
-
-	leader, err = cli.Leader(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, leader.ID, uint64(2))
 

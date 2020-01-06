@@ -425,7 +425,7 @@ func (m *Message) getNodes() Nodes {
 	for i := 0; i < int(n); i++ {
 		servers[i].ID = m.getUint64()
 		servers[i].Address = m.getString()
-		servers[i].Role = int(m.getUint64())
+		servers[i].Role = NodeRole(m.getUint64())
 	}
 
 	return servers
