@@ -49,7 +49,7 @@ const (
 	RequestQuerySQL  = 9
 	RequestInterrupt = 10
 	RequestJoin      = 12
-	RequestPromote   = 13
+	RequestAssign    = 13
 	RequestRemove    = 14
 	RequestDump      = 15
 	RequestCluster   = 16

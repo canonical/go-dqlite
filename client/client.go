@@ -183,7 +183,7 @@ func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 	request.Init(4096)
 	response.Init(4096)
 
-	protocol.EncodePromote(&request, node.ID, Voter)
+	protocol.EncodeAssign(&request, node.ID, Voter)
 
 	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return err
