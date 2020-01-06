@@ -163,6 +163,10 @@ func (c *Client) Dump(ctx context.Context, dbname string) ([]File, error) {
 }
 
 // Add a node to a cluster.
+//
+// The new node will have the role specified in node.Role. Note that if the
+// desired role is Voter, the node being added must be online, since it will be
+// granted voting rights only once it catches up with the leader's log.
 func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 	request := protocol.Message{}
 	response := protocol.Message{}
@@ -178,6 +182,12 @@ func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 
 	if err := protocol.DecodeEmpty(&response); err != nil {
 		return err
+	}
+
+	// If the desired role is spare, there's nothing to do, since all newly
+	// added nodes have the spare role.
+	if node.Role == Spare {
+		return nil
 	}
 
 	request.Init(4096)

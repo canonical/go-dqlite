@@ -6,7 +6,7 @@ import (
 
 // Node roles
 const (
-	StandBy = protocol.StandBy
 	Voter   = protocol.Voter
+	StandBy = protocol.StandBy
 	Spare   = protocol.Spare
 )
