@@ -15,6 +15,9 @@ import (
 // dqlite nodes that it can dial in order to find a leader dqlite node to use.
 type NodeStore = protocol.NodeStore
 
+// NodeRole identifies the role of a node.
+type NodeRole = protocol.NodeRole
+
 // NodeInfo holds information about a single server.
 type NodeInfo = protocol.NodeInfo
 

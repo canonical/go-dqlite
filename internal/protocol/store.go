@@ -4,10 +4,14 @@ import (
 	"context"
 )
 
+// NodeRole identifies the role of a node.
+type NodeRole int
+
 // NodeInfo holds information about a single server.
 type NodeInfo struct {
 	ID      uint64
 	Address string
+	Role    NodeRole
 }
 
 // NodeStore is used by a dqlite client to get an initial list of candidate

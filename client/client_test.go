@@ -2,6 +2,7 @@ package client_test
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -29,7 +30,7 @@ func TestClient_Leader(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, leader.ID, uint64(1))
-	assert.Equal(t, leader.Address, "1")
+	assert.Equal(t, leader.Address, "@1001")
 }
 
 func TestClient_Dump(t *testing.T) {
@@ -88,26 +89,94 @@ func TestClient_Cluster(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	client, err := client.New(ctx, node.BindAddress())
+	cli, err := client.New(ctx, node.BindAddress())
 	require.NoError(t, err)
-	defer client.Close()
+	defer cli.Close()
 
-	servers, err := client.Cluster(context.Background())
+	servers, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
 
 	assert.Len(t, servers, 1)
 	assert.Equal(t, servers[0].ID, uint64(1))
-	assert.Equal(t, servers[0].Address, "1")
+	assert.Equal(t, servers[0].Address, "@1001")
+	assert.Equal(t, servers[0].Role, client.Voter)
+}
+
+func TestClient_Transfer(t *testing.T) {
+	node1, cleanup := newNode(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	cli, err := client.New(ctx, node1.BindAddress())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	node2, cleanup := addNode(t, cli, 2)
+	defer cleanup()
+
+	err = cli.Assign(context.Background(), 2, client.Voter)
+	require.NoError(t, err)
+
+	err = cli.Transfer(context.Background(), 2)
+	require.NoError(t, err)
+
+	leader, err := cli.Leader(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, leader.ID, uint64(2))
+
+	cli, err = client.New(ctx, node2.BindAddress())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	leader, err = cli.Leader(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, leader.ID, uint64(2))
+
 }
 
 func newNode(t *testing.T) (*dqlite.Node, func()) {
 	t.Helper()
 	dir, dirCleanup := newDir(t)
 
-	node, err := dqlite.New(uint64(1), "1", dir, dqlite.WithBindAddress("@"))
+	id := uint64(1)
+	address := fmt.Sprintf("@%d", id+1000)
+	node, err := dqlite.New(uint64(1), address, dir, dqlite.WithBindAddress(address))
 	require.NoError(t, err)
 
 	err = node.Start()
+	require.NoError(t, err)
+
+	cleanup := func() {
+		require.NoError(t, node.Close())
+		dirCleanup()
+	}
+
+	return node, cleanup
+}
+
+func addNode(t *testing.T, cli *client.Client, id uint64) (*dqlite.Node, func()) {
+	t.Helper()
+	dir, dirCleanup := newDir(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	address := fmt.Sprintf("@%d", id+1000)
+	node, err := dqlite.New(id, address, dir, dqlite.WithBindAddress(address))
+	require.NoError(t, err)
+
+	err = node.Start()
+	require.NoError(t, err)
+
+	info := client.NodeInfo{
+		ID:      id,
+		Address: address,
+		Role:    client.Spare,
+	}
+
+	err = cli.Add(ctx, info)
 	require.NoError(t, err)
 
 	cleanup := func() {
