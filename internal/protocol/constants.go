@@ -14,8 +14,8 @@ const (
 
 // Node roles
 const (
-	StandBy = 0
-	Voter   = 1
+	Voter   = 0
+	StandBy = 1
 	Spare   = 2
 )
 
