@@ -190,10 +190,39 @@ func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 		return nil
 	}
 
+	return c.Assign(ctx, node.ID, node.Role)
+}
+
+// Assign a role to a node.
+func (c *Client) Assign(ctx context.Context, id uint64, role int) error {
+	request := protocol.Message{}
+	response := protocol.Message{}
+
 	request.Init(4096)
 	response.Init(4096)
 
-	protocol.EncodeAssign(&request, node.ID, Voter)
+	protocol.EncodeAssign(&request, id, uint64(role))
+
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	if err := protocol.DecodeEmpty(&response); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Transfer leadership from the current leader to another node.
+func (c *Client) Transfer(ctx context.Context, id uint64) error {
+	request := protocol.Message{}
+	response := protocol.Message{}
+
+	request.Init(4096)
+	response.Init(4096)
+
+	protocol.EncodeTransfer(&request, id)
 
 	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return err

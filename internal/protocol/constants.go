@@ -53,6 +53,7 @@ const (
 	RequestRemove    = 14
 	RequestDump      = 15
 	RequestCluster   = 16
+	RequestTransfer  = 17
 )
 
 // Response types.

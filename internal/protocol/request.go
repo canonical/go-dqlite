@@ -130,3 +130,10 @@ func EncodeCluster(request *Message, format uint64) {
 
 	request.putHeader(RequestCluster)
 }
+
+// EncodeTransfer encodes a Transfer request.
+func EncodeTransfer(request *Message, id uint64) {
+	request.putUint64(id)
+
+	request.putHeader(RequestTransfer)
+}

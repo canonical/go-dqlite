@@ -18,6 +18,7 @@ package protocol
 //go:generate ./schema.sh --request Remove    id:uint64
 //go:generate ./schema.sh --request Dump      name:string
 //go:generate ./schema.sh --request Cluster   format:uint64
+//go:generate ./schema.sh --request Transfer   id:uint64
 
 //go:generate ./schema.sh --response init
 //go:generate ./schema.sh --response Failure  code:uint64 message:string
