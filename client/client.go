@@ -165,8 +165,9 @@ func (c *Client) Dump(ctx context.Context, dbname string) ([]File, error) {
 // Add a node to a cluster.
 func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 	request := protocol.Message{}
-	request.Init(4096)
 	response := protocol.Message{}
+
+	request.Init(4096)
 	response.Init(4096)
 
 	protocol.EncodeJoin(&request, node.ID, node.Address)
@@ -175,9 +176,20 @@ func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 		return err
 	}
 
-	protocol.EncodePromote(&request, node.ID)
+	if err := protocol.DecodeEmpty(&response); err != nil {
+		return err
+	}
+
+	request.Init(4096)
+	response.Init(4096)
+
+	protocol.EncodePromote(&request, node.ID, Voter)
 
 	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	if err := protocol.DecodeEmpty(&response); err != nil {
 		return err
 	}
 
