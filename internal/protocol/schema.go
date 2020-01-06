@@ -12,8 +12,8 @@ package protocol
 //go:generate ./schema.sh --request Finalize  db:uint32 stmt:uint32
 //go:generate ./schema.sh --request ExecSQL   db:uint64 sql:string values:NamedValues
 //go:generate ./schema.sh --request QuerySQL  db:uint64 sql:string values:NamedValues
-//go:generate ./schema.sh --request Interrupt  db:uint64
-//go:generate ./schema.sh --request Join  id:uint64 address:string
+//go:generate ./schema.sh --request Interrupt db:uint64
+//go:generate ./schema.sh --request Add       id:uint64 address:string
 //go:generate ./schema.sh --request Assign    id:uint64 role:uint64
 //go:generate ./schema.sh --request Remove    id:uint64
 //go:generate ./schema.sh --request Dump      name:string

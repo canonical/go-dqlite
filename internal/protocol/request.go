@@ -94,12 +94,12 @@ func EncodeInterrupt(request *Message, db uint64) {
 	request.putHeader(RequestInterrupt)
 }
 
-// EncodeJoin encodes a Join request.
-func EncodeJoin(request *Message, id uint64, address string) {
+// EncodeAdd encodes a Add request.
+func EncodeAdd(request *Message, id uint64, address string) {
 	request.putUint64(id)
 	request.putString(address)
 
-	request.putHeader(RequestJoin)
+	request.putHeader(RequestAdd)
 }
 
 // EncodeAssign encodes a Assign request.

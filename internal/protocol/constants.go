@@ -48,7 +48,7 @@ const (
 	RequestExecSQL   = 8
 	RequestQuerySQL  = 9
 	RequestInterrupt = 10
-	RequestJoin      = 12
+	RequestAdd       = 12
 	RequestAssign    = 13
 	RequestRemove    = 14
 	RequestDump      = 15

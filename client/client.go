@@ -170,7 +170,7 @@ func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 	request.Init(4096)
 	response.Init(4096)
 
-	protocol.EncodeJoin(&request, node.ID, node.Address)
+	protocol.EncodeAdd(&request, node.ID, node.Address)
 
 	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return err
