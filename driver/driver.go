@@ -21,6 +21,7 @@ import (
 	"log"
 	"net"
 	"reflect"
+	"syscall"
 	"time"
 
 	"github.com/Rican7/retry/backoff"
@@ -652,6 +653,8 @@ func valuesToNamedValues(args []driver.Value) []driver.NamedValue {
 
 func driverError(err error) error {
 	switch err := errors.Cause(err).(type) {
+	case syscall.Errno:
+		return driver.ErrBadConn
 	case *net.OpError:
 		return driver.ErrBadConn
 	case protocol.ErrRequest:
