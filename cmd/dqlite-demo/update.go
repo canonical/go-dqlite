@@ -33,7 +33,7 @@ func newUpdate() *cobra.Command {
 			}
 			defer db.Close()
 
-			if _, err := db.Exec("CREATE TABLE IF NOT EXISTS model (key TEXT, value TEXT)"); err != nil {
+			if _, err := db.Exec("CREATE TABLE IF NOT EXISTS model (key TEXT, value TEXT, UNIQUE(key))"); err != nil {
 				return errors.Wrap(err, "can't create demo table")
 			}
 
