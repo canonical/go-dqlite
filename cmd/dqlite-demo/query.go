@@ -20,7 +20,7 @@ func newQuery() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key := args[0]
 			store := getStore(*cluster)
-			driver, err := driver.New(store, driver.WithLogFunc(logFunc))
+			driver, err := driver.New(store)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create dqlite driver")
 			}

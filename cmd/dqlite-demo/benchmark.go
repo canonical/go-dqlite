@@ -25,7 +25,7 @@ func newBenchmark() *cobra.Command {
 				return errors.Wrap(err, "invalid number")
 			}
 			store := getStore(*cluster)
-			driver, err := driver.New(store, driver.WithLogFunc(logFunc))
+			driver, err := driver.New(store)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create dqlite driver")
 			}

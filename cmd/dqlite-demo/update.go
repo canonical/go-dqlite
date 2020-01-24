@@ -21,7 +21,7 @@ func newUpdate() *cobra.Command {
 			key := args[0]
 			value := args[1]
 			store := getStore(*cluster)
-			driver, err := driver.New(store, driver.WithLogFunc(logFunc))
+			driver, err := driver.New(store)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create dqlite driver")
 			}

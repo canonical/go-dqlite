@@ -13,7 +13,7 @@ func getLeader(cluster []string) (*client.Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	return client.FindLeader(ctx, store, client.WithLogFunc(logFunc))
+	return client.FindLeader(ctx, store)
 }
 
 func getStore(cluster []string) client.NodeStore {
