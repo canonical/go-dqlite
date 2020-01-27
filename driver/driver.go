@@ -29,7 +29,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/canonical/go-dqlite/client"
-	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
@@ -44,7 +43,7 @@ type Driver struct {
 }
 
 // Error is returned in case of database errors.
-type Error = bindings.Error
+type Error = protocol.Error
 
 // Error codes. Values here mostly overlap with native SQLite codes.
 const (
