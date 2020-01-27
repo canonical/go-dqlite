@@ -90,14 +90,14 @@ func init() {
 
 func ConfigSingleThread() error {
 	if rc := C.sqlite3ConfigSingleThread(); rc != 0 {
-		return Error{Code: int(rc)}
+		return protocol.Error{Message: C.GoString(C.sqlite3_errstr(rc)), Code: int(rc)}
 	}
 	return nil
 }
 
 func ConfigMultiThread() error {
 	if rc := C.sqlite3ConfigMultiThread(); rc != 0 {
-		return Error{Code: int(rc)}
+		return protocol.Error{Message: C.GoString(C.sqlite3_errstr(rc)), Code: int(rc)}
 	}
 	return nil
 }
