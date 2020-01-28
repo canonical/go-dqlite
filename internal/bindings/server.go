@@ -197,6 +197,14 @@ func (s *Node) Recover(cluster []protocol.NodeInfo) error {
 	return nil
 }
 
+// GenerateID generates a unique ID for a server.
+func GenerateID(address string) uint64 {
+	caddress := C.CString(address)
+	defer C.free(unsafe.Pointer(caddress))
+	id := C.dqlite_generate_node_id(caddress)
+	return uint64(id)
+}
+
 // Extract the underlying socket from a connection.
 func connToSocket(conn net.Conn) (C.int, error) {
 	file, err := conn.(fileConn).File()
