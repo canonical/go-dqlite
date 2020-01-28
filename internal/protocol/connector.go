@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/Rican7/retry"
 	"github.com/canonical/go-dqlite/internal/logging"
@@ -51,13 +52,6 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 			c.log(l, format, a...)
 		}
 
-		select {
-		case <-ctx.Done():
-			// Stop retrying
-			return nil
-		default:
-		}
-
 		var err error
 		protocol, err = c.connectAttemptAll(ctx, log)
 		if err != nil {
@@ -71,7 +65,7 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	if err != nil {
 		// The retry strategy should never give up until success or
 		// context expiration.
-		panic("connect retry aborted unexpectedly")
+		return nil, errors.Wrap(err, "connect retry aborted unexpectedly")
 	}
 
 	if ctx.Err() != nil {
@@ -90,56 +84,77 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 	}
 
 	// Make an attempt for each address until we find the leader.
-	for _, server := range servers {
+	ch := make(chan *Protocol)
+	for i, server := range servers {
 		log := func(l logging.Level, format string, a ...interface{}) {
 			format += fmt.Sprintf(" address=%s id=%d", server.Address, server.ID)
 			log(l, format, a...)
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
-		defer cancel()
+		go func(x int, server NodeInfo) {
+			ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
+			defer cancel()
 
-		version := VersionOne
-		protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
-		if err == errBadProtocol {
-			version = VersionLegacy
-			protocol, leader, err = c.connectAttemptOne(ctx, server.Address, version)
-		}
-		if err != nil {
-			// This server is unavailable, try with the next target.
-			log(logging.Debug, "server connection failed err=%v", err)
-			continue
-		}
-		if protocol != nil {
-			// We found the leader
+			select {
+			case _ = <-ctx.Done():
+				log(logging.Debug, "connection context is done")
+				return
+			default:
+				// keep going!
+			}
+			version := VersionOne
+			protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
+			if err == errBadProtocol {
+				version = VersionLegacy
+				protocol, leader, err = c.connectAttemptOne(ctx, server.Address, version)
+			}
+			if err != nil {
+				// This server is unavailable, try with the next target.
+				log(logging.Debug, "server connection failed err=%v", err)
+				return
+			}
+			if protocol != nil {
+				// We found the leader
+				log(logging.Info, "connected directly")
+				ch <- protocol
+				return
+			}
+			if leader == "" {
+				// This server does not know who the current leader is,
+				// try with the next target.
+				return
+			}
+
+			// If we get here, it means this server reported that another
+			// server is the leader, let's close the connection to this
+			// server and try with the suggested one.
+			//logger = logger.With(zap.String("leader", leader))
+			protocol, leader, err = c.connectAttemptOne(ctx, leader, version)
+			if err != nil {
+				// The leader reported by the previous server is
+				// unavailable, try with the next target.
+				//logger.Info("leader server connection failed", zap.String("err", err.Error()))
+				log(logging.Debug, "server leader failed err=%v", err)
+				return
+			}
+			if protocol == nil {
+				// The leader reported by the target server does not consider itself
+				// the leader, try with the next target.
+				//logger.Info("reported leader server is not the leader")
+				log(logging.Debug, "reported leader is not the leader")
+				return
+			}
 			log(logging.Info, "connected")
-			return protocol, nil
-		}
-		if leader == "" {
-			// This server does not know who the current leader is,
-			// try with the next target.
-			continue
-		}
-
-		// If we get here, it means this server reported that another
-		// server is the leader, let's close the connection to this
-		// server and try with the suggested one.
-		//logger = logger.With(zap.String("leader", leader))
-		protocol, leader, err = c.connectAttemptOne(ctx, leader, version)
-		if err != nil {
-			// The leader reported by the previous server is
-			// unavailable, try with the next target.
-			//logger.Info("leader server connection failed", zap.String("err", err.Error()))
-			continue
-		}
-		if protocol == nil {
-			// The leader reported by the target server does not consider itself
-			// the leader, try with the next target.
-			//logger.Info("reported leader server is not the leader")
-			continue
-		}
-		log(logging.Info, "connected")
-		return protocol, nil
+			ch <- protocol
+		}(i, server)
+	}
+	timeout := c.config.AttemptTimeout * 2
+	t := time.NewTimer(timeout)
+	select {
+	case p := <-ch:
+		return p, nil
+	case _ = <-t.C:
+		log(logging.Debug, "timed out waiting for leader (%s)", timeout)
 	}
 
 	return nil, ErrNoAvailableLeader
