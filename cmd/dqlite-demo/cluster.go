@@ -20,12 +20,14 @@ var (
 
 // Return a cluster nodes command.
 func newCluster() *cobra.Command {
+	var cluster *[]string
+
 	cmd := &cobra.Command{
 		Use:   "cluster",
 		Short: "display cluster nodes.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getLeader(defaultCluster)
+			client, err := getLeader(*cluster)
 			if err != nil {
 				return errors.Wrap(err, "can't connect to cluster leader")
 			}
@@ -51,5 +53,9 @@ func newCluster() *cobra.Command {
 			return nil
 		},
 	}
+
+	flags := cmd.Flags()
+	cluster = flags.StringSliceP("cluster", "c", defaultCluster, "addresses of existing cluster nodes")
+
 	return cmd
 }
