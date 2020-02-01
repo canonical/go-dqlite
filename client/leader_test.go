@@ -31,7 +31,7 @@ func TestMembership(t *testing.T) {
 		defer node.Close()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	store := client.NewInmemNodeStore()

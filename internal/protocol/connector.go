@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"time"
+	"sync"
 
 	"github.com/Rican7/retry"
 	"github.com/canonical/go-dqlite/internal/logging"
@@ -85,23 +85,19 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 
 	// Make an attempt for each address until we find the leader.
 	ch := make(chan *Protocol)
+	var wg sync.WaitGroup
+	wg.Add(len(servers))
 	for i, server := range servers {
-		log := func(l logging.Level, format string, a ...interface{}) {
-			format += fmt.Sprintf(" address=%s id=%d", server.Address, server.ID)
-			log(l, format, a...)
-		}
-
 		go func(x int, server NodeInfo) {
+			log := func(l logging.Level, format string, a ...interface{}) {
+				format += fmt.Sprintf(" address=%s id=%d", server.Address, server.ID)
+				log(l, format, a...)
+			}
+
 			ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
 			defer cancel()
+			defer wg.Done()
 
-			select {
-			case _ = <-ctx.Done():
-				log(logging.Debug, "connection context is done")
-				return
-			default:
-				// keep going!
-			}
 			version := VersionOne
 			protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
 			if err == errBadProtocol {
@@ -122,6 +118,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			if leader == "" {
 				// This server does not know who the current leader is,
 				// try with the next target.
+				log(logging.Debug, "leader unknown")
 				return
 			}
 
@@ -133,14 +130,12 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			if err != nil {
 				// The leader reported by the previous server is
 				// unavailable, try with the next target.
-				//logger.Info("leader server connection failed", zap.String("err", err.Error()))
 				log(logging.Debug, "server leader failed err=%v", err)
 				return
 			}
 			if protocol == nil {
 				// The leader reported by the target server does not consider itself
 				// the leader, try with the next target.
-				//logger.Info("reported leader server is not the leader")
 				log(logging.Debug, "reported leader is not the leader")
 				return
 			}
@@ -148,13 +143,16 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			ch <- protocol
 		}(i, server)
 	}
-	timeout := c.config.AttemptTimeout * 2
-	t := time.NewTimer(timeout)
+
+	stop := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(stop)
+	}()
 	select {
 	case p := <-ch:
 		return p, nil
-	case _ = <-t.C:
-		log(logging.Debug, "timed out waiting for leader (%s)", timeout)
+	case _ = <-stop:
 	}
 
 	return nil, ErrNoAvailableLeader

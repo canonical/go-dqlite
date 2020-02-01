@@ -106,7 +106,7 @@ func TestClient_Transfer(t *testing.T) {
 	node1, cleanup := newNode(t)
 	defer cleanup()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	cli, err := client.New(ctx, node1.BindAddress())
@@ -133,7 +133,6 @@ func TestClient_Transfer(t *testing.T) {
 	leader, err = cli.Leader(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, leader.ID, uint64(2))
-
 }
 
 func newNode(t *testing.T) (*dqlite.Node, func()) {
