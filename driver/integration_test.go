@@ -226,6 +226,9 @@ func TestIntegration_HighAvailability(t *testing.T) {
 	helpers[1].Start()
 	helpers[2].Start()
 
+	// Give the cluster a chance to establish a quorom
+	time.Sleep(2 * time.Second)
+
 	_, err = db.Exec("INSERT INTO test(n) VALUES(1)")
 	require.NoError(t, err)
 }
