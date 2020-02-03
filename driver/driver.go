@@ -123,7 +123,7 @@ func WithAttemptTimeout(timeout time.Duration) Option {
 
 // WithRetryLimit sets the timeout for each individual connection attempt .
 //
-// If not used, the default is 5 seconds.
+// If not used, the default is 0 (unlimited retries)
 func WithRetryLimit(limit uint) Option {
 	return func(options *options) {
 		options.RetryLimit = limit
