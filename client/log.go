@@ -1,6 +1,8 @@
 package client
 
 import (
+	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -21,10 +23,35 @@ const (
 	LogError = logging.Error
 )
 
-var (
-	logger = log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
-)
-
 // DefaultLogFunc doesn't emit any message.
 func DefaultLogFunc(l LogLevel, format string, a ...interface{}) {
+}
+
+type logWriter struct{}
+
+func (l *logWriter) Write(in []byte) (int, error) {
+	log.Println(string(in))
+	return len(in), nil
+}
+
+// NewLoggingWriter returns an io.Writer using the default Go logger
+func NewLoggingWriter() io.Writer {
+	return &logWriter{}
+}
+
+// NewLogFunc returns a LogFunc.
+//
+// If no writer is specified it will use stdout
+func NewLogFunc(level LogLevel, prefix string, w io.Writer) LogFunc {
+	if w == nil {
+		w = os.Stdout
+	}
+	return func(l LogLevel, format string, args ...interface{}) {
+		if l >= level {
+			// prepend the log level to the message
+			args = append([]interface{}{l.String()}, args...)
+			format = "[%s] " + format
+			fmt.Fprintf(w, format, args...)
+		}
+	}
 }
