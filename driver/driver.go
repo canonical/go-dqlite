@@ -121,7 +121,7 @@ func WithAttemptTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithRetryLimit sets the timeout for each individual connection attempt .
+// WithRetryLimit sets the maximum number of connection retries.
 //
 // If not used, the default is 0 (unlimited retries)
 func WithRetryLimit(limit uint) Option {
@@ -166,7 +166,7 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 
 	driver.clientConfig.Dial = o.Dial
 	driver.clientConfig.AttemptTimeout = o.AttemptTimeout
-	driver.clientConfig.RetryStrategies = driverConnectionRetryStrategy(
+	driver.clientConfig.RetryStrategies = driverConnectionRetryStrategies(
 		o.ConnectionBackoffFactor,
 		o.ConnectionBackoffCap,
 		o.RetryLimit,
@@ -204,7 +204,7 @@ func defaultOptions() *options {
 
 // Return a retry strategy with jittered exponential backoff, capped at the
 // given amount of time.
-func driverConnectionRetryStrategy(factor, cap time.Duration, limit uint) []strategy.Strategy {
+func driverConnectionRetryStrategies(factor, cap time.Duration, limit uint) []strategy.Strategy {
 	backoff := backoff.BinaryExponential(factor)
 
 	strategies := []strategy.Strategy{

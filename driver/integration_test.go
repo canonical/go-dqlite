@@ -233,6 +233,25 @@ func TestIntegration_HighAvailability(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestOptions(t *testing.T) {
+	// make sure applying all options doesn't break anything
+	store, err := client.DefaultNodeStore(":memory:")
+	require.NoError(t, err)
+	log := logging.Test(t)
+	_, err = driver.New(
+		store,
+		driver.WithLogFunc(log),
+		driver.WithContext(context.Background()),
+		driver.WithConnectionTimeout(15*time.Second),
+		driver.WithContextTimeout(2*time.Second),
+		driver.WithConnectionBackoffFactor(50*time.Millisecond),
+		driver.WithConnectionBackoffCap(1*time.Second),
+		driver.WithAttemptTimeout(5*time.Second),
+		driver.WithRetryLimit(0),
+	)
+	require.NoError(t, err)
+}
+
 func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 	infos := make([]client.NodeInfo, n)
 	for i := range infos {
@@ -249,19 +268,7 @@ func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 
 	log := logging.Test(t)
 
-	// all driver options below (except logging) represent the default settings,
-	// and are included for code coverage
-	driver, err := driver.New(
-		store,
-		driver.WithLogFunc(log),
-		driver.WithContext(context.Background()),
-		driver.WithConnectionTimeout(15*time.Second),
-		driver.WithContextTimeout(2*time.Second),
-		driver.WithConnectionBackoffFactor(50*time.Millisecond),
-		driver.WithConnectionBackoffCap(1*time.Second),
-		driver.WithAttemptTimeout(5*time.Second),
-		driver.WithRetryLimit(0),
-	)
+	driver, err := driver.New(store, driver.WithLogFunc(log))
 	require.NoError(t, err)
 
 	driverName := fmt.Sprintf("dqlite-integration-test-%d", driversCount)
