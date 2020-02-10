@@ -39,6 +39,12 @@ func init() {
 	flag.BoolVar(&fail, "fail", false, "exit test if data is corrupted)")
 }
 
+// LogFunc is a go-dqlite logging function
+type LogFunc = client.LogFunc
+
+// LogLevel is a go-dqlite logging level
+type LogLevel = client.LogLevel
+
 // NewLogFunc returns a LogFunc.
 func NewLogFunc(level LogLevel, prefix string, w io.Writer) LogFunc {
 	if w == nil {
