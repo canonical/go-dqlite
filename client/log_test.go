@@ -3,6 +3,8 @@ package client
 import (
 	"log"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type writeCheck bool
@@ -42,4 +44,25 @@ func TestLoggingWriter(t *testing.T) {
 	if !*w {
 		t.Fatal("log level did not print")
 	}
+}
+
+func TestNewLogLevel(t *testing.T) {
+	l, err := NewLogLevel("debug")
+	assert.NoError(t, err)
+	assert.Equal(t, l, LogDebug)
+
+	l, err = NewLogLevel("info")
+	assert.NoError(t, err)
+	assert.Equal(t, l, LogInfo)
+
+	l, err = NewLogLevel("warn")
+	assert.NoError(t, err)
+	assert.Equal(t, l, LogWarn)
+
+	l, err = NewLogLevel("error")
+	assert.NoError(t, err)
+	assert.Equal(t, l, LogError)
+
+	l, err = NewLogLevel("invalid")
+	assert.Error(t, err)
 }
