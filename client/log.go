@@ -50,7 +50,7 @@ func NewLogFunc(level LogLevel, prefix string, w io.Writer) LogFunc {
 		if l >= level {
 			// prepend the log level to the message
 			args = append([]interface{}{l.String()}, args...)
-			format = "[%s] " + format
+			format = prefix + "[%s] " + format
 			fmt.Fprintf(w, format, args...)
 		}
 	}
