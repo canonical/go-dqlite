@@ -226,7 +226,29 @@ func TestIntegration_HighAvailability(t *testing.T) {
 	helpers[1].Start()
 	helpers[2].Start()
 
+	// Give the cluster a chance to establish a quorom
+	time.Sleep(2 * time.Second)
+
 	_, err = db.Exec("INSERT INTO test(n) VALUES(1)")
+	require.NoError(t, err)
+}
+
+func TestOptions(t *testing.T) {
+	// make sure applying all options doesn't break anything
+	store, err := client.DefaultNodeStore(":memory:")
+	require.NoError(t, err)
+	log := logging.Test(t)
+	_, err = driver.New(
+		store,
+		driver.WithLogFunc(log),
+		driver.WithContext(context.Background()),
+		driver.WithConnectionTimeout(15*time.Second),
+		driver.WithContextTimeout(2*time.Second),
+		driver.WithConnectionBackoffFactor(50*time.Millisecond),
+		driver.WithConnectionBackoffCap(1*time.Second),
+		driver.WithAttemptTimeout(5*time.Second),
+		driver.WithRetryLimit(0),
+	)
 	require.NoError(t, err)
 }
 
@@ -245,6 +267,7 @@ func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 	require.NoError(t, store.Set(context.Background(), infos))
 
 	log := logging.Test(t)
+
 	driver, err := driver.New(store, driver.WithLogFunc(log))
 	require.NoError(t, err)
 

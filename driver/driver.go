@@ -112,6 +112,24 @@ func WithConnectionBackoffCap(cap time.Duration) Option {
 	}
 }
 
+// WithAttemptTimeout sets the timeout for each individual connection attempt .
+//
+// If not used, the default is 5 seconds.
+func WithAttemptTimeout(timeout time.Duration) Option {
+	return func(options *options) {
+		options.AttemptTimeout = timeout
+	}
+}
+
+// WithRetryLimit sets the maximum number of connection retries.
+//
+// If not used, the default is 0 (unlimited retries)
+func WithRetryLimit(limit uint) Option {
+	return func(options *options) {
+		options.RetryLimit = limit
+	}
+}
+
 // WithContext sets a global cancellation context.
 func WithContext(context context.Context) Option {
 	return func(options *options) {
@@ -147,13 +165,12 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 	}
 
 	driver.clientConfig.Dial = o.Dial
-	driver.clientConfig.AttemptTimeout = 5 * time.Second
-	driver.clientConfig.RetryStrategies = []strategy.Strategy{
-		driverConnectionRetryStrategy(
-			o.ConnectionBackoffFactor,
-			o.ConnectionBackoffCap,
-		),
-	}
+	driver.clientConfig.AttemptTimeout = o.AttemptTimeout
+	driver.clientConfig.RetryStrategies = driverConnectionRetryStrategies(
+		o.ConnectionBackoffFactor,
+		o.ConnectionBackoffCap,
+		o.RetryLimit,
+	)
 
 	return driver, nil
 }
@@ -162,10 +179,12 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 type options struct {
 	Log                     client.LogFunc
 	Dial                    protocol.DialFunc
+	AttemptTimeout          time.Duration
 	ConnectionTimeout       time.Duration
 	ContextTimeout          time.Duration
 	ConnectionBackoffFactor time.Duration
 	ConnectionBackoffCap    time.Duration
+	RetryLimit              uint
 	Context                 context.Context
 }
 
@@ -174,6 +193,7 @@ func defaultOptions() *options {
 	return &options{
 		Log:                     client.DefaultLogFunc,
 		Dial:                    client.DefaultDialFunc,
+		AttemptTimeout:          5 * time.Second,
 		ConnectionTimeout:       15 * time.Second,
 		ContextTimeout:          2 * time.Second,
 		ConnectionBackoffFactor: 50 * time.Millisecond,
@@ -184,20 +204,26 @@ func defaultOptions() *options {
 
 // Return a retry strategy with jittered exponential backoff, capped at the
 // given amount of time.
-func driverConnectionRetryStrategy(factor, cap time.Duration) strategy.Strategy {
+func driverConnectionRetryStrategies(factor, cap time.Duration, limit uint) []strategy.Strategy {
 	backoff := backoff.BinaryExponential(factor)
 
-	return func(attempt uint) bool {
-		if attempt > 0 {
-			duration := backoff(attempt)
-			if duration > cap {
-				duration = cap
+	strategies := []strategy.Strategy{
+		func(attempt uint) bool {
+			if attempt > 0 {
+				duration := backoff(attempt)
+				if duration > cap {
+					duration = cap
+				}
+				time.Sleep(duration)
 			}
-			time.Sleep(duration)
-		}
 
-		return true
+			return true
+		},
 	}
+	if limit > 0 {
+		strategies = append(strategies, strategy.Limit(limit))
+	}
+	return strategies
 }
 
 // Open establishes a new connection to a SQLite database on the dqlite server.
