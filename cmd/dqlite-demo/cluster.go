@@ -27,14 +27,14 @@ func newCluster() *cobra.Command {
 		Short: "display cluster nodes.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := getLeader(*cluster)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			client, err := getLeader(ctx, *cluster)
 			if err != nil {
 				return errors.Wrap(err, "can't connect to cluster leader")
 			}
 			defer client.Close()
-
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
 
 			var leader *dqclient.NodeInfo
 			var nodes []dqclient.NodeInfo

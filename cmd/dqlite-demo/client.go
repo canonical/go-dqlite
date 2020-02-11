@@ -2,28 +2,19 @@ package main
 
 import (
 	"context"
-	"time"
 
 	"github.com/canonical/go-dqlite/client"
 )
 
-func getLeader(cluster []string) (*client.Client, error) {
-	store := getStore(cluster)
+func getLeader(ctx context.Context, cluster []string) (*client.Client, error) {
+	return client.FindLeader(ctx, getStore(cluster))
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	return client.FindLeader(ctx, store)
 }
 
 func getStore(cluster []string) client.NodeStore {
 	store := client.NewInmemNodeStore()
 	if len(cluster) == 0 {
-		cluster = []string{
-			"127.0.0.1:9181",
-			"127.0.0.1:9182",
-			"127.0.0.1:9183",
-		}
+		cluster = defaultCluster
 	}
 	infos := make([]client.NodeInfo, 3)
 	for i, address := range cluster {

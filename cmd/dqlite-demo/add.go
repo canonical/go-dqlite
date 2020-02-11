@@ -36,14 +36,14 @@ func newAdd() *cobra.Command {
 				Address: address,
 			}
 
-			client, err := getLeader(*cluster)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			client, err := getLeader(ctx, *cluster)
 			if err != nil {
 				return errors.Wrap(err, "can't connect to cluster leader")
 			}
 			defer client.Close()
-
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
 
 			if err := client.Add(ctx, info); err != nil {
 				return errors.Wrap(err, "can't add node")
