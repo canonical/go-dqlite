@@ -44,7 +44,7 @@ func getDB(ctx context.Context, dbName string, cluster []string, logger LogFunc)
 	logOpt := driver.WithLogFunc(logger)
 	dbDriver, err := driver.New(store, logOpt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create dqlite driver: %w", err)
+		return nil, err
 	}
 	sql.Register("dqlite", dbDriver)
 
