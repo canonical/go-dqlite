@@ -24,19 +24,21 @@ import (
 const defaultCluster = "127.0.0.1:9181,127.0.0.1:9182,127.0.0.1:9183"
 
 var (
-	cluster  string
-	dbName   string
-	logLevel string
-	count    int
-	fail     bool
+	addresses string
+	dbName    string
+	logLevel  string
+	count     int
+	fail      bool
+	rotate    bool
 )
 
 func init() {
-	flag.StringVar(&cluster, "cluster", defaultCluster, "list of nodes in the cluster")
+	flag.StringVar(&addresses, "cluster", defaultCluster, "list of nodes in the cluster")
 	flag.StringVar(&dbName, "database", "demo.db", "name of database to use")
 	flag.StringVar(&logLevel, "level", "error", "logging level: {debug|info|warn|error}")
 	flag.IntVar(&count, "count", 10000, "how many times to repeat (0 is infinite)")
 	flag.BoolVar(&fail, "fail", false, "exit test if data is corrupted)")
+	flag.BoolVar(&rotate, "rotate", false, "rotate leadership rapidly across nodes)")
 }
 
 // LogFunc is a go-dqlite logging function
@@ -79,6 +81,14 @@ func main() {
 		log.Fatalln("not a valid log level:", logLevel)
 	}
 
+	cluster := strings.Split(addresses, ",")
+
+	// meant to be run separately against a cluster under load
+	if rotate {
+		rotateLeadership(cluster)
+		return
+	}
+
 	logger := NewLogFunc(level, "hammer:", &tsWriter{})
-	hammer(count, fail, logger, dbName, strings.Split(cluster, ","))
+	hammer(count, fail, logger, dbName, cluster)
 }
