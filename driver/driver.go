@@ -273,6 +273,16 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 		return nil, errors.Wrap(err, "failed to open database")
 	}
 
+	// TODO: this is a workaround to force the raft log to be replayed. It
+	// should instead be fixed in dqlite by executing a barrier.
+	// See https://github.com/canonical/dqlite/issues/210.
+	conn.request.Reset()
+	conn.response.Reset()
+	if _, err := conn.ExecContext(ctx, "PRAGMA ignored_pragma", nil); err != nil {
+		conn.protocol.Close()
+		return nil, errors.Wrap(err, "force initial raft log replay")
+	}
+
 	return conn, nil
 }
 
