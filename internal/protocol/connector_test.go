@@ -54,6 +54,25 @@ func TestConnector_LimitRetries(t *testing.T) {
 	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
 }
 
+// The network connection can't be established because the context expired.
+func TestConnector_ContextExpired(t *testing.T) {
+	store := newStore(t, []string{"8.8.8.8:9000"})
+	config := protocol.Config{
+		Dial:           protocol.TCPDial,
+		AttemptTimeout: 50 * time.Millisecond,
+		RetryStrategies: []strategy.Strategy{
+			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
+		},
+	}
+	connector := newConnectorWithConfig(t, store, config)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := connector.Connect(ctx)
+	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
+}
+
 // Connection failed because the server store is empty.
 func TestConnector_Connect_Error_EmptyNodeStore(t *testing.T) {
 	store := newStore(t, []string{})
