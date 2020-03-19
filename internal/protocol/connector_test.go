@@ -225,11 +225,15 @@ func newConnector(t *testing.T, store protocol.NodeStore) *protocol.Connector {
 		},
 	}
 
+	return newConnectorWithConfig(t, store, config)
+}
+
+func newConnectorWithConfig(t *testing.T, store protocol.NodeStore, config protocol.Config) *protocol.Connector {
+	t.Helper()
+
 	log := logging.Test(t)
 
-	connector := protocol.NewConnector(0, store, config, log)
-
-	return connector
+	return protocol.NewConnector(0, store, config, log)
 }
 
 // Create a new in-memory server store populated with the given addresses.
