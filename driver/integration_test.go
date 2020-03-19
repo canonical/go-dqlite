@@ -80,7 +80,7 @@ CREATE TABLE test2 (n INT, t DATETIME DEFAULT CURRENT_TIMESTAMP)
 	require.NoError(t, tx.Rollback())
 }
 
-func TestIntegration_Error(t *testing.T) {
+func TestIntegration_ConstraintError(t *testing.T) {
 	db, _, cleanup := newDB(t, 3)
 	defer cleanup()
 
@@ -97,6 +97,33 @@ func TestIntegration_Error(t *testing.T) {
 	} else {
 		t.Fatalf("expected diver error, got %+v", err)
 	}
+}
+
+func TestIntegration_ExecBindError(t *testing.T) {
+	db, _, cleanup := newDB(t, 1)
+	defer cleanup()
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 9*time.Millisecond)
+	defer cancel()
+
+	_, err := db.ExecContext(ctx, "CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, "INSERT INTO test(n) VALUES(1)", 1)
+	assert.EqualError(t, err, "column index out of range")
+}
+
+func TestIntegration_QueryBindError(t *testing.T) {
+	db, _, cleanup := newDB(t, 1)
+	defer cleanup()
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 9*time.Millisecond)
+	defer cancel()
+
+	_, err := db.QueryContext(ctx, "SELECT 1", 1)
+	assert.EqualError(t, err, "column index out of range")
 }
 
 func TestIntegration_ConfigMultiThread(t *testing.T) {

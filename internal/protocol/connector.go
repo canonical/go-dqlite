@@ -61,7 +61,7 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 		var err error
 		protocol, err = c.connectAttemptAll(ctx, log)
 		if err != nil {
-			log(logging.Debug, "connection failed err=%v", err)
+			log(logging.Error, "connection failed err=%v", err)
 			return err
 		}
 
@@ -107,7 +107,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		}
 		if err != nil {
 			// This server is unavailable, try with the next target.
-			log(logging.Debug, "server connection failed err=%v", err)
+			log(logging.Info, "server unavailable err=%v", err)
 			continue
 		}
 		if protocol != nil {
@@ -118,6 +118,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		if leader == "" {
 			// This server does not know who the current leader is,
 			// try with the next target.
+			log(logging.Info, "no known leader")
 			continue
 		}
 
@@ -125,17 +126,18 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		// server is the leader, let's close the connection to this
 		// server and try with the suggested one.
 		//logger = logger.With(zap.String("leader", leader))
+		log(logging.Info, "connect to reported leader %s", leader)
 		protocol, leader, err = c.connectAttemptOne(ctx, leader, version)
 		if err != nil {
 			// The leader reported by the previous server is
 			// unavailable, try with the next target.
-			//logger.Info("leader server connection failed", zap.String("err", err.Error()))
+			log(logging.Info, "reported leader unavailable err=%v", err)
 			continue
 		}
 		if protocol == nil {
 			// The leader reported by the target server does not consider itself
 			// the leader, try with the next target.
-			//logger.Info("reported leader server is not the leader")
+			log(logging.Info, "reported leader server is not the leader")
 			continue
 		}
 		log(logging.Info, "connected")
