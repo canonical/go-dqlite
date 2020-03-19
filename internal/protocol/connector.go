@@ -166,14 +166,8 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 	return nil, ErrNoAvailableLeader
 }
 
-// Connect establishes a connection with a dqlite node.
-func Connect(ctx context.Context, dial DialFunc, address string, version uint64) (*Protocol, error) {
-	// Establish the connection.
-	conn, err := dial(ctx, address)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to establish network connection")
-	}
-
+// Perform the initial handshake using the given protocol version.
+func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, error) {
 	// Latest protocol version.
 	protocol := make([]byte, 8)
 	binary.LittleEndian.PutUint64(protocol, version)
@@ -181,11 +175,9 @@ func Connect(ctx context.Context, dial DialFunc, address string, version uint64)
 	// Perform the protocol handshake.
 	n, err := conn.Write(protocol)
 	if err != nil {
-		conn.Close()
 		return nil, errors.Wrap(err, "failed to send handshake")
 	}
 	if n != 8 {
-		conn.Close()
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
@@ -202,8 +194,15 @@ func Connect(ctx context.Context, dial DialFunc, address string, version uint64)
 // - Target is the leader:                   -> server, "", nil
 //
 func (c *Connector) connectAttemptOne(ctx context.Context, address string, version uint64) (*Protocol, string, error) {
-	protocol, err := Connect(ctx, c.config.Dial, address, version)
+	// Establish the connection.
+	conn, err := c.config.Dial(ctx, address)
 	if err != nil {
+		return nil, "", errors.Wrap(err, "failed to establish network connection")
+	}
+
+	protocol, err := Handshake(ctx, conn, version)
+	if err != nil {
+		conn.Close()
 		return nil, "", err
 	}
 
