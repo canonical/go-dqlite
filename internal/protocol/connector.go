@@ -124,8 +124,11 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		// If we get here, it means this server reported that another
 		// server is the leader, let's close the connection to this
 		// server and try with the suggested one.
-		//logger = logger.With(zap.String("leader", leader))
 		log(logging.Info, "connect to reported leader %s", leader)
+
+		ctx, cancel = context.WithTimeout(ctx, c.config.AttemptTimeout)
+		defer cancel()
+
 		protocol, leader, err = c.connectAttemptOne(ctx, leader, version)
 		if err != nil {
 			// The leader reported by the previous server is
