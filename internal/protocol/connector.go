@@ -61,7 +61,6 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 		var err error
 		protocol, err = c.connectAttemptAll(ctx, log)
 		if err != nil {
-			log(logging.Error, "connection failed err=%v", err)
 			return err
 		}
 
@@ -69,9 +68,9 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	}, c.config.RetryStrategies...)
 
 	if err != nil {
-		// The retry strategy should never give up until success or
-		// context expiration.
-		panic("connect retry aborted unexpectedly")
+		// We exhausted the number of retries allowed by the configured
+		// strategy.
+		return nil, ErrNoAvailableLeader
 	}
 
 	if ctx.Err() != nil {

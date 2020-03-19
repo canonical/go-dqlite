@@ -36,6 +36,24 @@ func TestConnector_Connect_Success(t *testing.T) {
 	assert.NoError(t, client.Close())
 }
 
+// The network connection can't be established within the specified number of
+// attempts.
+func TestConnector_LimitRetries(t *testing.T) {
+	store := newStore(t, []string{"@test-123"})
+	config := protocol.Config{
+		Dial:           protocol.UnixDial,
+		AttemptTimeout: 100 * time.Millisecond,
+		RetryStrategies: []strategy.Strategy{
+			strategy.Limit(2),
+			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
+		},
+	}
+	connector := newConnectorWithConfig(t, store, config)
+
+	_, err := connector.Connect(context.Background())
+	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
+}
+
 // Connection failed because the server store is empty.
 func TestConnector_Connect_Error_EmptyNodeStore(t *testing.T) {
 	store := newStore(t, []string{})
