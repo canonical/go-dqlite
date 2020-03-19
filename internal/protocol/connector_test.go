@@ -275,7 +275,7 @@ func newNode(t *testing.T, index int) (string, func()) {
 func newDir(t *testing.T) (string, func()) {
 	t.Helper()
 
-	dir, err := ioutil.TempDir("", "dqlite-replication-test-")
+	dir, err := ioutil.TempDir("", "dqlite-connector-test-")
 	assert.NoError(t, err)
 
 	cleanup := func() {
