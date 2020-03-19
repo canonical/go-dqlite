@@ -14,7 +14,6 @@ import (
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/canonical/go-dqlite/internal/protocol"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -298,11 +297,4 @@ func newListener(t *testing.T) net.Listener {
 	require.NoError(t, err)
 
 	return listener
-}
-
-func init() {
-	err := bindings.ConfigSingleThread()
-	if err != nil {
-		panic(errors.Wrap(err, "failed to initialize dqlite"))
-	}
 }
