@@ -181,7 +181,7 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
 	}
 
-	return NewProtocol(version, conn), nil
+	return newProtocol(version, conn), nil
 }
 
 // Connect to the given dqlite server and check if it's the leader.

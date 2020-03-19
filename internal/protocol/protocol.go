@@ -21,7 +21,7 @@ type Protocol struct {
 	netErr         error         // A network error occurred
 }
 
-func NewProtocol(version uint64, conn net.Conn) *Protocol {
+func newProtocol(version uint64, conn net.Conn) *Protocol {
 	protocol := &Protocol{
 		version:        version,
 		conn:           conn,
