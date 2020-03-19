@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/canonical/go-dqlite/internal/protocol"
@@ -43,10 +41,7 @@ func TestConnector_LimitRetries(t *testing.T) {
 	config := protocol.Config{
 		Dial:           protocol.UnixDial,
 		AttemptTimeout: 100 * time.Millisecond,
-		RetryStrategies: []strategy.Strategy{
-			strategy.Limit(2),
-			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
-		},
+		RetryLimit:     2,
 	}
 	connector := newConnectorWithConfig(t, store, config)
 
@@ -60,9 +55,7 @@ func TestConnector_ContextExpired(t *testing.T) {
 	config := protocol.Config{
 		Dial:           protocol.TCPDial,
 		AttemptTimeout: 50 * time.Millisecond,
-		RetryStrategies: []strategy.Strategy{
-			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
-		},
+		BackoffFactor:  time.Millisecond,
 	}
 	connector := newConnectorWithConfig(t, store, config)
 
@@ -257,9 +250,7 @@ func newConnector(t *testing.T, store protocol.NodeStore) *protocol.Connector {
 	config := protocol.Config{
 		Dial:           protocol.UnixDial,
 		AttemptTimeout: 100 * time.Millisecond,
-		RetryStrategies: []strategy.Strategy{
-			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
-		},
+		BackoffFactor:  time.Millisecond,
 	}
 
 	return newConnectorWithConfig(t, store, config)

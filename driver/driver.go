@@ -95,7 +95,7 @@ func WithConnectionTimeout(timeout time.Duration) Option {
 // WithConnectionBackoffFactor sets the exponential backoff factor for retrying
 // failed connection attempts.
 //
-// If not used, the default is 50 milliseconds.
+// If not used, the default is 100 milliseconds.
 func WithConnectionBackoffFactor(factor time.Duration) Option {
 	return func(options *options) {
 		options.ConnectionBackoffFactor = factor
@@ -114,7 +114,7 @@ func WithConnectionBackoffCap(cap time.Duration) Option {
 
 // WithAttemptTimeout sets the timeout for each individual connection attempt .
 //
-// If not used, the default is 5 seconds.
+// If not used, the default is 60 seconds.
 func WithAttemptTimeout(timeout time.Duration) Option {
 	return func(options *options) {
 		options.AttemptTimeout = timeout
@@ -166,11 +166,9 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 
 	driver.clientConfig.Dial = o.Dial
 	driver.clientConfig.AttemptTimeout = o.AttemptTimeout
-	driver.clientConfig.RetryStrategies = driverConnectionRetryStrategies(
-		o.ConnectionBackoffFactor,
-		o.ConnectionBackoffCap,
-		o.RetryLimit,
-	)
+	driver.clientConfig.BackoffFactor = o.ConnectionBackoffFactor
+	driver.clientConfig.BackoffCap = o.ConnectionBackoffCap
+	driver.clientConfig.RetryLimit = o.RetryLimit
 
 	return driver, nil
 }
@@ -191,14 +189,11 @@ type options struct {
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		Log:                     client.DefaultLogFunc,
-		Dial:                    client.DefaultDialFunc,
-		AttemptTimeout:          5 * time.Second,
-		ConnectionTimeout:       15 * time.Second,
-		ContextTimeout:          2 * time.Second,
-		ConnectionBackoffFactor: 50 * time.Millisecond,
-		ConnectionBackoffCap:    time.Second,
-		Context:                 context.Background(),
+		Log:               client.DefaultLogFunc,
+		Dial:              client.DefaultDialFunc,
+		ConnectionTimeout: 15 * time.Second,
+		ContextTimeout:    2 * time.Second,
+		Context:           context.Background(),
 	}
 }
 

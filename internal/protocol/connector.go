@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/Rican7/retry"
+	"github.com/Rican7/retry/backoff"
+	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/pkg/errors"
 )
@@ -27,6 +30,18 @@ type Connector struct {
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
 func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *Connector {
+	if config.AttemptTimeout == 0 {
+		config.AttemptTimeout = 60 * time.Second
+	}
+
+	if config.BackoffFactor == 0 {
+		config.BackoffFactor = 100 * time.Millisecond
+	}
+
+	if config.BackoffCap == 0 {
+		config.BackoffCap = time.Second
+	}
+
 	connector := &Connector{
 		id:     id,
 		store:  store,
@@ -42,6 +57,8 @@ func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *
 // If the connector is stopped before a leader is found, nil is returned.
 func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	var protocol *Protocol
+
+	strategies := makeRetryStrategies(c.config.BackoffFactor, c.config.BackoffCap, c.config.RetryLimit)
 
 	// The retry strategy should be configured to retry indefinitely, until
 	// the given context is done.
@@ -65,7 +82,7 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 		}
 
 		return nil
-	}, c.config.RetryStrategies...)
+	}, strategies...)
 
 	if err != nil {
 		// We exhausted the number of retries allowed by the configured
@@ -249,6 +266,34 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 		protocol.Close()
 		return nil, leader, nil
 	}
+}
+
+// Return a retry strategy with exponential backoff, capped at the given amount
+// of time and possibly with a maximum number of retries.
+func makeRetryStrategies(factor, cap time.Duration, limit uint) []strategy.Strategy {
+	backoff := backoff.BinaryExponential(factor)
+
+	strategies := []strategy.Strategy{}
+
+	if limit > 0 {
+		strategies = append(strategies, strategy.Limit(limit))
+	}
+
+	strategies = append(strategies,
+		func(attempt uint) bool {
+			if attempt > 0 {
+				duration := backoff(attempt)
+				if duration > cap {
+					duration = cap
+				}
+				time.Sleep(duration)
+			}
+
+			return true
+		},
+	)
+
+	return strategies
 }
 
 var errBadProtocol = fmt.Errorf("bad protocol")
