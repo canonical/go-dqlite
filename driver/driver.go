@@ -86,6 +86,9 @@ func WithDialFunc(dial DialFunc) Option {
 // WithConnectionTimeout sets the connection timeout.
 //
 // If not used, the default is 5 seconds.
+//
+// DEPRECATED: Connection cancellation is supported via the driver.Connector
+// interface, which is used internally by the stdlib sql package.
 func WithConnectionTimeout(timeout time.Duration) Option {
 	return func(options *options) {
 		options.ConnectionTimeout = timeout
@@ -189,11 +192,10 @@ type options struct {
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		Log:               client.DefaultLogFunc,
-		Dial:              client.DefaultDialFunc,
-		ConnectionTimeout: 15 * time.Second,
-		ContextTimeout:    2 * time.Second,
-		Context:           context.Background(),
+		Log:            client.DefaultLogFunc,
+		Dial:           client.DefaultDialFunc,
+		ContextTimeout: 2 * time.Second,
+		Context:        context.Background(),
 	}
 }
 
@@ -230,6 +232,15 @@ type Connector struct {
 
 // Connect returns a connection to the database.
 func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
+	if c.driver.context != nil {
+		ctx = c.driver.context
+	}
+
+	if c.driver.connectionTimeout != 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, c.driver.connectionTimeout)
+		defer cancel()
+	}
 
 	// TODO: generate a client ID.
 	connector := protocol.NewConnector(0, c.driver.store, c.driver.clientConfig, c.driver.log)
@@ -298,10 +309,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(d.context, d.connectionTimeout)
-	defer cancel()
-
-	return connector.Connect(ctx)
+	return connector.Connect(context.Background())
 }
 
 // SetContextTimeout sets the default client timeout when no context deadline
