@@ -452,7 +452,15 @@ func (c *Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, e
 //
 // Deprecated: Drivers should implement ConnBeginTx instead (or additionally).
 func (c *Conn) Begin() (driver.Tx, error) {
-	return c.BeginTx(context.Background(), driver.TxOptions{})
+	ctx := context.Background()
+
+	if c.contextTimeout > 0 {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(context.Background(), c.contextTimeout)
+		defer cancel()
+	}
+
+	return c.BeginTx(ctx, driver.TxOptions{})
 }
 
 // Tx is a transaction.
@@ -462,8 +470,7 @@ type Tx struct {
 
 // Commit the transaction.
 func (tx *Tx) Commit() error {
-	ctx, cancel := context.WithTimeout(context.Background(), tx.conn.contextTimeout)
-	defer cancel()
+	ctx := context.Background()
 
 	if _, err := tx.conn.ExecContext(ctx, "COMMIT", nil); err != nil {
 		return driverError(err)
@@ -474,8 +481,7 @@ func (tx *Tx) Commit() error {
 
 // Rollback the transaction.
 func (tx *Tx) Rollback() error {
-	ctx, cancel := context.WithTimeout(context.Background(), tx.conn.contextTimeout)
-	defer cancel()
+	ctx := context.Background()
 
 	if _, err := tx.conn.ExecContext(ctx, "ROLLBACK", nil); err != nil {
 		return driverError(err)
