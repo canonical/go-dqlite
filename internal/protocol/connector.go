@@ -283,7 +283,8 @@ func makeRetryStrategies(factor, cap time.Duration, limit uint) []strategy.Strat
 		func(attempt uint) bool {
 			if attempt > 0 {
 				duration := backoff(attempt)
-				if duration > cap {
+				// Duration might be negative in case of integer overflow.
+				if duration > cap || duration <= 0 {
 					duration = cap
 				}
 				time.Sleep(duration)
