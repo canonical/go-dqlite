@@ -30,6 +30,10 @@ type Connector struct {
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
 func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *Connector {
+	if config.DialTimeout == 0 {
+		config.DialTimeout = 10 * time.Second
+	}
+
 	if config.AttemptTimeout == 0 {
 		config.AttemptTimeout = 60 * time.Second
 	}
@@ -194,8 +198,11 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 // - Target is the leader:                   -> server, "", nil
 //
 func (c *Connector) connectAttemptOne(ctx context.Context, address string, version uint64) (*Protocol, string, error) {
+	dialCtx, cancel := context.WithTimeout(ctx, c.config.DialTimeout)
+	defer cancel()
+
 	// Establish the connection.
-	conn, err := c.config.Dial(ctx, address)
+	conn, err := c.config.Dial(dialCtx, address)
 	if err != nil {
 		return nil, "", errors.Wrap(err, "failed to establish network connection")
 	}
