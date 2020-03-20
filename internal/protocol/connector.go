@@ -176,6 +176,12 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 	protocol := make([]byte, 8)
 	binary.LittleEndian.PutUint64(protocol, version)
 
+	// Honor the ctx deadline, if present.
+	if deadline, ok := ctx.Deadline(); ok {
+		conn.SetDeadline(deadline)
+		defer conn.SetDeadline(time.Time{})
+	}
+
 	// Perform the protocol handshake.
 	n, err := conn.Write(protocol)
 	if err != nil {
