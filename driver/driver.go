@@ -221,25 +221,22 @@ func driverConnectionRetryStrategies(factor, cap time.Duration, limit uint) []st
 	return strategies
 }
 
-// Open establishes a new connection to a SQLite database on the dqlite server.
-//
-// The given name must be a pure file name without any directory segment,
-// dqlite will connect to a database with that name in its data directory.
-//
-// Query parameters are always valid except for "mode=memory".
-//
-// If this node is not the leader, or the leader is unknown an ErrNotLeader
-// error is returned.
-func (d *Driver) Open(uri string) (driver.Conn, error) {
-	ctx, cancel := context.WithTimeout(d.context, d.connectionTimeout)
-	defer cancel()
+// A Connector represents a driver in a fixed configuration and can create any
+// number of equivalent Conns for use by multiple goroutines.
+type Connector struct {
+	uri    string
+	driver *Driver
+}
+
+// Connect returns a connection to the database.
+func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 
 	// TODO: generate a client ID.
-	connector := protocol.NewConnector(0, d.store, d.clientConfig, d.log)
+	connector := protocol.NewConnector(0, c.driver.store, c.driver.clientConfig, c.driver.log)
 
 	conn := &Conn{
-		log:            d.log,
-		contextTimeout: d.contextTimeout,
+		log:            c.driver.log,
+		contextTimeout: c.driver.contextTimeout,
 	}
 
 	var err error
@@ -247,7 +244,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create dqlite connection")
 	}
-	conn.protocol.SetContextTimeout(d.contextTimeout)
+	conn.protocol.SetContextTimeout(c.driver.contextTimeout)
 
 	conn.request.Init(4096)
 	conn.response.Init(4096)
@@ -255,7 +252,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	defer conn.request.Reset()
 	defer conn.response.Reset()
 
-	protocol.EncodeOpen(&conn.request, uri, 0, "volatile")
+	protocol.EncodeOpen(&conn.request, c.uri, 0, "volatile")
 
 	if err := conn.protocol.Call(ctx, &conn.request, &conn.response); err != nil {
 		conn.protocol.Close()
@@ -269,6 +266,42 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+// Driver returns the underlying Driver of the Connector,
+func (c *Connector) Driver() driver.Driver {
+	return c.driver
+}
+
+// OpenConnector must parse the name in the same format that Driver.Open
+// parses the name parameter.
+func (d *Driver) OpenConnector(name string) (driver.Connector, error) {
+	connector := &Connector{
+		uri:    name,
+		driver: d,
+	}
+	return connector, nil
+}
+
+// Open establishes a new connection to a SQLite database on the dqlite server.
+//
+// The given name must be a pure file name without any directory segment,
+// dqlite will connect to a database with that name in its data directory.
+//
+// Query parameters are always valid except for "mode=memory".
+//
+// If this node is not the leader, or the leader is unknown an ErrNotLeader
+// error is returned.
+func (d *Driver) Open(uri string) (driver.Conn, error) {
+	connector, err := d.OpenConnector(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(d.context, d.connectionTimeout)
+	defer cancel()
+
+	return connector.Connect(ctx)
 }
 
 // SetContextTimeout sets the default client timeout when no context deadline
