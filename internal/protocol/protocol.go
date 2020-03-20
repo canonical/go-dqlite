@@ -50,13 +50,11 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 		return p.netErr
 	}
 
-	// Honor the ctx deadline, if present, or use a default.
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(p.contextTimeout)
+	// Honor the ctx deadline, if present.
+	if deadline, ok := ctx.Deadline(); ok {
+		p.conn.SetDeadline(deadline)
+		defer p.conn.SetDeadline(time.Time{})
 	}
-
-	p.conn.SetDeadline(deadline)
 
 	if err = p.send(request); err != nil {
 		err = errors.Wrap(err, "failed to send request")
@@ -91,12 +89,11 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Honor the ctx deadline, if present, or use a default.
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(2 * time.Second)
+	// Honor the ctx deadline, if present.
+	if deadline, ok := ctx.Deadline(); ok {
+		p.conn.SetDeadline(deadline)
+		defer p.conn.SetDeadline(time.Time{})
 	}
-	p.conn.SetDeadline(deadline)
 
 	defer request.Reset()
 
