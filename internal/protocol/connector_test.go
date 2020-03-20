@@ -9,12 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/canonical/go-dqlite/internal/protocol"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,6 +32,38 @@ func TestConnector_Connect_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NoError(t, client.Close())
+}
+
+// The network connection can't be established within the specified number of
+// attempts.
+func TestConnector_LimitRetries(t *testing.T) {
+	store := newStore(t, []string{"@test-123"})
+	config := protocol.Config{
+		Dial:           protocol.UnixDial,
+		AttemptTimeout: 100 * time.Millisecond,
+		RetryLimit:     2,
+	}
+	connector := newConnectorWithConfig(t, store, config)
+
+	_, err := connector.Connect(context.Background())
+	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
+}
+
+// The network connection can't be established because the context expired.
+func TestConnector_ContextExpired(t *testing.T) {
+	store := newStore(t, []string{"8.8.8.8:9000"})
+	config := protocol.Config{
+		Dial:           protocol.TCPDial,
+		AttemptTimeout: 50 * time.Millisecond,
+		BackoffFactor:  time.Millisecond,
+	}
+	connector := newConnectorWithConfig(t, store, config)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := connector.Connect(ctx)
+	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
 }
 
 // Connection failed because the server store is empty.
@@ -221,16 +250,18 @@ func newConnector(t *testing.T, store protocol.NodeStore) *protocol.Connector {
 	config := protocol.Config{
 		Dial:           protocol.UnixDial,
 		AttemptTimeout: 100 * time.Millisecond,
-		RetryStrategies: []strategy.Strategy{
-			strategy.Backoff(backoff.BinaryExponential(time.Millisecond)),
-		},
+		BackoffFactor:  time.Millisecond,
 	}
+
+	return newConnectorWithConfig(t, store, config)
+}
+
+func newConnectorWithConfig(t *testing.T, store protocol.NodeStore, config protocol.Config) *protocol.Connector {
+	t.Helper()
 
 	log := logging.Test(t)
 
-	connector := protocol.NewConnector(0, store, config, log)
-
-	return connector
+	return protocol.NewConnector(0, store, config, log)
 }
 
 // Create a new in-memory server store populated with the given addresses.
@@ -276,7 +307,7 @@ func newNode(t *testing.T, index int) (string, func()) {
 func newDir(t *testing.T) (string, func()) {
 	t.Helper()
 
-	dir, err := ioutil.TempDir("", "dqlite-replication-test-")
+	dir, err := ioutil.TempDir("", "dqlite-connector-test-")
 	assert.NoError(t, err)
 
 	cleanup := func() {
@@ -298,11 +329,4 @@ func newListener(t *testing.T) net.Listener {
 	require.NoError(t, err)
 
 	return listener
-}
-
-func init() {
-	err := bindings.ConfigSingleThread()
-	if err != nil {
-		panic(errors.Wrap(err, "failed to initialize dqlite"))
-	}
 }

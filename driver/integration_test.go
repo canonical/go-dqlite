@@ -221,7 +221,9 @@ func TestIntegration_PingOnlyWorksOnceLeaderElected(t *testing.T) {
 	helpers[0].Close()
 
 	// Ping returns an error, since the cluster is not available.
-	assert.Error(t, db.Ping())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	assert.Error(t, db.PingContext(ctx))
 
 	helpers[0].Create()
 	helpers[0].Start()
