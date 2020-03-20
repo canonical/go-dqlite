@@ -112,7 +112,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 	// Make an attempt for each address until we find the leader.
 	for _, server := range servers {
 		log := func(l logging.Level, format string, a ...interface{}) {
-			format += fmt.Sprintf(" address=%s id=%d", server.Address, server.ID)
+			format += fmt.Sprintf(" address=%s", server.Address)
 			log(l, format, a...)
 		}
 
