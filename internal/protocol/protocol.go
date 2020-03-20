@@ -13,29 +13,21 @@ import (
 
 // Protocol sends and receive the dqlite message on the wire.
 type Protocol struct {
-	version        uint64        // Protocol version
-	conn           net.Conn      // Underlying network connection.
-	contextTimeout time.Duration // Default context timeout.
-	closeCh        chan struct{} // Stops the heartbeat when the connection gets closed
-	mu             sync.Mutex    // Serialize requests
-	netErr         error         // A network error occurred
+	version uint64        // Protocol version
+	conn    net.Conn      // Underlying network connection.
+	closeCh chan struct{} // Stops the heartbeat when the connection gets closed
+	mu      sync.Mutex    // Serialize requests
+	netErr  error         // A network error occurred
 }
 
 func newProtocol(version uint64, conn net.Conn) *Protocol {
 	protocol := &Protocol{
-		version:        version,
-		conn:           conn,
-		closeCh:        make(chan struct{}),
-		contextTimeout: 5 * time.Second,
+		version: version,
+		conn:    conn,
+		closeCh: make(chan struct{}),
 	}
 
 	return protocol
-}
-
-// SetContextTimeout sets the default context timeout when no deadline is
-// provided.
-func (p *Protocol) SetContextTimeout(timeout time.Duration) {
-	p.contextTimeout = timeout
 }
 
 // Call invokes a dqlite RPC, sending a request message and receiving a

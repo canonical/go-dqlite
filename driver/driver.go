@@ -134,6 +134,9 @@ func WithRetryLimit(limit uint) Option {
 }
 
 // WithContext sets a global cancellation context.
+//
+// DEPRECATED: This API is no a no-op. Users should explicitly pass a context
+// if they wish to cancel their requests.
 func WithContext(context context.Context) Option {
 	return func(options *options) {
 		options.Context = context
@@ -143,7 +146,8 @@ func WithContext(context context.Context) Option {
 // WithContextTimeout sets the default client context timeout when no context
 // deadline is provided.
 //
-// If not used, the default is 5 seconds.
+// DEPRECATED: This API is no a no-op. Users should explicitly pass a context
+// if they wish to cancel their requests.
 func WithContextTimeout(timeout time.Duration) Option {
 	return func(options *options) {
 		options.ContextTimeout = timeout
@@ -192,10 +196,8 @@ type options struct {
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		Log:            client.DefaultLogFunc,
-		Dial:           client.DefaultDialFunc,
-		ContextTimeout: 2 * time.Second,
-		Context:        context.Background(),
+		Log:  client.DefaultLogFunc,
+		Dial: client.DefaultDialFunc,
 	}
 }
 
@@ -255,7 +257,6 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create dqlite connection")
 	}
-	conn.protocol.SetContextTimeout(c.driver.contextTimeout)
 
 	conn.request.Init(4096)
 	conn.response.Init(4096)
@@ -314,9 +315,10 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 
 // SetContextTimeout sets the default client timeout when no context deadline
 // is provided.
-func (d *Driver) SetContextTimeout(timeout time.Duration) {
-	d.contextTimeout = timeout
-}
+//
+// DEPRECATED: This API is no a no-op. Users should explicitly pass a context
+// if they wish to cancel their requests.
+func (d *Driver) SetContextTimeout(timeout time.Duration) {}
 
 // ErrNoAvailableLeader is returned as root cause of Open() if there's no
 // leader available in the cluster.
