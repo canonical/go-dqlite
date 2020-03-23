@@ -252,8 +252,8 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 		return nil, "", nil
 	case address:
 		// This server is the leader, register ourselves and return.
-		request.Reset()
-		response.Reset()
+		request.reset()
+		response.reset()
 
 		EncodeClient(&request, c.id)
 

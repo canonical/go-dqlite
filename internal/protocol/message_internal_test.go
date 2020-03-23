@@ -39,7 +39,7 @@ func TestMessage_putBlob(t *testing.T) {
 			assert.Equal(t, bytes[8:len(c.Blob)+8], c.Blob)
 			assert.Equal(t, offset, c.Offset)
 
-			message.Reset()
+			message.reset()
 		})
 	}
 }
@@ -66,7 +66,7 @@ func TestMessage_putString(t *testing.T) {
 			assert.Equal(t, string(bytes[:len(c.String)]), c.String)
 			assert.Equal(t, offset, c.Offset)
 
-			message.Reset()
+			message.reset()
 		})
 	}
 }
@@ -189,7 +189,7 @@ func BenchmarkMessage_putString(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		message.Reset()
+		message.reset()
 		message.putString("hello")
 	}
 }
@@ -201,7 +201,7 @@ func BenchmarkMessage_putUint64(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		message.Reset()
+		message.reset()
 		message.putUint64(270)
 	}
 }

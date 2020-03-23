@@ -235,9 +235,6 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn.request.Init(4096)
 	conn.response.Init(4096)
 
-	defer conn.request.Reset()
-	defer conn.response.Reset()
-
 	protocol.EncodeOpen(&conn.request, c.uri, 0, "volatile")
 
 	if err := conn.protocol.Call(ctx, &conn.request, &conn.response); err != nil {
@@ -312,9 +309,6 @@ type Conn struct {
 // context is for the preparation of the statement, it must not store the
 // context within the statement itself.
 func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
-	defer c.request.Reset()
-	defer c.response.Reset()
-
 	stmt := &Stmt{
 		protocol: c.protocol,
 		request:  &c.request,
@@ -343,9 +337,6 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 
 // ExecContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	defer c.request.Reset()
-	defer c.response.Reset()
-
 	protocol.EncodeExecSQL(&c.request, uint64(c.id), query, args)
 
 	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
@@ -367,18 +358,14 @@ func (c *Conn) Query(query string, args []driver.Value) (driver.Rows, error) {
 
 // QueryContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	defer c.request.Reset()
-
 	protocol.EncodeQuerySQL(&c.request, uint64(c.id), query, args)
 
 	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
-		c.response.Reset()
 		return nil, driverError(err)
 	}
 
 	rows, err := protocol.DecodeRows(&c.response)
 	if err != nil {
-		c.response.Reset()
 		return nil, driverError(err)
 	}
 
@@ -479,9 +466,6 @@ type Stmt struct {
 
 // Close closes the statement.
 func (s *Stmt) Close() error {
-	defer s.request.Reset()
-	defer s.response.Reset()
-
 	protocol.EncodeFinalize(s.request, s.db, s.id)
 
 	ctx := context.Background()
@@ -507,9 +491,6 @@ func (s *Stmt) NumInput() int {
 //
 // ExecContext must honor the context timeout and return when it is canceled.
 func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
-	defer s.request.Reset()
-	defer s.response.Reset()
-
 	protocol.EncodeExec(s.request, s.db, s.id, args)
 
 	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
@@ -534,22 +515,14 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 //
 // QueryContext must honor the context timeout and return when it is canceled.
 func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	defer s.request.Reset()
-
-	// FIXME: this shouldn't be needed but we have hit a few panics
-	// probably due to the response object not being fully reset.
-	s.response.Reset()
-
 	protocol.EncodeQuery(s.request, s.db, s.id, args)
 
 	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
-		s.response.Reset()
 		return nil, driverError(err)
 	}
 
 	rows, err := protocol.DecodeRows(s.response)
 	if err != nil {
-		s.response.Reset()
 		return nil, driverError(err)
 	}
 

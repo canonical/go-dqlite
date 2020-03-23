@@ -38,11 +38,11 @@ func (m *Message) Init(initialBufferSize int) {
 	}
 	m.header = make([]byte, messageHeaderSize)
 	m.body1.Bytes = make([]byte, initialBufferSize)
-	m.Reset()
+	m.reset()
 }
 
 // Reset the state of the message so it can be used to encode or decode again.
-func (m *Message) Reset() {
+func (m *Message) reset() {
 	m.words = 0
 	m.mtype = 0
 	m.flags = 0
@@ -575,7 +575,7 @@ func (r *Rows) Close() error {
 			err = fmt.Errorf("unexpected end of message")
 		}
 	}
-	r.message.Reset()
+	r.message.reset()
 	return err
 }
 
@@ -600,7 +600,7 @@ func (f *Files) Next() (string, []byte) {
 }
 
 func (f *Files) Close() {
-	f.message.Reset()
+	f.message.reset()
 }
 
 const (

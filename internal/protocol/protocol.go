@@ -87,8 +87,6 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 		defer p.conn.SetDeadline(time.Time{})
 	}
 
-	defer request.Reset()
-
 	EncodeInterrupt(request, 0)
 
 	if err := p.send(request); err != nil {
@@ -97,12 +95,10 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 
 	for {
 		if err := p.recv(response); err != nil {
-			response.Reset()
 			return errors.Wrap(err, "failed to receive response")
 		}
 
 		mtype, _ := response.getHeader()
-		response.Reset()
 
 		if mtype == ResponseEmpty {
 			break
@@ -158,6 +154,8 @@ func (p *Protocol) sendBody(req *Message) error {
 }
 
 func (p *Protocol) recv(res *Message) error {
+	res.reset()
+
 	if err := p.recvHeader(res); err != nil {
 		return errors.Wrap(err, "failed to receive header")
 	}

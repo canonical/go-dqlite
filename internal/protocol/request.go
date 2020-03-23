@@ -7,7 +7,7 @@ package protocol
 
 // EncodeLeader encodes a Leader request.
 func EncodeLeader(request *Message) {
-    request.Reset()
+	request.reset()
 	request.putUint64(0)
 
 	request.putHeader(RequestLeader)
@@ -15,7 +15,7 @@ func EncodeLeader(request *Message) {
 
 // EncodeClient encodes a Client request.
 func EncodeClient(request *Message, id uint64) {
-    request.Reset()
+	request.reset()
 	request.putUint64(id)
 
 	request.putHeader(RequestClient)
@@ -23,7 +23,7 @@ func EncodeClient(request *Message, id uint64) {
 
 // EncodeHeartbeat encodes a Heartbeat request.
 func EncodeHeartbeat(request *Message, timestamp uint64) {
-    request.Reset()
+	request.reset()
 	request.putUint64(timestamp)
 
 	request.putHeader(RequestHeartbeat)
@@ -31,7 +31,7 @@ func EncodeHeartbeat(request *Message, timestamp uint64) {
 
 // EncodeOpen encodes a Open request.
 func EncodeOpen(request *Message, name string, flags uint64, vfs string) {
-    request.Reset()
+	request.reset()
 	request.putString(name)
 	request.putUint64(flags)
 	request.putString(vfs)
@@ -41,7 +41,7 @@ func EncodeOpen(request *Message, name string, flags uint64, vfs string) {
 
 // EncodePrepare encodes a Prepare request.
 func EncodePrepare(request *Message, db uint64, sql string) {
-    request.Reset()
+	request.reset()
 	request.putUint64(db)
 	request.putString(sql)
 
@@ -50,7 +50,7 @@ func EncodePrepare(request *Message, db uint64, sql string) {
 
 // EncodeExec encodes a Exec request.
 func EncodeExec(request *Message, db uint32, stmt uint32, values NamedValues) {
-    request.Reset()
+	request.reset()
 	request.putUint32(db)
 	request.putUint32(stmt)
 	request.putNamedValues(values)
@@ -60,7 +60,7 @@ func EncodeExec(request *Message, db uint32, stmt uint32, values NamedValues) {
 
 // EncodeQuery encodes a Query request.
 func EncodeQuery(request *Message, db uint32, stmt uint32, values NamedValues) {
-    request.Reset()
+	request.reset()
 	request.putUint32(db)
 	request.putUint32(stmt)
 	request.putNamedValues(values)
@@ -70,7 +70,7 @@ func EncodeQuery(request *Message, db uint32, stmt uint32, values NamedValues) {
 
 // EncodeFinalize encodes a Finalize request.
 func EncodeFinalize(request *Message, db uint32, stmt uint32) {
-    request.Reset()
+	request.reset()
 	request.putUint32(db)
 	request.putUint32(stmt)
 
@@ -79,7 +79,7 @@ func EncodeFinalize(request *Message, db uint32, stmt uint32) {
 
 // EncodeExecSQL encodes a ExecSQL request.
 func EncodeExecSQL(request *Message, db uint64, sql string, values NamedValues) {
-    request.Reset()
+	request.reset()
 	request.putUint64(db)
 	request.putString(sql)
 	request.putNamedValues(values)
@@ -89,7 +89,7 @@ func EncodeExecSQL(request *Message, db uint64, sql string, values NamedValues) 
 
 // EncodeQuerySQL encodes a QuerySQL request.
 func EncodeQuerySQL(request *Message, db uint64, sql string, values NamedValues) {
-    request.Reset()
+	request.reset()
 	request.putUint64(db)
 	request.putString(sql)
 	request.putNamedValues(values)
@@ -99,7 +99,7 @@ func EncodeQuerySQL(request *Message, db uint64, sql string, values NamedValues)
 
 // EncodeInterrupt encodes a Interrupt request.
 func EncodeInterrupt(request *Message, db uint64) {
-    request.Reset()
+	request.reset()
 	request.putUint64(db)
 
 	request.putHeader(RequestInterrupt)
@@ -107,7 +107,7 @@ func EncodeInterrupt(request *Message, db uint64) {
 
 // EncodeAdd encodes a Add request.
 func EncodeAdd(request *Message, id uint64, address string) {
-    request.Reset()
+	request.reset()
 	request.putUint64(id)
 	request.putString(address)
 
@@ -116,7 +116,7 @@ func EncodeAdd(request *Message, id uint64, address string) {
 
 // EncodeAssign encodes a Assign request.
 func EncodeAssign(request *Message, id uint64, role uint64) {
-    request.Reset()
+	request.reset()
 	request.putUint64(id)
 	request.putUint64(role)
 
@@ -125,7 +125,7 @@ func EncodeAssign(request *Message, id uint64, role uint64) {
 
 // EncodeRemove encodes a Remove request.
 func EncodeRemove(request *Message, id uint64) {
-    request.Reset()
+	request.reset()
 	request.putUint64(id)
 
 	request.putHeader(RequestRemove)
@@ -133,7 +133,7 @@ func EncodeRemove(request *Message, id uint64) {
 
 // EncodeDump encodes a Dump request.
 func EncodeDump(request *Message, name string) {
-    request.Reset()
+	request.reset()
 	request.putString(name)
 
 	request.putHeader(RequestDump)
@@ -141,7 +141,7 @@ func EncodeDump(request *Message, name string) {
 
 // EncodeCluster encodes a Cluster request.
 func EncodeCluster(request *Message, format uint64) {
-    request.Reset()
+	request.reset()
 	request.putUint64(format)
 
 	request.putHeader(RequestCluster)
@@ -149,7 +149,7 @@ func EncodeCluster(request *Message, format uint64) {
 
 // EncodeTransfer encodes a Transfer request.
 func EncodeTransfer(request *Message, id uint64) {
-    request.Reset()
+	request.reset()
 	request.putUint64(id)
 
 	request.putHeader(RequestTransfer)
