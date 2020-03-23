@@ -417,10 +417,6 @@ func (m *Message) hasBeenConsumed() bool {
 
 func (m *Message) lastByte() byte {
 	size := int(m.words * messageWordSize)
-	if size > len(m.body1.Bytes) {
-		size = size - m.body1.Offset
-		return m.body2.Bytes[size-1]
-	}
 	return m.body1.Bytes[size-1]
 }
 
