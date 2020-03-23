@@ -30,15 +30,15 @@ type Message struct {
 	body2  buffer // Dynamically allocated body data
 }
 
-// Init initializes the message using the given size of the statically
-// allocated buffer (i.e. a buffer which is re-used across requests or
-// responses encoded or decoded using this message object).
-func (m *Message) Init(staticSize int) {
-	if (staticSize % messageWordSize) != 0 {
-		panic("static size is not aligned to word boundary")
+// Init initializes the message using the given initial size for the data
+// buffer, which is re-used across requests or responses encoded or decoded
+// using this message object.
+func (m *Message) Init(initialBufferSize int) {
+	if (initialBufferSize % messageWordSize) != 0 {
+		panic("initial buffer size is not aligned to word boundary")
 	}
 	m.header = make([]byte, messageHeaderSize)
-	m.body1.Bytes = make([]byte, staticSize)
+	m.body1.Bytes = make([]byte, initialBufferSize)
 	m.Reset()
 }
 
