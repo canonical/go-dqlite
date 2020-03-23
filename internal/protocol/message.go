@@ -412,8 +412,7 @@ func (m *Message) getFiles() Files {
 
 func (m *Message) hasBeenConsumed() bool {
 	size := int(m.words * messageWordSize)
-	return (m.body1.Offset == size || m.body1.Offset == len(m.body1.Bytes)) &&
-		m.body1.Offset+m.body2.Offset == size
+	return m.body1.Offset == size
 }
 
 func (m *Message) lastByte() byte {
