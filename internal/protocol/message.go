@@ -246,21 +246,6 @@ func (m *Message) putHeader(mtype uint8) {
 
 	m.words = uint32(m.body1.Offset) / messageWordSize
 
-	if m.body2.Bytes == nil {
-		m.finalize()
-		return
-	}
-
-	if m.body2.Offset <= 0 {
-		panic("dynamic offset is not positive")
-	}
-
-	if (m.body2.Offset % messageWordSize) != 0 {
-		panic("dynamic body is not aligned")
-	}
-
-	m.words += uint32(m.body2.Offset) / messageWordSize
-
 	m.finalize()
 }
 
