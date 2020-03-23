@@ -184,28 +184,17 @@ func (p *Protocol) recvHeader(res *Message) error {
 
 func (p *Protocol) recvBody(res *Message) error {
 	n := int(res.words) * messageWordSize
-	n1 := n
-	n2 := 0
 
-	if n1 > len(res.body1.Bytes) {
-		// We need to allocate the dynamic buffer.
-		n1 = len(res.body1.Bytes)
-		n2 = n - n1
+	for n > len(res.body1.Bytes) {
+		// Grow message buffer.
+		bytes := make([]byte, len(res.body1.Bytes)*2)
+		res.body1.Bytes = bytes
 	}
 
-	buf := res.body1.Bytes[:n1]
+	buf := res.body1.Bytes[:n]
 
 	if err := p.recvPeek(buf); err != nil {
 		return errors.Wrap(err, "failed to read body")
-	}
-
-	if n2 > 0 {
-		res.body2.Bytes = make([]byte, n2)
-		res.body2.Offset = 0
-		buf = res.body2.Bytes
-		if err := p.recvPeek(buf); err != nil {
-			return errors.Wrap(err, "failed to read body")
-		}
 	}
 
 	return nil
