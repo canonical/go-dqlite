@@ -24,8 +24,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	"github.com/pkg/errors"
 
 	"github.com/canonical/go-dqlite/client"
@@ -199,30 +197,6 @@ func defaultOptions() *options {
 		Log:  client.DefaultLogFunc,
 		Dial: client.DefaultDialFunc,
 	}
-}
-
-// Return a retry strategy with jittered exponential backoff, capped at the
-// given amount of time.
-func driverConnectionRetryStrategies(factor, cap time.Duration, limit uint) []strategy.Strategy {
-	backoff := backoff.BinaryExponential(factor)
-
-	strategies := []strategy.Strategy{
-		func(attempt uint) bool {
-			if attempt > 0 {
-				duration := backoff(attempt)
-				if duration > cap {
-					duration = cap
-				}
-				time.Sleep(duration)
-			}
-
-			return true
-		},
-	}
-	if limit > 0 {
-		strategies = append(strategies, strategy.Limit(limit))
-	}
-	return strategies
 }
 
 // A Connector represents a driver in a fixed configuration and can create any
