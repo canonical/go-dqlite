@@ -422,13 +422,10 @@ func (m *Message) lastByte() byte {
 
 func (m *Message) bufferForGet() *buffer {
 	size := int(m.words * messageWordSize)
-	if m.body1.Offset == size || m.body1.Offset == len(m.body1.Bytes) {
-		// The static body has been exahusted, use the dynamic one.
-		if m.body1.Offset+m.body2.Offset == size {
-			err := fmt.Errorf("short message: type=%d words=%d off=%d", m.mtype, m.words, m.body1.Offset)
-			panic(err)
-		}
-		return &m.body2
+	// The static body has been exahusted, use the dynamic one.
+	if m.body1.Offset == size {
+		err := fmt.Errorf("short message: type=%d words=%d off=%d", m.mtype, m.words, m.body1.Offset)
+		panic(err)
 	}
 
 	return &m.body1
