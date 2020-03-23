@@ -285,6 +285,5 @@ func TestMessage_getString_Overflow_WordBoundary(t *testing.T) {
 	s := message.getString()
 	assert.Equal(t, "abcdefghilmnopqr", s)
 
-	assert.Equal(t, 8, message.body1.Offset)
-	assert.Equal(t, 24, message.body2.Offset)
+	assert.Equal(t, 32, message.body1.Offset)
 }

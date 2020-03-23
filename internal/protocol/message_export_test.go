@@ -6,5 +6,4 @@ func (m *Message) Body1() ([]byte, int) {
 
 func (m *Message) Rewind() {
 	m.body1.Offset = 0
-	m.body2.Offset = 0
 }

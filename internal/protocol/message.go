@@ -27,7 +27,6 @@ type Message struct {
 	extra  uint16
 	header []byte // Statically allocated header buffer
 	body1  buffer // Statically allocated body data, using bytes
-	body2  buffer // Dynamically allocated body data
 }
 
 // Init initializes the message using the given initial size for the data
@@ -52,8 +51,6 @@ func (m *Message) Reset() {
 		m.header[i] = 0
 	}
 	m.body1.Offset = 0
-	m.body2.Bytes = nil
-	m.body2.Offset = 0
 }
 
 // Append a byte slice to the message.
