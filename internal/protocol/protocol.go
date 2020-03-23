@@ -154,20 +154,6 @@ func (p *Protocol) sendBody(req *Message) error {
 		return errors.Wrap(io.ErrShortWrite, "failed to write body")
 	}
 
-	if req.body2.Bytes == nil {
-		return nil
-	}
-
-	buf = req.body2.Bytes[:req.body2.Offset]
-	n, err = p.conn.Write(buf)
-	if err != nil {
-		return errors.Wrap(err, "failed to send dynamic body")
-	}
-
-	if n != len(buf) {
-		return errors.Wrap(io.ErrShortWrite, "failed to write body")
-	}
-
 	return nil
 }
 
