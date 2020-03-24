@@ -132,7 +132,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		}
 		if protocol != nil {
 			// We found the leader
-			log(logging.Info, "connected")
+			log(logging.Debug, "connected")
 			return protocol, nil
 		}
 		if leader == "" {
