@@ -87,8 +87,6 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 		defer p.conn.SetDeadline(time.Time{})
 	}
 
-	defer request.Reset()
-
 	EncodeInterrupt(request, 0)
 
 	if err := p.send(request); err != nil {
@@ -97,12 +95,10 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 
 	for {
 		if err := p.recv(response); err != nil {
-			response.Reset()
 			return errors.Wrap(err, "failed to receive response")
 		}
 
 		mtype, _ := response.getHeader()
-		response.Reset()
 
 		if mtype == ResponseEmpty {
 			break
@@ -144,24 +140,10 @@ func (p *Protocol) sendHeader(req *Message) error {
 }
 
 func (p *Protocol) sendBody(req *Message) error {
-	buf := req.body1.Bytes[:req.body1.Offset]
+	buf := req.body.Bytes[:req.body.Offset]
 	n, err := p.conn.Write(buf)
 	if err != nil {
 		return errors.Wrap(err, "failed to send static body")
-	}
-
-	if n != len(buf) {
-		return errors.Wrap(io.ErrShortWrite, "failed to write body")
-	}
-
-	if req.body2.Bytes == nil {
-		return nil
-	}
-
-	buf = req.body2.Bytes[:req.body2.Offset]
-	n, err = p.conn.Write(buf)
-	if err != nil {
-		return errors.Wrap(err, "failed to send dynamic body")
 	}
 
 	if n != len(buf) {
@@ -172,6 +154,8 @@ func (p *Protocol) sendBody(req *Message) error {
 }
 
 func (p *Protocol) recv(res *Message) error {
+	res.reset()
+
 	if err := p.recvHeader(res); err != nil {
 		return errors.Wrap(err, "failed to receive header")
 	}
@@ -198,28 +182,17 @@ func (p *Protocol) recvHeader(res *Message) error {
 
 func (p *Protocol) recvBody(res *Message) error {
 	n := int(res.words) * messageWordSize
-	n1 := n
-	n2 := 0
 
-	if n1 > len(res.body1.Bytes) {
-		// We need to allocate the dynamic buffer.
-		n1 = len(res.body1.Bytes)
-		n2 = n - n1
+	for n > len(res.body.Bytes) {
+		// Grow message buffer.
+		bytes := make([]byte, len(res.body.Bytes)*2)
+		res.body.Bytes = bytes
 	}
 
-	buf := res.body1.Bytes[:n1]
+	buf := res.body.Bytes[:n]
 
 	if err := p.recvPeek(buf); err != nil {
 		return errors.Wrap(err, "failed to read body")
-	}
-
-	if n2 > 0 {
-		res.body2.Bytes = make([]byte, n2)
-		res.body2.Offset = 0
-		buf = res.body2.Bytes
-		if err := p.recvPeek(buf); err != nil {
-			return errors.Wrap(err, "failed to read body")
-		}
 	}
 
 	return nil

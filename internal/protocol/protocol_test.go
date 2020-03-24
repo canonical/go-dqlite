@@ -44,9 +44,6 @@ func TestProtocol_RequestWithDynamicBuffer(t *testing.T) {
 	id, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
 
-	request.Reset()
-	response.Reset()
-
 	sql := `
 CREATE TABLE foo (n INT);
 CREATE TABLE bar (n INT);
@@ -70,9 +67,6 @@ func TestProtocol_Prepare(t *testing.T) {
 
 	db, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
-
-	request.Reset()
-	response.Reset()
 
 	protocol.EncodePrepare(&request, uint64(db), "CREATE TABLE test (n INT)")
 

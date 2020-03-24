@@ -132,7 +132,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		}
 		if protocol != nil {
 			// We found the leader
-			log(logging.Info, "connected")
+			log(logging.Debug, "connected")
 			return protocol, nil
 		}
 		if leader == "" {
@@ -252,8 +252,8 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 		return nil, "", nil
 	case address:
 		// This server is the leader, register ourselves and return.
-		request.Reset()
-		response.Reset()
+		request.reset()
+		response.reset()
 
 		EncodeClient(&request, c.id)
 
