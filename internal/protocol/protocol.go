@@ -140,7 +140,7 @@ func (p *Protocol) sendHeader(req *Message) error {
 }
 
 func (p *Protocol) sendBody(req *Message) error {
-	buf := req.body1.Bytes[:req.body1.Offset]
+	buf := req.body.Bytes[:req.body.Offset]
 	n, err := p.conn.Write(buf)
 	if err != nil {
 		return errors.Wrap(err, "failed to send static body")
@@ -183,13 +183,13 @@ func (p *Protocol) recvHeader(res *Message) error {
 func (p *Protocol) recvBody(res *Message) error {
 	n := int(res.words) * messageWordSize
 
-	for n > len(res.body1.Bytes) {
+	for n > len(res.body.Bytes) {
 		// Grow message buffer.
-		bytes := make([]byte, len(res.body1.Bytes)*2)
-		res.body1.Bytes = bytes
+		bytes := make([]byte, len(res.body.Bytes)*2)
+		res.body.Bytes = bytes
 	}
 
-	buf := res.body1.Bytes[:n]
+	buf := res.body.Bytes[:n]
 
 	if err := p.recvPeek(buf); err != nil {
 		return errors.Wrap(err, "failed to read body")

@@ -13,7 +13,7 @@ import (
 func TestMessage_StaticBytesAlignment(t *testing.T) {
 	message := Message{}
 	message.Init(4096)
-	pointer := uintptr(unsafe.Pointer(&message.body1.Bytes))
+	pointer := uintptr(unsafe.Pointer(&message.body.Bytes))
 	assert.Equal(t, pointer%messageWordSize, uintptr(0))
 }
 
@@ -34,7 +34,7 @@ func TestMessage_putBlob(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", c.Offset), func(t *testing.T) {
 			message.putBlob(c.Blob)
 
-			bytes, offset := message.Body1()
+			bytes, offset := message.Body()
 
 			assert.Equal(t, bytes[8:len(c.Blob)+8], c.Blob)
 			assert.Equal(t, offset, c.Offset)
@@ -61,7 +61,7 @@ func TestMessage_putString(t *testing.T) {
 		t.Run(c.String, func(t *testing.T) {
 			message.putString(c.String)
 
-			bytes, offset := message.Body1()
+			bytes, offset := message.Body()
 
 			assert.Equal(t, string(bytes[:len(c.String)]), c.String)
 			assert.Equal(t, offset, c.Offset)
@@ -79,7 +79,7 @@ func TestMessage_putUint8(t *testing.T) {
 
 	message.putUint8(v)
 
-	bytes, offset := message.Body1()
+	bytes, offset := message.Body()
 
 	assert.Equal(t, bytes[0], byte(v))
 
@@ -94,7 +94,7 @@ func TestMessage_putUint16(t *testing.T) {
 
 	message.putUint16(v)
 
-	bytes, offset := message.Body1()
+	bytes, offset := message.Body()
 
 	assert.Equal(t, bytes[0], byte((v & 0x00ff)))
 	assert.Equal(t, bytes[1], byte((v&0xff00)>>8))
@@ -110,7 +110,7 @@ func TestMessage_putUint32(t *testing.T) {
 
 	message.putUint32(v)
 
-	bytes, offset := message.Body1()
+	bytes, offset := message.Body()
 
 	assert.Equal(t, bytes[0], byte((v & 0x000000ff)))
 	assert.Equal(t, bytes[1], byte((v&0x0000ff00)>>8))
@@ -128,7 +128,7 @@ func TestMessage_putUint64(t *testing.T) {
 
 	message.putUint64(v)
 
-	bytes, offset := message.Body1()
+	bytes, offset := message.Body()
 
 	assert.Equal(t, bytes[0], byte((v & 0x00000000000000ff)))
 	assert.Equal(t, bytes[1], byte((v&0x000000000000ff00)>>8))
@@ -161,7 +161,7 @@ func TestMessage_putNamedValues(t *testing.T) {
 
 	message.putNamedValues(values)
 
-	bytes, offset := message.Body1()
+	bytes, offset := message.Body()
 
 	assert.Equal(t, 96, offset)
 	assert.Equal(t, bytes[0], byte(7))
@@ -229,7 +229,7 @@ func TestMessage_getString(t *testing.T) {
 
 			s := message.getString()
 
-			_, offset := message.Body1()
+			_, offset := message.Body()
 
 			assert.Equal(t, s, c.String)
 			assert.Equal(t, offset, c.Offset)
@@ -259,7 +259,7 @@ func TestMessage_getBlob(t *testing.T) {
 
 			bytes := message.getBlob()
 
-			_, offset := message.Body1()
+			_, offset := message.Body()
 
 			assert.Equal(t, bytes, c.Blob)
 			assert.Equal(t, offset, c.Offset)
@@ -285,5 +285,5 @@ func TestMessage_getString_Overflow_WordBoundary(t *testing.T) {
 	s := message.getString()
 	assert.Equal(t, "abcdefghilmnopqr", s)
 
-	assert.Equal(t, 32, message.body1.Offset)
+	assert.Equal(t, 32, message.body.Offset)
 }

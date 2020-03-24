@@ -26,7 +26,7 @@ type Message struct {
 	flags  uint8
 	extra  uint16
 	header []byte // Statically allocated header buffer
-	body1  buffer // Statically allocated body data, using bytes
+	body   buffer // Message body data.
 }
 
 // Init initializes the message using the given initial size for the data
@@ -37,7 +37,7 @@ func (m *Message) Init(initialBufferSize int) {
 		panic("initial buffer size is not aligned to word boundary")
 	}
 	m.header = make([]byte, messageHeaderSize)
-	m.body1.Bytes = make([]byte, initialBufferSize)
+	m.body.Bytes = make([]byte, initialBufferSize)
 	m.reset()
 }
 
@@ -50,7 +50,7 @@ func (m *Message) reset() {
 	for i := 0; i < messageHeaderSize; i++ {
 		m.header[i] = 0
 	}
-	m.body1.Offset = 0
+	m.body.Offset = 0
 }
 
 // Append a byte slice to the message.
@@ -229,11 +229,11 @@ func (m *Message) putNamedValues(values NamedValues) {
 // Finalize the message by setting the message type and the number
 // of words in the body (calculated from the body size).
 func (m *Message) putHeader(mtype uint8) {
-	if m.body1.Offset <= 0 {
+	if m.body.Offset <= 0 {
 		panic("static offset is not positive")
 	}
 
-	if (m.body1.Offset % messageWordSize) != 0 {
+	if (m.body.Offset % messageWordSize) != 0 {
 		panic("static body is not aligned")
 	}
 
@@ -241,7 +241,7 @@ func (m *Message) putHeader(mtype uint8) {
 	m.flags = 0
 	m.extra = 0
 
-	m.words = uint32(m.body1.Offset) / messageWordSize
+	m.words = uint32(m.body.Offset) / messageWordSize
 
 	m.finalize()
 }
@@ -258,14 +258,14 @@ func (m *Message) finalize() {
 }
 
 func (m *Message) bufferForPut(size int) *buffer {
-	for (m.body1.Offset + size) > len(m.body1.Bytes) {
+	for (m.body.Offset + size) > len(m.body.Bytes) {
 		// Grow message buffer.
-		bytes := make([]byte, len(m.body1.Bytes)*2)
-		copy(bytes, m.body1.Bytes)
-		m.body1.Bytes = bytes
+		bytes := make([]byte, len(m.body.Bytes)*2)
+		copy(bytes, m.body.Bytes)
+		m.body.Bytes = bytes
 	}
 
-	return &m.body1
+	return &m.body
 }
 
 // Return the message type and its flags.
@@ -409,23 +409,23 @@ func (m *Message) getFiles() Files {
 
 func (m *Message) hasBeenConsumed() bool {
 	size := int(m.words * messageWordSize)
-	return m.body1.Offset == size
+	return m.body.Offset == size
 }
 
 func (m *Message) lastByte() byte {
 	size := int(m.words * messageWordSize)
-	return m.body1.Bytes[size-1]
+	return m.body.Bytes[size-1]
 }
 
 func (m *Message) bufferForGet() *buffer {
 	size := int(m.words * messageWordSize)
 	// The static body has been exahusted, use the dynamic one.
-	if m.body1.Offset == size {
-		err := fmt.Errorf("short message: type=%d words=%d off=%d", m.mtype, m.words, m.body1.Offset)
+	if m.body.Offset == size {
+		err := fmt.Errorf("short message: type=%d words=%d off=%d", m.mtype, m.words, m.body.Offset)
 		panic(err)
 	}
 
-	return &m.body1
+	return &m.body
 }
 
 // Result holds the result of a statement.
