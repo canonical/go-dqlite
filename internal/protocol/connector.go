@@ -145,7 +145,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		// If we get here, it means this server reported that another
 		// server is the leader, let's close the connection to this
 		// server and try with the suggested one.
-		log(logging.Info, "connect to reported leader %s", leader)
+		log(logging.Debug, "connect to reported leader %s", leader)
 
 		ctx, cancel = context.WithTimeout(ctx, c.config.AttemptTimeout)
 		defer cancel()
@@ -163,7 +163,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			log(logging.Warn, "reported leader server is not the leader")
 			continue
 		}
-		log(logging.Info, "connected")
+		log(logging.Debug, "connected")
 		return protocol, nil
 	}
 
