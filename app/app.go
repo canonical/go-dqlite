@@ -1,13 +1,16 @@
 package app
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
+	"github.com/pkg/errors"
 )
 
 type App struct {
@@ -38,6 +41,8 @@ func New(dir string, options ...Option) (*App, error) {
 		return nil, err
 	}
 
+	store.Set(context.Background(), []client.NodeInfo{{Address: o.Address}})
+
 	driver, err := driver.New(store)
 	if err != nil {
 		return nil, err
@@ -62,6 +67,31 @@ func (a *App) Close() error {
 		return err
 	}
 	return nil
+}
+
+// Open the dqlite database with the given name
+func (a *App) Open(ctx context.Context, database string) (*sql.DB, error) {
+	db, err := sql.Open(a.driverName, database)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := 0; i < 60; i++ {
+		err = db.PingContext(ctx)
+		if err == nil {
+			break
+		}
+		cause := errors.Cause(err)
+		if cause != driver.ErrNoAvailableLeader {
+			return nil, err
+		}
+		time.Sleep(time.Second)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
 }
 
 var driverIndex = 0
