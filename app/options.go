@@ -47,9 +47,21 @@ func WithAddress(address string) Option {
 	}
 }
 
+// WithCluster must be used when starting a newly added application node for
+// the first time.
+//
+// It should contain the addresses of one or more applications nodes which are
+// already part of the cluster.
+func WithCluster(cluster []string) Option {
+	return func(options *options) {
+		options.Cluster = cluster
+	}
+}
+
 type options struct {
 	ID       uint64
 	Address  string
+	Cluster  []string
 	DialFunc client.DialFunc
 	LogFunc  client.LogFunc
 }

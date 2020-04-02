@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 )
 
 type App struct {
+	address    string
 	node       *dqlite.Node
 	store      client.NodeStore
 	driver     *driver.Driver
@@ -23,11 +25,11 @@ type App struct {
 // New creates a new application node.
 func New(dir string, options ...Option) (*App, error) {
 	o := defaultOptions()
-
 	for _, option := range options {
 		option(o)
 	}
 
+	// Start the local dqlite engine.
 	node, err := dqlite.New(o.ID, o.Address, dir, dqlite.WithBindAddress(o.Address))
 	if err != nil {
 		return nil, err
@@ -36,12 +38,38 @@ func New(dir string, options ...Option) (*App, error) {
 		return nil, err
 	}
 
-	store, err := client.DefaultNodeStore(filepath.Join(dir, "servers.sql"))
+	// Open the nodes store.
+	storePath := filepath.Join(dir, "servers.sql")
+	storePathExists := true
+	if _, err := os.Stat(storePath); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		storePathExists = false
+	}
+	store, err := client.DefaultNodeStore(storePath)
 	if err != nil {
 		return nil, err
 	}
-
-	store.Set(context.Background(), []client.NodeInfo{{Address: o.Address}})
+	if !storePathExists {
+		// If this is a brand new application node, populate the store
+		// either with the node's address (for bootstrap nodes) or with
+		// the given cluster addresses (for joining nodes).
+		nodes := []client.NodeInfo{}
+		if o.ID == dqlite.BootstrapID || o.ID == 1 {
+			nodes = append(nodes, client.NodeInfo{Address: o.Address})
+		} else {
+			if len(o.Cluster) == 0 {
+				return nil, fmt.Errorf("no cluster addresses provided")
+			}
+			for _, address := range o.Cluster {
+				nodes = append(nodes, client.NodeInfo{Address: address})
+			}
+		}
+		if err := store.Set(context.Background(), nodes); err != nil {
+			return nil, err
+		}
+	}
 
 	driver, err := driver.New(store)
 	if err != nil {
@@ -52,6 +80,7 @@ func New(dir string, options ...Option) (*App, error) {
 	sql.Register(driverName, driver)
 
 	app := &App{
+		address:    o.Address,
 		node:       node,
 		store:      store,
 		driver:     driver,
@@ -92,6 +121,11 @@ func (a *App) Open(ctx context.Context, database string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// Leader returns a client connected to the current cluster leader, if any.
+func (a *App) Leader(ctx context.Context) (*client.Client, error) {
+	return client.FindLeader(ctx, a.store)
 }
 
 var driverIndex = 0
