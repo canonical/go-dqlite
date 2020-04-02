@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"log"
 	"net"
 
 	"github.com/canonical/go-dqlite"
@@ -48,8 +50,8 @@ func WithAddress(address string) Option {
 type options struct {
 	ID       uint64
 	Address  string
-	Log      client.LogFunc
 	DialFunc client.DialFunc
+	LogFunc  client.LogFunc
 }
 
 // Create a options object with sane defaults.
@@ -58,6 +60,7 @@ func defaultOptions() *options {
 		ID:       dqlite.BootstrapID,
 		Address:  defaultAddress(),
 		DialFunc: client.DefaultDialFunc,
+		LogFunc:  defaultLogFunc,
 	}
 }
 
@@ -84,4 +87,9 @@ func defaultAddress() string {
 		return addr.IP.String() + ":9000"
 	}
 	return ""
+}
+
+func defaultLogFunc(l client.LogLevel, format string, a ...interface{}) {
+	msg := fmt.Sprintf("["+l.String()+"]"+" dqlite: "+format, a...)
+	log.Printf(msg)
 }
