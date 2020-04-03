@@ -42,19 +42,22 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 		return p.netErr
 	}
 
+	var budget time.Duration
+
 	// Honor the ctx deadline, if present.
 	if deadline, ok := ctx.Deadline(); ok {
 		p.conn.SetDeadline(deadline)
+		budget = time.Until(deadline)
 		defer p.conn.SetDeadline(time.Time{})
 	}
 
 	if err = p.send(request); err != nil {
-		err = errors.Wrap(err, "failed to send request")
+		err = errors.Wrapf(err, "send request (budget=%s)", budget)
 		goto err
 	}
 
 	if err = p.recv(response); err != nil {
-		err = errors.Wrap(err, "failed to receive response")
+		err = errors.Wrapf(err, "receive response (budget=%s)", budget)
 		goto err
 	}
 
