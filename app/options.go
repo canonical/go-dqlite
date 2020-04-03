@@ -1,6 +1,7 @@
 package app
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -58,11 +59,32 @@ func WithCluster(cluster []string) Option {
 	}
 }
 
+// WithTLS enables TLS encryption of network traffic.
+//
+// The "listen" parameter must hold the TLS configuration to use when accepting
+// incoming connections clients or application nodes.
+//
+// The "dial" parameter must hold the TLS configuration to use when
+// establishing outgoing connections to other application nodes.
+func WithTLS(listen *tls.Config, dial *tls.Config) Option {
+	return func(options *options) {
+		options.TLS = &tlsSetup{
+			Listen: listen,
+			Dial:   dial,
+		}
+	}
+}
+
 // WithLogFunc sets a custom log function.
 func WithLogFunc(log client.LogFunc) Option {
 	return func(options *options) {
 		options.Log = log
 	}
+}
+
+type tlsSetup struct {
+	Listen *tls.Config
+	Dial   *tls.Config
 }
 
 type options struct {
@@ -71,6 +93,7 @@ type options struct {
 	Cluster []string
 	Dial    client.DialFunc
 	Log     client.LogFunc
+	TLS     *tlsSetup
 }
 
 // Create a options object with sane defaults.
