@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -15,28 +16,17 @@ import (
 
 // Create a pristine bootstrap node with default value.
 func TestNew_PristineDefault(t *testing.T) {
-	dir, cleanup := newDir(t)
+	_, cleanup := newApp(t)
 	defer cleanup()
-
-	app, err := app.New(dir)
-	assert.NoError(t, err)
-	assert.NoError(t, app.Close())
 }
 
 // Create a pristine joining node.
 func TestNew_PristineJoiner(t *testing.T) {
-	dir1, cleanup := newDir(t)
-	defer cleanup()
-
-	dir2, cleanup := newDir(t)
-	defer cleanup()
-
 	addr1 := "127.0.0.1:9001"
 	addr2 := "127.0.0.1:9002"
 
-	app1, err := app.New(dir1, app.WithAddress(addr1))
-	assert.NoError(t, err)
-	defer app1.Close()
+	app1, cleanup := newApp(t, app.WithAddress(addr1))
+	defer cleanup()
 
 	cli, err := app1.Leader(context.Background())
 	require.NoError(t, err)
@@ -45,9 +35,8 @@ func TestNew_PristineJoiner(t *testing.T) {
 	err = cli.Add(context.Background(), client.NodeInfo{ID: id, Address: addr2, Role: client.Spare})
 	require.NoError(t, err)
 
-	app2, err := app.New(dir2, app.WithID(id), app.WithAddress(addr2), app.WithCluster([]string{addr1}))
-	require.NoError(t, err)
-	defer app2.Close()
+	app2, cleanup := newApp(t, app.WithID(id), app.WithAddress(addr2), app.WithCluster([]string{addr1}))
+	defer cleanup()
 
 	err = cli.Assign(context.Background(), id, client.Voter)
 	require.NoError(t, err)
@@ -55,12 +44,8 @@ func TestNew_PristineJoiner(t *testing.T) {
 
 // Open a database on a fresh one-node cluster.
 func TestOpen(t *testing.T) {
-	dir, cleanup := newDir(t)
+	app, cleanup := newApp(t)
 	defer cleanup()
-
-	app, err := app.New(dir)
-	assert.NoError(t, err)
-	defer app.Close()
 
 	db, err := app.Open(context.Background(), "test")
 	require.NoError(t, err)
@@ -68,6 +53,29 @@ func TestOpen(t *testing.T) {
 
 	_, err = db.ExecContext(context.Background(), "CREATE TABLE foo(n INT)")
 	assert.NoError(t, err)
+}
+
+func newApp(t *testing.T, options ...app.Option) (*app.App, func()) {
+	t.Helper()
+
+	dir, dirCleanup := newDir(t)
+
+	log := func(l client.LogLevel, format string, a ...interface{}) {
+		format = fmt.Sprintf("%s: %s", l.String(), format)
+		t.Logf(format, a...)
+	}
+
+	options = append(options, app.WithLogFunc(log))
+
+	app, err := app.New(dir, options...)
+	require.NoError(t, err)
+
+	cleanup := func() {
+		require.NoError(t, app.Close())
+		dirCleanup()
+	}
+
+	return app, cleanup
 }
 
 // Return a new temporary directory.

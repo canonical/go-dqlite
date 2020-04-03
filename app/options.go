@@ -58,21 +58,28 @@ func WithCluster(cluster []string) Option {
 	}
 }
 
+// WithLogFunc sets a custom log function.
+func WithLogFunc(log client.LogFunc) Option {
+	return func(options *options) {
+		options.Log = log
+	}
+}
+
 type options struct {
-	ID       uint64
-	Address  string
-	Cluster  []string
-	DialFunc client.DialFunc
-	LogFunc  client.LogFunc
+	ID      uint64
+	Address string
+	Cluster []string
+	Dial    client.DialFunc
+	Log     client.LogFunc
 }
 
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		ID:       dqlite.BootstrapID,
-		Address:  defaultAddress(),
-		DialFunc: client.DefaultDialFunc,
-		LogFunc:  defaultLogFunc,
+		ID:      dqlite.BootstrapID,
+		Address: defaultAddress(),
+		Dial:    client.DefaultDialFunc,
+		Log:     defaultLogFunc,
 	}
 }
 
