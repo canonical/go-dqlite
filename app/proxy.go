@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"syscall"
+	"time"
 )
 
 // Copies data between a client network connection and a local unix server
@@ -19,6 +21,10 @@ import (
 //
 // In case of errors, details are returned.
 func proxy(ctx context.Context, client net.Conn, server net.Conn) error {
+	if err := setKeepalive(client.(*net.TCPConn)); err != nil {
+		return err
+	}
+
 	serverToClient := make(chan error, 0)
 	clientToServer := make(chan error, 0)
 
@@ -57,10 +63,7 @@ func proxy(ctx context.Context, client net.Conn, server net.Conn) error {
 		if err != nil {
 			errs[0] = fmt.Errorf("client -> server: %w", err)
 		}
-		// XXX: we should use CloseRead(), but that's not available on
-		// tls.Conn. Using Close() will typically make io.Copy() fail
-		// with a sporious error ("use of closed network connection").
-		client.Close()
+		client.(*net.TCPConn).CloseRead()
 		if err := <-clientToServer; err != nil {
 			errs[1] = fmt.Errorf("client -> server: %w", err)
 		}
@@ -73,6 +76,36 @@ func proxy(ctx context.Context, client net.Conn, server net.Conn) error {
 	}
 
 	return nil
+}
+
+// Set TCP keepalive with 30 seconds idle time, 3 seconds retry interval with
+// at most 3 retries.
+//
+// See https://thenotexpert.com/golang-tcp-keepalive/.
+func setKeepalive(conn *net.TCPConn) error {
+	conn.SetKeepAlive(true)
+	conn.SetKeepAlivePeriod(time.Second * 30)
+
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		return err
+	}
+
+	raw.Control(
+		func(ptr uintptr) {
+			fd := int(ptr)
+			// Number of probes.
+			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, 3)
+			if err != nil {
+				return
+			}
+			// Wait time after an unsuccessful probe.
+			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, 3)
+			if err != nil {
+				return
+			}
+		})
+	return err
 }
 
 type proxyError struct {
