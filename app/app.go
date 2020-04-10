@@ -39,7 +39,7 @@ func New(dir string, options ...Option) (*App, error) {
 	}
 
 	// Open the nodes store.
-	storePath := filepath.Join(dir, "servers.sql")
+	storePath := filepath.Join(dir, "servers.yaml")
 	storePathExists := true
 	if _, err := os.Stat(storePath); err != nil {
 		if !os.IsNotExist(err) {
@@ -47,7 +47,7 @@ func New(dir string, options ...Option) (*App, error) {
 		}
 		storePathExists = false
 	}
-	store, err := client.DefaultNodeStore(storePath)
+	store, err := client.NewYamlNodeStore(storePath)
 	if err != nil {
 		return nil, err
 	}
