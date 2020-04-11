@@ -2,8 +2,6 @@ package client
 
 import (
 	"context"
-	"net"
-	"strings"
 
 	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/pkg/errors"
@@ -262,11 +260,4 @@ func defaultOptions() *options {
 		DialFunc: DefaultDialFunc,
 		LogFunc:  DefaultLogFunc,
 	}
-}
-
-func DefaultDialFunc(ctx context.Context, address string) (net.Conn, error) {
-	if strings.HasPrefix(address, "@") {
-		return protocol.UnixDial(ctx, address)
-	}
-	return protocol.TCPDial(ctx, address)
 }
