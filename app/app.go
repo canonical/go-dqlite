@@ -137,7 +137,7 @@ func New(dir string, options ...Option) (*App, error) {
 		driverDial = client.DialFuncWithTLS(driverDial, o.TLS.Dial)
 	}
 
-	driver, err := driver.New(store, driver.WithDialFunc(driverDial))
+	driver, err := driver.New(store, driver.WithDialFunc(driverDial), driver.WithLogFunc(o.Log))
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func (a *App) Leader(ctx context.Context) (*client.Client, error) {
 	if a.tls != nil {
 		dial = client.DialFuncWithTLS(dial, a.tls.Dial)
 	}
-	return client.FindLeader(ctx, a.store, client.WithDialFunc(dial))
+	return client.FindLeader(ctx, a.store, client.WithDialFunc(dial), client.WithLogFunc(a.log))
 }
 
 // Proxy incoming TLS connections.
