@@ -115,10 +115,8 @@ func New(dir string, options ...Option) (*App, error) {
 		// If this is a brand new application node, populate the store
 		// either with the node's address (for bootstrap nodes) or with
 		// the given cluster addresses (for joining nodes).
-		nodes := []client.NodeInfo{}
-		if info.ID == dqlite.BootstrapID || info.ID == 1 {
-			nodes = append(nodes, client.NodeInfo{Address: o.Address})
-		} else {
+		nodes := []client.NodeInfo{{Address: o.Address}}
+		if info.ID != dqlite.BootstrapID {
 			if len(o.Cluster) == 0 {
 				return nil, fmt.Errorf("no cluster addresses provided")
 			}
