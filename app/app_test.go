@@ -29,20 +29,11 @@ func TestNew_PristineJoiner(t *testing.T) {
 	addr1 := "127.0.0.1:9001"
 	addr2 := "127.0.0.1:9002"
 
-	app1, cleanup := newApp(t, app.WithAddress(addr1))
+	_, cleanup := newApp(t, app.WithAddress(addr1))
 	defer cleanup()
 
-	cli, err := app1.Leader(context.Background())
-	require.NoError(t, err)
-
-	app2, cleanup := newApp(t, app.WithAddress(addr2), app.WithCluster([]string{addr1}))
+	_, cleanup = newApp(t, app.WithAddress(addr2), app.WithCluster([]string{addr1}))
 	defer cleanup()
-
-	err = cli.Add(context.Background(), client.NodeInfo{ID: app2.ID(), Address: addr2, Role: client.Spare})
-	require.NoError(t, err)
-
-	err = cli.Assign(context.Background(), app2.ID(), client.Voter)
-	require.NoError(t, err)
 }
 
 // Open a database on a fresh one-node cluster.

@@ -42,11 +42,13 @@ func New(dir string, options ...Option) (*App, error) {
 
 	// Load our ID, or generate one if we are joining.
 	infoPath := filepath.Join(dir, "info.yaml")
+	infoPathExists := true
 	info := client.NodeInfo{}
 	if _, err := os.Stat(infoPath); err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
+		infoPathExists = false
 		if len(o.Cluster) == 0 {
 			info.ID = dqlite.BootstrapID
 		} else {
@@ -164,6 +166,23 @@ func New(dir string, options ...Option) (*App, error) {
 		app.serveCh = make(chan struct{}, 0)
 
 		go app.serve()
+	}
+
+	// If are starting a brand new non-bootstrap node, let's add it to the
+	// cluter.
+	if !infoPathExists && info.ID != dqlite.BootstrapID {
+		// TODO: add a customizable timeout
+		cli, err := app.Leader(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		err = cli.Add(
+			context.Background(),
+			client.NodeInfo{ID: info.ID, Address: o.Address, Role: client.Voter})
+		if err != nil {
+			return nil, err
+		}
+
 	}
 
 	return app, nil
