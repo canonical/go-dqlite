@@ -1,4 +1,5 @@
 .sqlite
+cmd/dqlite-demo/dqlite-demo
 demo
 profile.coverprofile
 overalls.coverprofile

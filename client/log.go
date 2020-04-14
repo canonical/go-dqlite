@@ -1,9 +1,6 @@
 package client
 
 import (
-	"log"
-	"os"
-
 	"github.com/canonical/go-dqlite/internal/logging"
 )
 
@@ -21,10 +18,5 @@ const (
 	LogError = logging.Error
 )
 
-var (
-	logger = log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
-)
-
 // DefaultLogFunc doesn't emit any message.
-func DefaultLogFunc(l LogLevel, format string, a ...interface{}) {
-}
+func DefaultLogFunc(l LogLevel, format string, a ...interface{}) {}
