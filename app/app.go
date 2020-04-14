@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/ghodss/yaml"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
@@ -17,6 +20,7 @@ import (
 )
 
 type App struct {
+	id              uint64
 	address         string
 	node            *dqlite.Node
 	nodeBindAddress string
@@ -36,18 +40,52 @@ func New(dir string, options ...Option) (*App, error) {
 		option(o)
 	}
 
+	// Load our ID, or generate one if we are joining.
+	infoPath := filepath.Join(dir, "info.yaml")
+	info := client.NodeInfo{}
+	if _, err := os.Stat(infoPath); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		if len(o.Cluster) == 0 {
+			info.ID = dqlite.BootstrapID
+		} else {
+			info.ID = dqlite.GenerateID(o.Address)
+		}
+		info.Address = o.Address
+
+		data, err := yaml.Marshal(info)
+		if err != nil {
+			return nil, err
+		}
+		if err := ioutil.WriteFile(infoPath, data, 0600); err != nil {
+			return nil, err
+		}
+	} else {
+		data, err := ioutil.ReadFile(infoPath)
+		if err != nil {
+			return nil, err
+		}
+		if err := yaml.Unmarshal(data, &info); err != nil {
+			return nil, err
+		}
+		if o.Address != "" && o.Address != info.Address {
+			return nil, fmt.Errorf("address in info.yaml does not match the given one")
+		}
+	}
+
 	// Start the local dqlite engine.
 	var nodeBindAddress string
 	var nodeDial client.DialFunc
 	if o.TLS != nil {
-		nodeBindAddress = fmt.Sprintf("@dqlite-%d", o.ID)
+		nodeBindAddress = fmt.Sprintf("@dqlite-%d", info.ID)
 		nodeDial = makeNodeDialFunc(o.TLS.Dial)
 	} else {
 		nodeBindAddress = o.Address
 		nodeDial = client.DefaultDialFunc
 	}
 	node, err := dqlite.New(
-		o.ID, o.Address, dir,
+		info.ID, o.Address, dir,
 		dqlite.WithBindAddress(nodeBindAddress),
 		dqlite.WithDialFunc(nodeDial),
 	)
@@ -76,7 +114,7 @@ func New(dir string, options ...Option) (*App, error) {
 		// either with the node's address (for bootstrap nodes) or with
 		// the given cluster addresses (for joining nodes).
 		nodes := []client.NodeInfo{}
-		if o.ID == dqlite.BootstrapID || o.ID == 1 {
+		if info.ID == dqlite.BootstrapID || info.ID == 1 {
 			nodes = append(nodes, client.NodeInfo{Address: o.Address})
 		} else {
 			if len(o.Cluster) == 0 {
@@ -91,6 +129,7 @@ func New(dir string, options ...Option) (*App, error) {
 		}
 	}
 
+	// Register the local dqlite driver.
 	driverDial := client.DefaultDialFunc
 	if o.TLS != nil {
 		driverDial = client.DialFuncWithTLS(driverDial, o.TLS.Dial)
@@ -105,6 +144,7 @@ func New(dir string, options ...Option) (*App, error) {
 	sql.Register(driverName, driver)
 
 	app := &App{
+		id:              info.ID,
 		address:         o.Address,
 		node:            node,
 		nodeBindAddress: nodeBindAddress,
@@ -139,6 +179,11 @@ func (a *App) Close() error {
 		return err
 	}
 	return nil
+}
+
+// ID returns the dqlite ID of this application node.
+func (a *App) ID() uint64 {
+	return a.id
 }
 
 // Open the dqlite database with the given name

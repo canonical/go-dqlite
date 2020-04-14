@@ -6,28 +6,12 @@ import (
 	"log"
 	"net"
 
-	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/lxc/lxd/shared"
 )
 
 // Option can be used to tweak app parameters.
 type Option func(*options)
-
-// WithID sets the ID of the application node.
-//
-// The very first node of the cluster should not set this option or set it
-// either to dqlite.BootstrapID or to 1.
-//
-// Additional nodes should set this option to the value that was retured by the
-// App.Add() method upon registration.
-//
-// The ID must be stable across application restarts.
-func WithID(id uint64) Option {
-	return func(options *options) {
-		options.ID = id
-	}
-}
 
 // WithAddress sets the network address of the application node.
 //
@@ -88,7 +72,6 @@ type tlsSetup struct {
 }
 
 type options struct {
-	ID      uint64
 	Address string
 	Cluster []string
 	Dial    client.DialFunc
@@ -99,7 +82,6 @@ type options struct {
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		ID:      dqlite.BootstrapID,
 		Address: defaultAddress(),
 		Dial:    client.DefaultDialFunc,
 		Log:     defaultLogFunc,

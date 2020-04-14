@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/stretchr/testify/assert"
@@ -36,14 +35,13 @@ func TestNew_PristineJoiner(t *testing.T) {
 	cli, err := app1.Leader(context.Background())
 	require.NoError(t, err)
 
-	id := dqlite.GenerateID(addr2)
-	err = cli.Add(context.Background(), client.NodeInfo{ID: id, Address: addr2, Role: client.Spare})
-	require.NoError(t, err)
-
-	_, cleanup = newApp(t, app.WithID(id), app.WithAddress(addr2), app.WithCluster([]string{addr1}))
+	app2, cleanup := newApp(t, app.WithAddress(addr2), app.WithCluster([]string{addr1}))
 	defer cleanup()
 
-	err = cli.Assign(context.Background(), id, client.Voter)
+	err = cli.Add(context.Background(), client.NodeInfo{ID: app2.ID(), Address: addr2, Role: client.Spare})
+	require.NoError(t, err)
+
+	err = cli.Assign(context.Background(), app2.ID(), client.Voter)
 	require.NoError(t, err)
 }
 
