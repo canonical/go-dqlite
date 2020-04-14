@@ -188,6 +188,19 @@ func New(dir string, options ...Option) (*App, error) {
 
 // Close the application node, releasing all resources it created.
 func (a *App) Close() error {
+	// Try to transfer leadership if we are the leader.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	cli, err := client.New(ctx, a.nodeBindAddress)
+	if err == nil {
+		leader, err := cli.Leader(ctx)
+		if err == nil && leader != nil && leader.Address == a.address {
+			cli.Transfer(ctx, 0)
+		}
+		cli.Close()
+	}
+
 	if a.listener != nil {
 		a.listener.Close()
 		<-a.serveCh
