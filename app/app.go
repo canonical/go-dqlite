@@ -76,6 +76,10 @@ func New(dir string, options ...Option) (*App, error) {
 		}
 	}
 
+	if info.ID == dqlite.BootstrapID && len(o.Cluster) > 0 {
+		return nil, fmt.Errorf("bootstrap node can't join a cluster")
+	}
+
 	// Start the local dqlite engine.
 	var nodeBindAddress string
 	var nodeDial client.DialFunc
