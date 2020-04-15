@@ -113,3 +113,21 @@ and things will work since an automatic failover has taken place:
 ```bash
 kill -TERM %1; curl http://127.0.0.1:8002/my-value
 ```
+
+Shell
+------
+
+A basic SQLite-like dqlite shell can be built with:
+
+```
+go install -tags libsqlite3 ./cmd/dqlite
+```
+
+You can test it with the `dqlite-demo` with:
+
+```
+dqlite -s 127.0.0.1:9001
+```
+
+It supports normal SQL queries plus the special `.cluster` and `.leader`
+commands to inspect the cluster members and the current leader.
