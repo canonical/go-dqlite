@@ -48,11 +48,52 @@ func New(database string, store client.NodeStore, options ...Option) (*Shell, er
 
 // Process a single input line.
 func (s *Shell) Process(ctx context.Context, line string) (string, error) {
+	switch line {
+	case ".cluster":
+		return s.processCluster(ctx, line)
+	case ".leader":
+		return s.processLeader(ctx, line)
+	}
 	if strings.HasPrefix(line, "SELECT") {
 		return s.processSelect(ctx, line)
 	} else {
 		return "", s.processExec(ctx, line)
 	}
+}
+
+func (s *Shell) processCluster(ctx context.Context, line string) (string, error) {
+	cli, err := client.FindLeader(ctx, s.store, client.WithDialFunc(s.dial))
+	if err != nil {
+		return "", err
+	}
+	cluster, err := cli.Cluster(ctx)
+	if err != nil {
+		return "", err
+	}
+	result := ""
+	for i, server := range cluster {
+		if i > 0 {
+			result += "\n"
+		}
+		result += fmt.Sprintf("%x|%s|%s", server.ID, server.Address, server.Role)
+	}
+
+	return result, nil
+}
+
+func (s *Shell) processLeader(ctx context.Context, line string) (string, error) {
+	cli, err := client.FindLeader(ctx, s.store, client.WithDialFunc(s.dial))
+	if err != nil {
+		return "", err
+	}
+	leader, err := cli.Leader(ctx)
+	if err != nil {
+		return "", err
+	}
+	if leader == nil {
+		return "", nil
+	}
+	return leader.Address, nil
 }
 
 func (s *Shell) processSelect(ctx context.Context, line string) (string, error) {
