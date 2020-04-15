@@ -30,7 +30,9 @@ type App struct {
 	driver          *driver.Driver
 	driverName      string
 	log             client.LogFunc
+	stop            context.CancelFunc
 	serveCh         chan struct{} // Waits for App.serve() to return.
+	updateStoreCh   chan struct{} // Waits for App.updateStore() to return.
 }
 
 // New creates a new application node.
@@ -74,6 +76,10 @@ func New(dir string, options ...Option) (*App, error) {
 		if o.Address != "" && o.Address != info.Address {
 			return nil, fmt.Errorf("address in info.yaml does not match the given one")
 		}
+	}
+
+	if info.ID == dqlite.BootstrapID && len(o.Cluster) > 0 {
+		return nil, fmt.Errorf("bootstrap node can't join a cluster")
 	}
 
 	// Start the local dqlite engine.
@@ -143,6 +149,8 @@ func New(dir string, options ...Option) (*App, error) {
 	driverName := fmt.Sprintf("dqlite-%d", driverIndex)
 	sql.Register(driverName, driver)
 
+	ctx, stop := context.WithCancel(context.Background())
+
 	app := &App{
 		id:              info.ID,
 		address:         o.Address,
@@ -153,6 +161,8 @@ func New(dir string, options ...Option) (*App, error) {
 		driverName:      driverName,
 		log:             o.Log,
 		tls:             o.TLS,
+		stop:            stop,
+		updateStoreCh:   make(chan struct{}, 0),
 	}
 
 	if o.TLS != nil {
@@ -183,11 +193,17 @@ func New(dir string, options ...Option) (*App, error) {
 
 	}
 
+	go app.updateStore(ctx)
+
 	return app, nil
 }
 
 // Close the application node, releasing all resources it created.
 func (a *App) Close() error {
+	// Stop the store update task.
+	a.stop()
+	<-a.updateStoreCh
+
 	// Try to transfer leadership if we are the leader.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -277,6 +293,27 @@ func (a *App) serve() {
 				a.error("proxy: %v", err)
 			}
 		}()
+	}
+}
+
+// Periodically update the node store cache.
+func (a *App) updateStore(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			close(a.updateStoreCh)
+			return
+		case <-time.After(30 * time.Second):
+			cli, err := a.Leader(ctx)
+			if err != nil {
+				continue
+			}
+			servers, err := cli.Cluster(ctx)
+			if err != nil {
+				continue
+			}
+			a.store.Set(ctx, servers)
+		}
 	}
 }
 
