@@ -7,7 +7,6 @@ import (
 	"net"
 
 	"github.com/canonical/go-dqlite/client"
-	"github.com/lxc/lxd/shared"
 )
 
 // Option can be used to tweak app parameters.
@@ -88,13 +87,17 @@ func defaultOptions() *options {
 	}
 }
 
+func isLoopback(iface *net.Interface) bool {
+	return int(iface.Flags&net.FlagLoopback) > 0
+}
+
 func defaultAddress() string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return ""
 	}
 	for _, iface := range ifaces {
-		if shared.IsLoopback(&iface) {
+		if isLoopback(&iface) {
 			continue
 		}
 		addrs, err := iface.Addrs()
