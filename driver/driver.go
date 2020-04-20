@@ -401,7 +401,7 @@ func (c *Conn) Close() error {
 // an error if it is not supported.
 func (c *Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
 	if _, err := c.ExecContext(ctx, "BEGIN", nil); err != nil {
-		return nil, driverError(err)
+		return nil, err
 	}
 
 	tx := &Tx{
@@ -680,6 +680,13 @@ func driverError(err error) error {
 		case errIoErrLeadershipLost:
 			return driver.ErrBadConn
 		default:
+			// FIXME: the server side sometimes return SQLITE_OK
+			// even in case of errors. This issue is still being
+			// investigated, but for now let's just mark this
+			// connection as bad so the client will retry.
+			if err.Code == 0 {
+				return driver.ErrBadConn
+			}
 			return Error{
 				Code:    int(err.Code),
 				Message: err.Description,
