@@ -87,6 +87,15 @@ func New(dir string, options ...Option) (*App, error) {
 	var nodeDial client.DialFunc
 	if o.TLS != nil {
 		nodeBindAddress = fmt.Sprintf("@dqlite-%d", info.ID)
+
+		// Within a snap we need to choose a different name for the abstract unix domain
+		// socket to get it past the AppArmor confinement.
+		// See https://github.com/snapcore/snapd/blob/master/interfaces/apparmor/template.go#L357
+		snapInstanceName := os.Getenv("SNAP_INSTANCE_NAME")
+		if len(snapInstanceName) > 0 {
+			nodeBindAddress = fmt.Sprintf("@snap.%s.dqlite-%d", snapInstanceName, info.ID)
+		}
+
 		nodeDial = makeNodeDialFunc(o.TLS.Dial)
 	} else {
 		nodeBindAddress = o.Address
