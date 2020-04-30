@@ -16,7 +16,29 @@ import (
 // The returned configs can be used as "listen" and "dial" parameters for the
 // WithTLS option.
 //
+// In order to generate a suitable TLS certificate you can use the openssl
+// command, for example:
+//
+//   DNS=$(hostname)
+//   IP=$(hostname -I | cut -f 1 -d ' ')
+//   CN=example.com
+//   openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 \
+//     -nodes -keyout cluster.key -out cluster.crt -subj "/CN=$CN" \
+//     -addext "subjectAltName=DNS:$DNS,IP:$IP"
+//
+// then load the resulting key pair and pool with:
+//
+//   cert, _ := tls.LoadX509KeyPair("cluster.crt", "cluster.key")
+//   data, _ := ioutil.ReadFile("cluster.crt")
+//   pool := x509.NewCertPool()
+//   pool.AppendCertsFromPEM(data)
+//
+// and finally use the WithTLS option together with the SimpleTLSConfig helper:
+//
+//   app, _ := app.New("/my/dir", app.WithTLS(app.SimpleTLSConfig(cert, pool)))
+//
 // See SimpleListenTLSConfig and SimpleDialTLSConfig for details.
+
 func SimpleTLSConfig(cert tls.Certificate, pool *x509.CertPool) (*tls.Config, *tls.Config) {
 	listen := SimpleListenTLSConfig(cert, pool)
 	dial := SimpleDialTLSConfig(cert, pool)
