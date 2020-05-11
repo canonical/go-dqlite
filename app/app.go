@@ -186,7 +186,7 @@ func New(dir string, options ...Option) (*App, error) {
 	}
 
 	// If are starting a brand new non-bootstrap node, let's add it to the
-	// cluter.
+	// cluster.
 	if !infoPathExists && info.ID != dqlite.BootstrapID {
 		// TODO: add a customizable timeout
 		cli, err := app.Leader(context.Background())

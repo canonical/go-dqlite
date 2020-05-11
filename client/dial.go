@@ -24,10 +24,18 @@ func DefaultDialFunc(ctx context.Context, address string) (net.Conn, error) {
 // and the given TLS config will be used for encryption.
 func DialFuncWithTLS(dial DialFunc, config *tls.Config) DialFunc {
 	return func(ctx context.Context, addr string) (net.Conn, error) {
+		clonedConfig := config.Clone()
+		if len(clonedConfig.ServerName) == 0 {
+			remoteIP, _, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			clonedConfig.ServerName = remoteIP
+		}
 		conn, err := dial(ctx, addr)
 		if err != nil {
 			return nil, err
 		}
-		return tls.Client(conn, config), nil
+		return tls.Client(conn, clonedConfig), nil
 	}
 }
