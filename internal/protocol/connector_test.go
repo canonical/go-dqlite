@@ -25,7 +25,7 @@ func TestConnector_Connect_Success(t *testing.T) {
 
 	connector := newConnector(t, store)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	client, err := connector.Connect(ctx)
