@@ -667,6 +667,10 @@ func valuesToNamedValues(args []driver.Value) []driver.NamedValue {
 	return namedValues
 }
 
+type unwrappable interface {
+	Unwrap() error
+}
+
 func driverError(err error) error {
 	switch err := errors.Cause(err).(type) {
 	case syscall.Errno:
@@ -691,6 +695,18 @@ func driverError(err error) error {
 				Code:    int(err.Code),
 				Message: err.Description,
 			}
+		}
+	default:
+		// When using a TLS connection, the underlying error might get
+		// wrapped by the stdlib itself with the new errors wrapping
+		// conventions available since go 1.13. In that case we check
+		// the underlying error with Unwrap() instead of Cause().
+		if root, ok := err.(unwrappable); ok {
+			err = root.Unwrap()
+		}
+		switch err.(type) {
+		case *net.OpError:
+			return driver.ErrBadConn
 		}
 	}
 	return err
