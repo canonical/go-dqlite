@@ -18,7 +18,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"io"
-	"log"
 	"net"
 	"reflect"
 	"syscall"
@@ -369,7 +368,14 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 		return nil, driverError(err)
 	}
 
-	return &Rows{ctx: ctx, request: &c.request, response: &c.response, protocol: c.protocol, rows: rows}, nil
+	return &Rows{
+		ctx:      ctx,
+		request:  &c.request,
+		response: &c.response,
+		protocol: c.protocol,
+		rows:     rows,
+		log:      c.log,
+	}, nil
 }
 
 // Exec is an optional interface that may be implemented by a Conn.
@@ -561,6 +567,7 @@ type Rows struct {
 	rows     protocol.Rows
 	consumed bool
 	types    []string
+	log      client.LogFunc
 }
 
 // Columns returns the names of the columns. The number of
@@ -648,7 +655,7 @@ func (r *Rows) ColumnTypeDatabaseTypeName(i int) string {
 			// as an empty column type is not the end of the world
 			// but we should still inform the user of the failure
 			const msg = "row (%p) error returning column #%d type: %v\n"
-			log.Printf(msg, r, i, err)
+			r.log(client.LogWarn, msg, r, i, err)
 			return ""
 		}
 	}
