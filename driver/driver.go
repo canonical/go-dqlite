@@ -312,18 +312,19 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 		protocol: c.protocol,
 		request:  &c.request,
 		response: &c.response,
+		log:      c.log,
 	}
 
 	protocol.EncodePrepare(&c.request, uint64(c.id), query)
 
 	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
-		return nil, driverError(err)
+		return nil, driverError(c.log, err)
 	}
 
 	var err error
 	stmt.db, stmt.id, stmt.params, err = protocol.DecodeStmt(&c.response)
 	if err != nil {
-		return nil, driverError(err)
+		return nil, driverError(c.log, err)
 	}
 
 	return stmt, nil
@@ -339,12 +340,12 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 	protocol.EncodeExecSQL(&c.request, uint64(c.id), query, args)
 
 	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
-		return nil, driverError(err)
+		return nil, driverError(c.log, err)
 	}
 
 	result, err := protocol.DecodeResult(&c.response)
 	if err != nil {
-		return nil, driverError(err)
+		return nil, driverError(c.log, err)
 	}
 
 	return &Result{result: result}, nil
@@ -360,12 +361,12 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 	protocol.EncodeQuerySQL(&c.request, uint64(c.id), query, args)
 
 	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
-		return nil, driverError(err)
+		return nil, driverError(c.log, err)
 	}
 
 	rows, err := protocol.DecodeRows(&c.response)
 	if err != nil {
-		return nil, driverError(err)
+		return nil, driverError(c.log, err)
 	}
 
 	return &Rows{
@@ -412,6 +413,7 @@ func (c *Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, e
 
 	tx := &Tx{
 		conn: c,
+		log:  c.log,
 	}
 
 	return tx, nil
@@ -435,6 +437,7 @@ func (c *Conn) Begin() (driver.Tx, error) {
 // Tx is a transaction.
 type Tx struct {
 	conn *Conn
+	log  client.LogFunc
 }
 
 // Commit the transaction.
@@ -442,7 +445,7 @@ func (tx *Tx) Commit() error {
 	ctx := context.Background()
 
 	if _, err := tx.conn.ExecContext(ctx, "COMMIT", nil); err != nil {
-		return driverError(err)
+		return driverError(tx.log, err)
 	}
 
 	return nil
@@ -453,7 +456,7 @@ func (tx *Tx) Rollback() error {
 	ctx := context.Background()
 
 	if _, err := tx.conn.ExecContext(ctx, "ROLLBACK", nil); err != nil {
-		return driverError(err)
+		return driverError(tx.log, err)
 	}
 
 	return nil
@@ -468,6 +471,7 @@ type Stmt struct {
 	db       uint32
 	id       uint32
 	params   uint64
+	log      client.LogFunc
 }
 
 // Close closes the statement.
@@ -477,11 +481,11 @@ func (s *Stmt) Close() error {
 	ctx := context.Background()
 
 	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
-		return driverError(err)
+		return driverError(s.log, err)
 	}
 
 	if err := protocol.DecodeEmpty(s.response); err != nil {
-		return driverError(err)
+		return driverError(s.log, err)
 	}
 
 	return nil
@@ -500,12 +504,12 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 	protocol.EncodeExec(s.request, s.db, s.id, args)
 
 	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
-		return nil, driverError(err)
+		return nil, driverError(s.log, err)
 	}
 
 	result, err := protocol.DecodeResult(s.response)
 	if err != nil {
-		return nil, driverError(err)
+		return nil, driverError(s.log, err)
 	}
 
 	return &Result{result: result}, nil
@@ -524,12 +528,12 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 	protocol.EncodeQuery(s.request, s.db, s.id, args)
 
 	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
-		return nil, driverError(err)
+		return nil, driverError(s.log, err)
 	}
 
 	rows, err := protocol.DecodeRows(s.response)
 	if err != nil {
-		return nil, driverError(err)
+		return nil, driverError(s.log, err)
 	}
 
 	return &Rows{ctx: ctx, request: s.request, response: s.response, protocol: s.protocol, rows: rows}, nil
@@ -596,7 +600,7 @@ func (r *Rows) Close() error {
 	// Let's issue an interrupt request and wait until we get an empty
 	// response, signalling that the query was interrupted.
 	if err := r.protocol.Interrupt(r.ctx, r.request, r.response); err != nil {
-		return driverError(err)
+		return driverError(r.log, err)
 	}
 
 	return nil
@@ -613,11 +617,11 @@ func (r *Rows) Next(dest []driver.Value) error {
 	if err == protocol.ErrRowsPart {
 		r.rows.Close()
 		if err := r.protocol.More(r.ctx, r.response); err != nil {
-			return driverError(err)
+			return driverError(r.log, err)
 		}
 		rows, err := protocol.DecodeRows(r.response)
 		if err != nil {
-			return driverError(err)
+			return driverError(r.log, err)
 		}
 		r.rows = rows
 		return r.rows.Next(dest)
@@ -678,17 +682,20 @@ type unwrappable interface {
 	Unwrap() error
 }
 
-func driverError(err error) error {
+func driverError(log client.LogFunc, err error) error {
 	switch err := errors.Cause(err).(type) {
 	case syscall.Errno:
+		log(client.LogDebug, "network connection lost: %v", err)
 		return driver.ErrBadConn
 	case *net.OpError:
+		log(client.LogDebug, "network connection lost: %v", err)
 		return driver.ErrBadConn
 	case protocol.ErrRequest:
 		switch err.Code {
 		case errIoErrNotLeader:
 			fallthrough
 		case errIoErrLeadershipLost:
+			log(client.LogWarn, "leadership lost (%d - %s)", err.Code, err.Description)
 			return driver.ErrBadConn
 		default:
 			// FIXME: the server side sometimes return SQLITE_OK
@@ -696,6 +703,7 @@ func driverError(err error) error {
 			// investigated, but for now let's just mark this
 			// connection as bad so the client will retry.
 			if err.Code == 0 {
+				log(client.LogWarn, "unexpected error code (%d - %s)", err.Code, err.Description)
 				return driver.ErrBadConn
 			}
 			return Error{
@@ -713,6 +721,7 @@ func driverError(err error) error {
 		}
 		switch err.(type) {
 		case *net.OpError:
+			log(client.LogDebug, "network connection lost: %v", err)
 			return driver.ErrBadConn
 		}
 	}
