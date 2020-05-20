@@ -695,7 +695,7 @@ func driverError(log client.LogFunc, err error) error {
 		case errIoErrNotLeader:
 			fallthrough
 		case errIoErrLeadershipLost:
-			log(client.LogWarn, "leadership lost (%d - %s)", err.Code, err.Description)
+			log(client.LogDebug, "leadership lost (%d - %s)", err.Code, err.Description)
 			return driver.ErrBadConn
 		default:
 			// FIXME: the server side sometimes return SQLITE_OK
