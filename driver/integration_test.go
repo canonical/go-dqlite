@@ -262,6 +262,40 @@ func TestIntegration_HighAvailability(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestIntegration_NodeRemoval(t *testing.T) {
+	infos := make([]client.NodeInfo, 3)
+	for i := range infos {
+		infos[i].ID = uint64(i + 1)
+		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
+		if i == 0 {
+			infos[i].Role = client.Voter
+		} else {
+			infos[i].Role = client.Spare
+		}
+	}
+
+	db, helpers, cleanup := newDBWithInfos(t, infos)
+	defer cleanup()
+
+	cli := helpers[0].Client()
+
+	require.NoError(t, cli.Assign(context.Background(), 2, client.Voter))
+	require.NoError(t, cli.Assign(context.Background(), 3, client.Voter))
+
+	_, err := db.Exec("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	require.NoError(t, cli.Transfer(context.Background(), 2))
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	_, err = tx.Query("SELECT * FROM test")
+	require.NoError(t, err)
+
+	require.NoError(t, tx.Commit())
+}
+
 func TestOptions(t *testing.T) {
 	// make sure applying all options doesn't break anything
 	store, err := client.DefaultNodeStore(":memory:")
@@ -286,8 +320,12 @@ func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 	for i := range infos {
 		infos[i].ID = uint64(i + 1)
 		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
+		infos[i].Role = client.Voter
 	}
+	return newDBWithInfos(t, infos)
+}
 
+func newDBWithInfos(t *testing.T, infos []client.NodeInfo) (*sql.DB, []*nodeHelper, func()) {
 	helpers, helpersCleanup := newNodeHelpers(t, infos)
 
 	store, err := client.DefaultNodeStore(":memory:")

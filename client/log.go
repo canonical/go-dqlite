@@ -12,6 +12,7 @@ type LogLevel = logging.Level
 
 // Available logging levels.
 const (
+	LogNone  = logging.None
 	LogDebug = logging.Debug
 	LogInfo  = logging.Info
 	LogWarn  = logging.Warn
