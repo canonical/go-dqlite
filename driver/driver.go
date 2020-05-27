@@ -37,6 +37,7 @@ type Driver struct {
 	connectionTimeout time.Duration    // Max time to wait for a new connection
 	contextTimeout    time.Duration    // Default client context timeout.
 	clientConfig      protocol.Config  // Configuration for dqlite client instances
+	tracing           client.LogLevel  // Whether to trace statements
 }
 
 // Error is returned in case of database errors.
@@ -151,6 +152,14 @@ func WithContextTimeout(timeout time.Duration) Option {
 	}
 }
 
+// WithTracing will emit a log message at the given level every time a
+// statement gets executed.
+func WithTracing(level client.LogLevel) Option {
+	return func(options *options) {
+		options.Tracing = level
+	}
+}
+
 // NewDriver creates a new dqlite driver, which also implements the
 // driver.Driver interface.
 func New(store client.NodeStore, options ...Option) (*Driver, error) {
@@ -166,13 +175,15 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 		context:           o.Context,
 		connectionTimeout: o.ConnectionTimeout,
 		contextTimeout:    o.ContextTimeout,
+		tracing:           o.Tracing,
+		clientConfig: protocol.Config{
+			Dial:           o.Dial,
+			AttemptTimeout: o.AttemptTimeout,
+			BackoffFactor:  o.ConnectionBackoffFactor,
+			BackoffCap:     o.ConnectionBackoffCap,
+			RetryLimit:     o.RetryLimit,
+		},
 	}
-
-	driver.clientConfig.Dial = o.Dial
-	driver.clientConfig.AttemptTimeout = o.AttemptTimeout
-	driver.clientConfig.BackoffFactor = o.ConnectionBackoffFactor
-	driver.clientConfig.BackoffCap = o.ConnectionBackoffCap
-	driver.clientConfig.RetryLimit = o.RetryLimit
 
 	return driver, nil
 }
@@ -188,13 +199,15 @@ type options struct {
 	ConnectionBackoffCap    time.Duration
 	RetryLimit              uint
 	Context                 context.Context
+	Tracing                 client.LogLevel
 }
 
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		Log:  client.DefaultLogFunc,
-		Dial: client.DefaultDialFunc,
+		Log:     client.DefaultLogFunc,
+		Dial:    client.DefaultDialFunc,
+		Tracing: client.LogNone,
 	}
 }
 
@@ -223,6 +236,7 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn := &Conn{
 		log:            c.driver.log,
 		contextTimeout: c.driver.contextTimeout,
+		tracing:        c.driver.tracing,
 	}
 
 	var err error
@@ -302,6 +316,7 @@ type Conn struct {
 	response       protocol.Message
 	id             uint32 // Database ID.
 	contextTimeout time.Duration
+	tracing        client.LogLevel
 }
 
 // PrepareContext returns a prepared statement, bound to this connection.
@@ -313,6 +328,7 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 		request:  &c.request,
 		response: &c.response,
 		log:      c.log,
+		tracing:  c.tracing,
 	}
 
 	protocol.EncodePrepare(&c.request, uint64(c.id), query)
@@ -325,6 +341,10 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 	stmt.db, stmt.id, stmt.params, err = protocol.DecodeStmt(&c.response)
 	if err != nil {
 		return nil, driverError(c.log, err)
+	}
+
+	if c.tracing != client.LogNone {
+		stmt.sql = query
 	}
 
 	return stmt, nil
@@ -348,6 +368,10 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 		return nil, driverError(c.log, err)
 	}
 
+	if c.tracing != client.LogNone {
+		c.log(c.tracing, "exec: %s", query)
+	}
+
 	return &Result{result: result}, nil
 }
 
@@ -367,6 +391,10 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 	rows, err := protocol.DecodeRows(&c.response)
 	if err != nil {
 		return nil, driverError(c.log, err)
+	}
+
+	if c.tracing != client.LogNone {
+		c.log(c.tracing, "query: %s", query)
 	}
 
 	return &Rows{
@@ -472,6 +500,8 @@ type Stmt struct {
 	id       uint32
 	params   uint64
 	log      client.LogFunc
+	sql      string // Prepared SQL, only set when tracing
+	tracing  client.LogLevel
 }
 
 // Close closes the statement.
@@ -512,6 +542,10 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 		return nil, driverError(s.log, err)
 	}
 
+	if s.tracing != client.LogNone {
+		s.log(s.tracing, "exec prepared: %s", s.sql)
+	}
+
 	return &Result{result: result}, nil
 }
 
@@ -534,6 +568,10 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 	rows, err := protocol.DecodeRows(s.response)
 	if err != nil {
 		return nil, driverError(s.log, err)
+	}
+
+	if s.tracing != client.LogNone {
+		s.log(s.tracing, "query prepared: %s", s.sql)
 	}
 
 	return &Rows{ctx: ctx, request: s.request, response: s.response, protocol: s.protocol, rows: rows}, nil

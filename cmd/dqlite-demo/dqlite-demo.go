@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/canonical/go-dqlite/app"
+	"github.com/canonical/go-dqlite/client"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -30,11 +32,14 @@ func main() {
 
 Complete documentation is available at https://github.com/canonical/go-dqlite`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			logFunc := func(l client.LogLevel, format string, a ...interface{}) {
+				log.Printf(fmt.Sprintf("Dqlite: %s: %s\n", l.String(), format), a...)
+			}
 			dir := filepath.Join(dir, db)
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				return errors.Wrapf(err, "can't create %s", dir)
 			}
-			app, err := app.New(dir, app.WithAddress(db), app.WithCluster(*join))
+			app, err := app.New(dir, app.WithAddress(db), app.WithCluster(*join), app.WithLogFunc(logFunc))
 			if err != nil {
 				return err
 			}

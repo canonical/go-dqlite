@@ -5,7 +5,8 @@ type Level int
 
 // Available logging levels.
 const (
-	Debug Level = iota
+	None Level = iota
+	Debug
 	Info
 	Warn
 	Error
