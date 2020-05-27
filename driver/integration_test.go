@@ -263,7 +263,18 @@ func TestIntegration_HighAvailability(t *testing.T) {
 }
 
 func TestIntegration_NodeRemoval(t *testing.T) {
-	db, helpers, cleanup := newDB(t, 3)
+	infos := make([]client.NodeInfo, 3)
+	for i := range infos {
+		infos[i].ID = uint64(i + 1)
+		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
+		if i == 0 {
+			infos[i].Role = client.Voter
+		} else {
+			infos[i].Role = client.Spare
+		}
+	}
+
+	db, helpers, cleanup := newDBWithInfos(t, infos)
 	defer cleanup()
 
 	cli := helpers[0].Client()
@@ -309,13 +320,12 @@ func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 	for i := range infos {
 		infos[i].ID = uint64(i + 1)
 		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
-		if i == 0 {
-			infos[i].Role = client.Voter
-		} else {
-			infos[i].Role = client.Spare
-		}
+		infos[i].Role = client.Voter
 	}
+	return newDBWithInfos(t, infos)
+}
 
+func newDBWithInfos(t *testing.T, infos []client.NodeInfo) (*sql.DB, []*nodeHelper, func()) {
 	helpers, helpersCleanup := newNodeHelpers(t, infos)
 
 	store, err := client.DefaultNodeStore(":memory:")
