@@ -262,38 +262,18 @@ func TestIntegration_HighAvailability(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestIntegration_NodeRemoval(t *testing.T) {
-	infos := make([]client.NodeInfo, 3)
-	for i := range infos {
-		infos[i].ID = uint64(i + 1)
-		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
-		if i == 0 {
-			infos[i].Role = client.Voter
-		} else {
-			infos[i].Role = client.Spare
-		}
-	}
-
-	db, helpers, cleanup := newDBWithInfos(t, infos)
+func TestIntegration_LeadershipTransfer(t *testing.T) {
+	db, helpers, cleanup := newDB(t, 3)
 	defer cleanup()
-
-	cli := helpers[0].Client()
-
-	require.NoError(t, cli.Assign(context.Background(), 2, client.Voter))
-	require.NoError(t, cli.Assign(context.Background(), 3, client.Voter))
 
 	_, err := db.Exec("CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
+	cli := helpers[0].Client()
 	require.NoError(t, cli.Transfer(context.Background(), 2))
 
-	tx, err := db.Begin()
+	_, err = db.Exec("INSERT INTO test(n) VALUES(1)")
 	require.NoError(t, err)
-
-	_, err = tx.Query("SELECT * FROM test")
-	require.NoError(t, err)
-
-	require.NoError(t, tx.Commit())
 }
 
 func TestOptions(t *testing.T) {

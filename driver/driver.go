@@ -47,8 +47,8 @@ type Error = protocol.Error
 const (
 	ErrBusy                = 5
 	errIoErr               = 10
-	errIoErrNotLeader      = errIoErr | 32<<8
-	errIoErrLeadershipLost = errIoErr | (33 << 8)
+	errIoErrNotLeader      = errIoErr | 40<<8
+	errIoErrLeadershipLost = errIoErr | (41 << 8)
 )
 
 // Option can be used to tweak driver parameters.
