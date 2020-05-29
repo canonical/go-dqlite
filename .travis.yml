@@ -23,6 +23,7 @@ script:
   - go vet -tags libsqlite3 ./...
   - golint
   - deadcode
+  - export GO_DQLITE_MULTITHREAD=1
   - project=github.com/canonical/go-dqlite
   - $GOPATH/bin/overalls -project $project -covermode=count -- -tags libsqlite3 -timeout 240s
   - $GOPATH/bin/goveralls -coverprofile overalls.coverprofile -service=travis-ci
