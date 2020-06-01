@@ -276,6 +276,25 @@ func TestIntegration_LeadershipTransfer(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestIntegration_LeadershipTransfer_Tx(t *testing.T) {
+	db, helpers, cleanup := newDB(t, 3)
+	defer cleanup()
+
+	_, err := db.Exec("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	cli := helpers[0].Client()
+	require.NoError(t, cli.Transfer(context.Background(), 2))
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	_, err = tx.Query("SELECT * FROM test")
+	require.NoError(t, err)
+
+	require.NoError(t, tx.Commit())
+}
+
 func TestOptions(t *testing.T) {
 	// make sure applying all options doesn't break anything
 	store, err := client.DefaultNodeStore(":memory:")
