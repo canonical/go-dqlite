@@ -246,9 +246,14 @@ func (a *App) ID() uint64 {
 	return a.id
 }
 
+// Driver returns the name used to register the dqlite driver.
+func (a *App) Driver() string {
+	return a.driverName
+}
+
 // Open the dqlite database with the given name
 func (a *App) Open(ctx context.Context, database string) (*sql.DB, error) {
-	db, err := sql.Open(a.driverName, database)
+	db, err := sql.Open(a.Driver(), database)
 	if err != nil {
 		return nil, err
 	}
