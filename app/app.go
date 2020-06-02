@@ -19,6 +19,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+// App is a high-level helper for initializing a typical dqlite-based Go
+// application.
+//
+// It takes care of starting a dqlite node and registering a dqlite Go SQL
+// driver.
 type App struct {
 	id              uint64
 	address         string
@@ -74,7 +79,7 @@ func New(dir string, options ...Option) (*App, error) {
 			return nil, err
 		}
 		if o.Address != "" && o.Address != info.Address {
-			return nil, fmt.Errorf("address in info.yaml does not match the given one")
+			return nil, fmt.Errorf("address %q in info.yaml does not match %q", info.Address, o.Address)
 		}
 	}
 
@@ -241,9 +246,14 @@ func (a *App) ID() uint64 {
 	return a.id
 }
 
+// Driver returns the name used to register the dqlite driver.
+func (a *App) Driver() string {
+	return a.driverName
+}
+
 // Open the dqlite database with the given name
 func (a *App) Open(ctx context.Context, database string) (*sql.DB, error) {
-	db, err := sql.Open(a.driverName, database)
+	db, err := sql.Open(a.Driver(), database)
 	if err != nil {
 		return nil, err
 	}

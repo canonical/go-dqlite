@@ -49,6 +49,11 @@ const (
 	errIoErr               = 10
 	errIoErrNotLeader      = errIoErr | 40<<8
 	errIoErrLeadershipLost = errIoErr | (41 << 8)
+
+	// Legacy error codes before version-3.32.1+replication4. Kept here
+	// for backward compatibility, but should eventually be dropped.
+	errIoErrNotLeaderLegacy      = errIoErr | 32<<8
+	errIoErrLeadershipLostLegacy = errIoErr | (33 << 8)
 )
 
 // Option can be used to tweak driver parameters.
@@ -730,6 +735,10 @@ func driverError(log client.LogFunc, err error) error {
 		return driver.ErrBadConn
 	case protocol.ErrRequest:
 		switch err.Code {
+		case errIoErrNotLeaderLegacy:
+			fallthrough
+		case errIoErrLeadershipLostLegacy:
+			fallthrough
 		case errIoErrNotLeader:
 			fallthrough
 		case errIoErrLeadershipLost:
