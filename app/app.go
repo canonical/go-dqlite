@@ -19,6 +19,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+// App is a high-level helper for initializing a typical dqlite-based Go
+// application.
+//
+// It takes care of starting a dqlite node and registering a dqlite Go SQL
+// driver.
 type App struct {
 	id              uint64
 	address         string
