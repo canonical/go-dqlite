@@ -79,7 +79,7 @@ func New(dir string, options ...Option) (*App, error) {
 			return nil, err
 		}
 		if o.Address != "" && o.Address != info.Address {
-			return nil, fmt.Errorf("address in info.yaml does not match the given one")
+			return nil, fmt.Errorf("address %q in info.yaml does not match %q", info.Address, o.Address)
 		}
 	}
 
