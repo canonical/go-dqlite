@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/ghodss/yaml"
@@ -40,12 +41,18 @@ type DatabaseNodeStore struct {
 	where  string  // Optional WHERE filter
 }
 
-// DefaultNodeStore creates a new NodeStore using the given filename to
-// open a SQLite database, with default names for the schema, table and column
-// parameters.
+// DefaultNodeStore creates a new NodeStore using the given filename.
+//
+// If the filename ends with ".yaml" then the YamlNodeStore implementation will
+// be used. Otherwise the SQLite-based one will be picked, with default names
+// for the schema, table and column parameters.
 //
 // It also creates the table if it doesn't exist yet.
-func DefaultNodeStore(filename string) (*DatabaseNodeStore, error) {
+func DefaultNodeStore(filename string) (NodeStore, error) {
+	if strings.HasSuffix(filename, ".yaml") {
+		return NewYamlNodeStore(filename)
+	}
+
 	// Open the database.
 	db, err := sql.Open("sqlite3", filename)
 	if err != nil {

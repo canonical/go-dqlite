@@ -466,7 +466,7 @@ func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 }
 
 // Create a new in-memory server store populated with the given addresses.
-func newStore(t *testing.T, address string) *client.DatabaseNodeStore {
+func newStore(t *testing.T, address string) client.NodeStore {
 	t.Helper()
 
 	store, err := client.DefaultNodeStore(":memory:")
