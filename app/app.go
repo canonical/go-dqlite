@@ -246,6 +246,11 @@ func (a *App) ID() uint64 {
 	return a.id
 }
 
+// Address returns the dqlite address of this application node.
+func (a *App) Address() string {
+	return a.address
+}
+
 // Driver returns the name used to register the dqlite driver.
 func (a *App) Driver() string {
 	return a.driverName
