@@ -41,11 +41,23 @@ type App struct {
 }
 
 // New creates a new application node.
-func New(dir string, options ...Option) (*App, error) {
+func New(dir string, options ...Option) (app *App, err error) {
 	o := defaultOptions()
 	for _, option := range options {
 		option(o)
 	}
+
+	// List of cleanup functions to run in case of errors.
+	cleanups := []func(){}
+	defer func() {
+		if err == nil {
+			return
+		}
+		for i := range cleanups {
+			i = len(cleanups) - 1 - i // Reverse order
+			cleanups[i]()
+		}
+	}()
 
 	// Load our ID, or generate one if we are joining.
 	infoPath := filepath.Join(dir, "info.yaml")
@@ -70,6 +82,8 @@ func New(dir string, options ...Option) (*App, error) {
 		if err := ioutil.WriteFile(infoPath, data, 0600); err != nil {
 			return nil, fmt.Errorf("write info.yaml: %w", err)
 		}
+
+		cleanups = append(cleanups, func() { os.Remove(infoPath) })
 	} else {
 		data, err := ioutil.ReadFile(infoPath)
 		if err != nil {
@@ -117,6 +131,7 @@ func New(dir string, options ...Option) (*App, error) {
 	if err := node.Start(); err != nil {
 		return nil, fmt.Errorf("start node: %w", err)
 	}
+	cleanups = append(cleanups, func() { node.Close() })
 
 	// Open the nodes store.
 	storePath := filepath.Join(dir, "cluster.yaml")
@@ -131,6 +146,7 @@ func New(dir string, options ...Option) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open cluster.yaml node store: %w", err)
 	}
+
 	if !storePathExists {
 		// If this is a brand new application node, populate the store
 		// either with the node's address (for bootstrap nodes) or with
@@ -147,6 +163,7 @@ func New(dir string, options ...Option) (*App, error) {
 		if err := store.Set(context.Background(), nodes); err != nil {
 			return nil, fmt.Errorf("initialize node store: %w", err)
 		}
+		cleanups = append(cleanups, func() { os.Remove(storePath) })
 	}
 
 	// Register the local dqlite driver.
@@ -165,7 +182,7 @@ func New(dir string, options ...Option) (*App, error) {
 
 	ctx, stop := context.WithCancel(context.Background())
 
-	app := &App{
+	app = &App{
 		id:              info.ID,
 		address:         o.Address,
 		node:            node,
@@ -184,10 +201,15 @@ func New(dir string, options ...Option) (*App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("listen to %s: %w", o.Address, err)
 		}
+		serveCh := make(chan struct{}, 0)
+
 		app.listener = listener
-		app.serveCh = make(chan struct{}, 0)
+		app.serveCh = serveCh
 
 		go app.serve()
+
+		cleanups = append(cleanups, func() { listener.Close(); <-serveCh })
+
 	}
 
 	// If are starting a brand new non-bootstrap node, let's add it to the
@@ -198,6 +220,8 @@ func New(dir string, options ...Option) (*App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("find cluster leader: %w", err)
 		}
+		defer cli.Close()
+
 		err = cli.Add(
 			context.Background(),
 			client.NodeInfo{ID: info.ID, Address: o.Address, Role: client.Voter})
