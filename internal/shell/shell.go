@@ -54,7 +54,7 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	case ".leader":
 		return s.processLeader(ctx, line)
 	}
-	if strings.HasPrefix(line, "SELECT") {
+	if strings.HasPrefix(strings.ToUpper(strings.TrimLeft(line, " ")), "SELECT") {
 		return s.processSelect(ctx, line)
 	} else {
 		return "", s.processExec(ctx, line)
@@ -99,18 +99,18 @@ func (s *Shell) processLeader(ctx context.Context, line string) (string, error) 
 func (s *Shell) processSelect(ctx context.Context, line string) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("begin transaction: %w", err)
 	}
 
 	rows, err := tx.Query(line)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("query: %w", err)
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("columns: %w", err)
 	}
 	n := len(columns)
 
@@ -123,26 +123,28 @@ func (s *Shell) processSelect(ctx context.Context, line string) (string, error) 
 		}
 
 		if err := rows.Scan(rowPointers...); err != nil {
-			return "", err
+			return "", fmt.Errorf("scan: %w", err)
 		}
 
 		for i, column := range row {
 			s := fmt.Sprintf("%v", column)
 			if i == 0 {
-				result = s
+				result += s
 			} else {
 				result += "|" + s
 			}
 
 		}
+		result += "\n"
 	}
+	result = strings.TrimRight(result, "\n")
 
 	if err := rows.Err(); err != nil {
-		return "", err
+		return "", fmt.Errorf("rows: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return "", err
+		return "", fmt.Errorf("commit: %w", err)
 	}
 
 	return result, nil
