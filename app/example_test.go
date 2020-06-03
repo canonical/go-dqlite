@@ -15,7 +15,7 @@ import (
 // be omitted, since the node address will be persisted in the info.yaml file.
 //
 // The very first node has always the same ID (dqlite.BootstrapID).
-func ExampleFirstNode() {
+func Example() {
 	dir, err := ioutil.TempDir("", "dqlite-app-example-")
 	if err != nil {
 		return
@@ -54,7 +54,7 @@ func ExampleFirstNode() {
 // be omitted, since the node has already joined the cluster.
 //
 // Each additional node will be automatically assigned a unique ID.
-func ExampleAdditionalNodes() {
+func ExampleWithCluster() {
 	dir1, err := ioutil.TempDir("", "dqlite-app-example-")
 	if err != nil {
 		return
