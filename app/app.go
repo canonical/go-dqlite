@@ -53,7 +53,7 @@ func New(dir string, options ...Option) (*App, error) {
 	info := client.NodeInfo{}
 	if _, err := os.Stat(infoPath); err != nil {
 		if !os.IsNotExist(err) {
-			return nil, err
+			return nil, fmt.Errorf("check if info.yaml exists: %w", err)
 		}
 		infoPathExists = false
 		if len(o.Cluster) == 0 {
@@ -65,18 +65,18 @@ func New(dir string, options ...Option) (*App, error) {
 
 		data, err := yaml.Marshal(info)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("marshall info.yaml: %w", err)
 		}
 		if err := ioutil.WriteFile(infoPath, data, 0600); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("write info.yaml: %w", err)
 		}
 	} else {
 		data, err := ioutil.ReadFile(infoPath)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read info.yaml: %w", err)
 		}
 		if err := yaml.Unmarshal(data, &info); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unmarshall info.yaml: %w", err)
 		}
 		if o.Address != "" && o.Address != info.Address {
 			return nil, fmt.Errorf("address %q in info.yaml does not match %q", info.Address, o.Address)
@@ -112,10 +112,10 @@ func New(dir string, options ...Option) (*App, error) {
 		dqlite.WithDialFunc(nodeDial),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create node: %w", err)
 	}
 	if err := node.Start(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("start node: %w", err)
 	}
 
 	// Open the nodes store.
@@ -123,13 +123,13 @@ func New(dir string, options ...Option) (*App, error) {
 	storePathExists := true
 	if _, err := os.Stat(storePath); err != nil {
 		if !os.IsNotExist(err) {
-			return nil, err
+			return nil, fmt.Errorf("check if cluster.yaml exists: %w", err)
 		}
 		storePathExists = false
 	}
 	store, err := client.NewYamlNodeStore(storePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open cluster.yaml node store: %w", err)
 	}
 	if !storePathExists {
 		// If this is a brand new application node, populate the store
@@ -145,7 +145,7 @@ func New(dir string, options ...Option) (*App, error) {
 			}
 		}
 		if err := store.Set(context.Background(), nodes); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("initialize node store: %w", err)
 		}
 	}
 
@@ -157,7 +157,7 @@ func New(dir string, options ...Option) (*App, error) {
 
 	driver, err := driver.New(store, driver.WithDialFunc(driverDial), driver.WithLogFunc(o.Log))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create driver: %w", err)
 	}
 	driverIndex++
 	driverName := fmt.Sprintf("dqlite-%d", driverIndex)
@@ -182,7 +182,7 @@ func New(dir string, options ...Option) (*App, error) {
 	if o.TLS != nil {
 		listener, err := net.Listen("tcp", o.Address)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("listen to %s: %w", o.Address, err)
 		}
 		app.listener = listener
 		app.serveCh = make(chan struct{}, 0)
@@ -196,13 +196,13 @@ func New(dir string, options ...Option) (*App, error) {
 		// TODO: add a customizable timeout
 		cli, err := app.Leader(context.Background())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("find cluster leader: %w", err)
 		}
 		err = cli.Add(
 			context.Background(),
 			client.NodeInfo{ID: info.ID, Address: o.Address, Role: client.Voter})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("add node to cluster: %w", err)
 		}
 
 	}
