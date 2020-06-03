@@ -73,7 +73,6 @@ type tlsSetup struct {
 type options struct {
 	Address string
 	Cluster []string
-	Dial    client.DialFunc
 	Log     client.LogFunc
 	TLS     *tlsSetup
 }
@@ -82,7 +81,6 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		Address: defaultAddress(),
-		Dial:    client.DefaultDialFunc,
 		Log:     defaultLogFunc,
 	}
 }
