@@ -29,11 +29,30 @@ func TestNew_PristineJoiner(t *testing.T) {
 	addr1 := "127.0.0.1:9001"
 	addr2 := "127.0.0.1:9002"
 
-	_, cleanup := newApp(t, app.WithAddress(addr1))
+	app1, cleanup := newApp(t, app.WithAddress(addr1))
 	defer cleanup()
 
 	_, cleanup = newApp(t, app.WithAddress(addr2), app.WithCluster([]string{addr1}))
 	defer cleanup()
+
+	// Eventually the joining nodes appear in the cluster list.
+	cli, err := app1.Leader(context.Background())
+	require.NoError(t, err)
+
+	joined := false
+	for i := 0; i < 20; i++ {
+		time.Sleep(50 * time.Millisecond)
+		cluster, err := cli.Cluster(context.Background())
+		require.NoError(t, err)
+		if len(cluster) == 2 {
+			assert.Equal(t, addr1, cluster[0].Address)
+			assert.Equal(t, addr2, cluster[1].Address)
+			joined = true
+			break
+		}
+	}
+
+	assert.True(t, joined)
 }
 
 // Open a database on a fresh one-node cluster.

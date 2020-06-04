@@ -24,6 +24,7 @@ func main() {
 	var db string
 	var join *[]string
 	var dir string
+	var verbose bool
 
 	cmd := &cobra.Command{
 		Use:   "dqlite-demo",
@@ -33,7 +34,10 @@ func main() {
 Complete documentation is available at https://github.com/canonical/go-dqlite`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logFunc := func(l client.LogLevel, format string, a ...interface{}) {
-				log.Printf(fmt.Sprintf("Dqlite: %s: %s\n", l.String(), format), a...)
+				if !verbose {
+					return
+				}
+				log.Printf(fmt.Sprintf("%s: %s: %s\n", api, l.String(), format), a...)
 			}
 			dir := filepath.Join(dir, db)
 			if err := os.MkdirAll(dir, 0755); err != nil {
@@ -104,6 +108,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 	flags.StringVarP(&db, "db", "d", "", "address used for internal database replication")
 	join = flags.StringSliceP("join", "j", nil, "database addresses of existing nodes")
 	flags.StringVarP(&dir, "dir", "D", "/tmp/dqlite-demo", "data directory")
+	flags.BoolVarP(&verbose, "verbose", "v", false, "verbose logging")
 
 	cmd.MarkFlagRequired("api")
 	cmd.MarkFlagRequired("db")
