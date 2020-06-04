@@ -4,14 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
-
-	"github.com/ghodss/yaml"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
@@ -60,14 +57,12 @@ func New(dir string, options ...Option) (app *App, err error) {
 	}()
 
 	// Load our ID, or generate one if we are joining.
-	infoPath := filepath.Join(dir, "info.yaml")
-	infoPathExists := true
 	info := client.NodeInfo{}
-	if _, err := os.Stat(infoPath); err != nil {
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("check if info.yaml exists: %w", err)
-		}
-		infoPathExists = false
+	infoYamlExists, err := fileExists(dir, infoYamlFile)
+	if err != nil {
+		return nil, err
+	}
+	if !infoYamlExists {
 		if len(o.Cluster) == 0 {
 			info.ID = dqlite.BootstrapID
 		} else {
@@ -75,22 +70,14 @@ func New(dir string, options ...Option) (app *App, err error) {
 		}
 		info.Address = o.Address
 
-		data, err := yaml.Marshal(info)
-		if err != nil {
-			return nil, fmt.Errorf("marshall info.yaml: %w", err)
-		}
-		if err := ioutil.WriteFile(infoPath, data, 0600); err != nil {
-			return nil, fmt.Errorf("write info.yaml: %w", err)
+		if err := fileMarshal(dir, infoYamlFile, info); err != nil {
+			return nil, err
 		}
 
-		cleanups = append(cleanups, func() { os.Remove(infoPath) })
+		cleanups = append(cleanups, func() { fileRemove(dir, infoYamlFile) })
 	} else {
-		data, err := ioutil.ReadFile(infoPath)
-		if err != nil {
-			return nil, fmt.Errorf("read info.yaml: %w", err)
-		}
-		if err := yaml.Unmarshal(data, &info); err != nil {
-			return nil, fmt.Errorf("unmarshall info.yaml: %w", err)
+		if err := fileUnmarshal(dir, infoYamlFile, &info); err != nil {
+			return nil, err
 		}
 		if o.Address != "" && o.Address != info.Address {
 			return nil, fmt.Errorf("address %q in info.yaml does not match %q", info.Address, o.Address)
@@ -134,20 +121,16 @@ func New(dir string, options ...Option) (app *App, err error) {
 	cleanups = append(cleanups, func() { node.Close() })
 
 	// Open the nodes store.
-	storePath := filepath.Join(dir, "cluster.yaml")
-	storePathExists := true
-	if _, err := os.Stat(storePath); err != nil {
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("check if cluster.yaml exists: %w", err)
-		}
-		storePathExists = false
+	storeFileExists, err := fileExists(dir, storeFile)
+	if err != nil {
+		return nil, err
 	}
-	store, err := client.NewYamlNodeStore(storePath)
+	store, err := client.NewYamlNodeStore(filepath.Join(dir, storeFile))
 	if err != nil {
 		return nil, fmt.Errorf("open cluster.yaml node store: %w", err)
 	}
 
-	if !storePathExists {
+	if !storeFileExists {
 		// If this is a brand new application node, populate the store
 		// either with the node's address (for bootstrap nodes) or with
 		// the given cluster addresses (for joining nodes).
@@ -163,7 +146,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		if err := store.Set(context.Background(), nodes); err != nil {
 			return nil, fmt.Errorf("initialize node store: %w", err)
 		}
-		cleanups = append(cleanups, func() { os.Remove(storePath) })
+		cleanups = append(cleanups, func() { fileRemove(dir, storeFile) })
 	}
 
 	// Register the local dqlite driver.
@@ -214,7 +197,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	// If we are starting a brand new non-bootstrap node, let's add it to the
 	// cluster.
-	if !infoPathExists && info.ID != dqlite.BootstrapID {
+	if !infoYamlExists && info.ID != dqlite.BootstrapID {
 		// TODO: add a customizable timeout
 		cli, err := app.Leader(context.Background())
 		if err != nil {
