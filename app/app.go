@@ -58,25 +58,28 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	// Load our ID, or generate one if we are joining.
 	info := client.NodeInfo{}
-	infoYamlExists, err := fileExists(dir, infoYamlFile)
+	infoFileExists, err := fileExists(dir, infoFile)
 	if err != nil {
 		return nil, err
 	}
-	if !infoYamlExists {
+	if !infoFileExists {
 		if len(o.Cluster) == 0 {
 			info.ID = dqlite.BootstrapID
 		} else {
 			info.ID = dqlite.GenerateID(o.Address)
+			if err := fileWrite(dir, joinFile, []byte{}); err != nil {
+				return nil, err
+			}
 		}
 		info.Address = o.Address
 
-		if err := fileMarshal(dir, infoYamlFile, info); err != nil {
+		if err := fileMarshal(dir, infoFile, info); err != nil {
 			return nil, err
 		}
 
-		cleanups = append(cleanups, func() { fileRemove(dir, infoYamlFile) })
+		cleanups = append(cleanups, func() { fileRemove(dir, infoFile) })
 	} else {
-		if err := fileUnmarshal(dir, infoYamlFile, &info); err != nil {
+		if err := fileUnmarshal(dir, infoFile, &info); err != nil {
 			return nil, err
 		}
 		if o.Address != "" && o.Address != info.Address {
@@ -84,8 +87,50 @@ func New(dir string, options ...Option) (app *App, err error) {
 		}
 	}
 
-	if info.ID == dqlite.BootstrapID && len(o.Cluster) > 0 {
+	joinFileExists, err := fileExists(dir, joinFile)
+	if err != nil {
+		return nil, err
+	}
+
+	if info.ID == dqlite.BootstrapID && joinFileExists {
 		return nil, fmt.Errorf("bootstrap node can't join a cluster")
+	}
+
+	// Open the nodes store.
+	storeFileExists, err := fileExists(dir, storeFile)
+	if err != nil {
+		return nil, err
+	}
+	store, err := client.NewYamlNodeStore(filepath.Join(dir, storeFile))
+	if err != nil {
+		return nil, fmt.Errorf("open cluster.yaml node store: %w", err)
+	}
+
+	// The info file and the store file should both exists or none of them
+	// exist.
+	if infoFileExists != storeFileExists {
+		return nil, fmt.Errorf("inconsistent info.yaml and cluster.yaml")
+	}
+
+	if !storeFileExists {
+		// If this is a brand new application node, populate the store
+		// either with the node's address (for bootstrap nodes) or with
+		// the given cluster addresses (for joining nodes).
+		nodes := []client.NodeInfo{}
+		if info.ID == dqlite.BootstrapID {
+			nodes = append(nodes, client.NodeInfo{Address: o.Address})
+		} else {
+			if len(o.Cluster) == 0 {
+				return nil, fmt.Errorf("no cluster addresses provided")
+			}
+			for _, address := range o.Cluster {
+				nodes = append(nodes, client.NodeInfo{Address: address})
+			}
+		}
+		if err := store.Set(context.Background(), nodes); err != nil {
+			return nil, fmt.Errorf("initialize node store: %w", err)
+		}
+		cleanups = append(cleanups, func() { fileRemove(dir, storeFile) })
 	}
 
 	// Start the local dqlite engine.
@@ -120,35 +165,6 @@ func New(dir string, options ...Option) (app *App, err error) {
 	}
 	cleanups = append(cleanups, func() { node.Close() })
 
-	// Open the nodes store.
-	storeFileExists, err := fileExists(dir, storeFile)
-	if err != nil {
-		return nil, err
-	}
-	store, err := client.NewYamlNodeStore(filepath.Join(dir, storeFile))
-	if err != nil {
-		return nil, fmt.Errorf("open cluster.yaml node store: %w", err)
-	}
-
-	if !storeFileExists {
-		// If this is a brand new application node, populate the store
-		// either with the node's address (for bootstrap nodes) or with
-		// the given cluster addresses (for joining nodes).
-		nodes := []client.NodeInfo{{Address: o.Address}}
-		if info.ID != dqlite.BootstrapID {
-			if len(o.Cluster) == 0 {
-				return nil, fmt.Errorf("no cluster addresses provided")
-			}
-			for _, address := range o.Cluster {
-				nodes = append(nodes, client.NodeInfo{Address: address})
-			}
-		}
-		if err := store.Set(context.Background(), nodes); err != nil {
-			return nil, fmt.Errorf("initialize node store: %w", err)
-		}
-		cleanups = append(cleanups, func() { fileRemove(dir, storeFile) })
-	}
-
 	// Register the local dqlite driver.
 	driverDial := client.DefaultDialFunc
 	if o.TLS != nil {
@@ -179,6 +195,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		runCh:           make(chan struct{}, 0),
 	}
 
+	// Start the proxy if a TLS configuration was provided.
 	if o.TLS != nil {
 		listener, err := net.Listen("tcp", o.Address)
 		if err != nil {
@@ -195,26 +212,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	}
 
-	// If we are starting a brand new non-bootstrap node, let's add it to the
-	// cluster.
-	if !infoYamlExists && info.ID != dqlite.BootstrapID {
-		// TODO: add a customizable timeout
-		cli, err := app.Leader(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("find cluster leader: %w", err)
-		}
-		defer cli.Close()
-
-		err = cli.Add(
-			context.Background(),
-			client.NodeInfo{ID: info.ID, Address: o.Address, Role: client.Voter})
-		if err != nil {
-			return nil, fmt.Errorf("add node to cluster: %w", err)
-		}
-
-	}
-
-	go app.run(ctx)
+	go app.run(ctx, joinFileExists)
 
 	return app, nil
 }
@@ -327,12 +325,29 @@ func (a *App) proxy() {
 	}
 }
 
-// Run background tasks.
-func (a *App) run(ctx context.Context) {
+// Run background tasks. The join flag is true if the node is a brand new one
+// and should join the cluster.
+func (a *App) run(ctx context.Context, join bool) {
+	defer close(a.runCh)
+
+	if join {
+		cli, err := a.Leader(ctx)
+		if err != nil {
+			return
+		}
+		defer cli.Close()
+
+		err = cli.Add(
+			context.Background(),
+			client.NodeInfo{ID: a.id, Address: a.address, Role: client.Voter})
+		if err != nil {
+			return
+		}
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
-			close(a.runCh)
 			return
 		case <-time.After(30 * time.Second):
 			cli, err := a.Leader(ctx)

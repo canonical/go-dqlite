@@ -11,10 +11,15 @@ import (
 
 const (
 	// Store the node ID and address.
-	infoYamlFile = "info.yaml"
+	infoFile = "info.yaml"
 
 	// The node store file.
 	storeFile = "cluster.yaml"
+
+	// This is a "flag" file to signal when a brand new node needs to join
+	// the cluster. In case the node doesn't successfully make it to join
+	// the cluster first time it's started, it will re-try the next time.
+	joinFile = "join"
 )
 
 // Return true if the given file exists in the given directory.
