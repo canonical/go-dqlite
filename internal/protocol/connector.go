@@ -72,7 +72,7 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	// the given context is done.
 	err := retry.Retry(func(attempt uint) error {
 		log := func(l logging.Level, format string, a ...interface{}) {
-			format += fmt.Sprintf(" attempt=%d", attempt)
+			format = fmt.Sprintf("attempt %d: ", attempt) + format
 			c.log(l, format, a...)
 		}
 
@@ -117,13 +117,13 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
 	servers, err := c.store.Get(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get cluster servers")
+		return nil, errors.Wrap(err, "get servers")
 	}
 
 	// Make an attempt for each address until we find the leader.
 	for _, server := range servers {
 		log := func(l logging.Level, format string, a ...interface{}) {
-			format += fmt.Sprintf(" address=%s", server.Address)
+			format = fmt.Sprintf("server %s: ", server.Address) + format
 			log(l, format, a...)
 		}
 
@@ -133,12 +133,13 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		version := VersionOne
 		protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
 		if err == errBadProtocol {
+			log(logging.Warn, "unsupported protocol %d, attempt with %d", version, VersionLegacy)
 			version = VersionLegacy
 			protocol, leader, err = c.connectAttemptOne(ctx, server.Address, version)
 		}
 		if err != nil {
 			// This server is unavailable, try with the next target.
-			log(logging.Warn, "server unavailable err=%v", err)
+			log(logging.Warn, err.Error())
 			continue
 		}
 		if protocol != nil {
@@ -221,7 +222,7 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 	// Establish the connection.
 	conn, err := c.config.Dial(dialCtx, address)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "failed to establish network connection")
+		return nil, "", errors.Wrap(err, "dial")
 	}
 
 	protocol, err := Handshake(ctx, conn, version)

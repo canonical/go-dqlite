@@ -23,7 +23,8 @@ func TestConnector_Success(t *testing.T) {
 
 	store := newStore(t, []string{address})
 
-	connector := newConnector(t, store)
+	log, check := newLogFunc(t)
+	connector := protocol.NewConnector(0, store, protocol.Config{}, log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -32,6 +33,10 @@ func TestConnector_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NoError(t, client.Close())
+
+	check([]string{
+		"DEBUG: attempt 0: server @test-0: connected",
+	})
 }
 
 // The network connection can't be established within the specified number of
@@ -41,49 +46,69 @@ func TestConnector_LimitRetries(t *testing.T) {
 	config := protocol.Config{
 		RetryLimit: 2,
 	}
-	connector := newConnectorWithConfig(t, store, config)
+	log, check := newLogFunc(t)
+	connector := protocol.NewConnector(0, store, config, log)
 
 	_, err := connector.Connect(context.Background())
 	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
+
+	check([]string{
+		"WARN: attempt 0: server @test-123: dial: dial unix @test-123: connect: connection refused",
+		"WARN: attempt 1: server @test-123: dial: dial unix @test-123: connect: connection refused",
+		"WARN: attempt 2: server @test-123: dial: dial unix @test-123: connect: connection refused",
+	})
 }
 
-// The network connection can't be established because the context expired.
-func TestConnector_ContextExpired(t *testing.T) {
+// The network connection can't be established because of a connection timeout.
+func TestConnector_DialTimeout(t *testing.T) {
 	store := newStore(t, []string{"8.8.8.8:9000"})
-	config := protocol.Config{}
-	connector := newConnectorWithConfig(t, store, config)
+	log, check := newLogFunc(t)
+	config := protocol.Config{
+		DialTimeout: 50 * time.Millisecond,
+		RetryLimit:  1,
+	}
+	connector := protocol.NewConnector(0, store, config, log)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	_, err := connector.Connect(ctx)
+	_, err := connector.Connect(context.Background())
 	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
+
+	check([]string{
+		"WARN: attempt 0: server 8.8.8.8:9000: dial: dial tcp 8.8.8.8:9000: i/o timeout",
+		"WARN: attempt 1: server 8.8.8.8:9000: dial: dial tcp 8.8.8.8:9000: i/o timeout",
+	})
 }
 
 // Connection failed because the server store is empty.
-func TestConnector_Connect_Error_EmptyNodeStore(t *testing.T) {
+func TestConnector_EmptyNodeStore(t *testing.T) {
 	store := newStore(t, []string{})
-
-	connector := newConnector(t, store)
+	log, check := newLogFunc(t)
+	connector := protocol.NewConnector(0, store, protocol.Config{}, log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 	defer cancel()
 
 	_, err := connector.Connect(ctx)
-	require.EqualError(t, err, "no available dqlite leader server found")
+	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
+
+	check([]string{})
 }
 
 // Connection failed because the context was canceled.
-func TestConnector_Connect_Error_AfterCancel(t *testing.T) {
+func TestConnector_ContextCanceled(t *testing.T) {
 	store := newStore(t, []string{"1.2.3.4:666"})
 
-	connector := newConnector(t, store)
+	log, check := newLogFunc(t)
+	connector := protocol.NewConnector(0, store, protocol.Config{}, log)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
 
 	_, err := connector.Connect(ctx)
-	assert.EqualError(t, err, "no available dqlite leader server found")
+	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
+
+	check([]string{
+		"WARN: attempt 0: server 1.2.3.4:666: dial: dial tcp 1.2.3.4:666: i/o timeout",
+	})
 }
 
 // If an election is in progress, the connector will retry until a leader gets
@@ -238,23 +263,21 @@ func TestConnector_Connect_Error_AfterCancel(t *testing.T) {
 // 	assert.NoError(t, client.Close())
 // }
 
-func newConnector(t *testing.T, store protocol.NodeStore) *protocol.Connector {
-	t.Helper()
+// Return a log function that emits messages using the test logger as well as
+// collecting them into a slice. The second function returned can be used to
+// assert that the collected messages match the given ones.
+func newLogFunc(t *testing.T) (logging.Func, func([]string)) {
+	messages := []string{}
+	log := func(l logging.Level, format string, a ...interface{}) {
+		message := l.String() + ": " + fmt.Sprintf(format, a...)
+		messages = append(messages, message)
+		t.Log(message)
 
-	config := protocol.Config{
-		AttemptTimeout: 100 * time.Millisecond,
-		BackoffFactor:  time.Millisecond,
 	}
-
-	return newConnectorWithConfig(t, store, config)
-}
-
-func newConnectorWithConfig(t *testing.T, store protocol.NodeStore, config protocol.Config) *protocol.Connector {
-	t.Helper()
-
-	log := logging.Test(t)
-
-	return protocol.NewConnector(0, store, config, log)
+	check := func(expected []string) {
+		assert.Equal(t, expected, messages)
+	}
+	return log, check
 }
 
 // Create a new in-memory server store populated with the given addresses.

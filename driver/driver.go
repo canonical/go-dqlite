@@ -118,7 +118,7 @@ func WithConnectionBackoffCap(cap time.Duration) Option {
 	}
 }
 
-// WithAttemptTimeout sets the timeout for each individual connection attempt .
+// WithAttemptTimeout sets the timeout for each individual connection attempt.
 //
 // If not used, the default is 60 seconds.
 func WithAttemptTimeout(timeout time.Duration) Option {
