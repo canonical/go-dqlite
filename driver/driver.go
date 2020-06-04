@@ -146,11 +146,11 @@ func WithContext(context context.Context) Option {
 	}
 }
 
-// WithContextTimeout sets the default client context timeout when no context
-// deadline is provided.
+// WithContextTimeout sets the default client context timeout for DB.Begin()
+// when no context deadline is provided.
 //
-// DEPRECATED: This API is no a no-op. Users should explicitly pass a context
-// if they wish to cancel their requests.
+// DEPRECATED: Users should use db APIs that support contexts if they wish to
+// cancel their requests.
 func WithContextTimeout(timeout time.Duration) Option {
 	return func(options *options) {
 		options.ContextTimeout = timeout
@@ -306,7 +306,7 @@ func (d *Driver) Open(uri string) (driver.Conn, error) {
 // is provided.
 //
 // DEPRECATED: This API is no a no-op. Users should explicitly pass a context
-// if they wish to cancel their requests.
+// if they wish to cancel their requests, or use the WithContextTimeout option.
 func (d *Driver) SetContextTimeout(timeout time.Duration) {}
 
 // ErrNoAvailableLeader is returned as root cause of Open() if there's no
