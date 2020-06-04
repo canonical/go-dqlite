@@ -35,9 +35,9 @@ type App struct {
 	driver          *driver.Driver
 	driverName      string
 	log             client.LogFunc
-	stop            context.CancelFunc
-	serveCh         chan struct{} // Waits for App.serve() to return.
-	updateStoreCh   chan struct{} // Waits for App.updateStore() to return.
+	stop            context.CancelFunc // Signal App.run() to stop.
+	proxyCh         chan struct{}      // Waits for App.proxy() to return.
+	runCh           chan struct{}      // Waits for App.run() to return.
 }
 
 // New creates a new application node.
@@ -193,7 +193,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		log:             o.Log,
 		tls:             o.TLS,
 		stop:            stop,
-		updateStoreCh:   make(chan struct{}, 0),
+		runCh:           make(chan struct{}, 0),
 	}
 
 	if o.TLS != nil {
@@ -201,18 +201,18 @@ func New(dir string, options ...Option) (app *App, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("listen to %s: %w", o.Address, err)
 		}
-		serveCh := make(chan struct{}, 0)
+		proxyCh := make(chan struct{}, 0)
 
 		app.listener = listener
-		app.serveCh = serveCh
+		app.proxyCh = proxyCh
 
-		go app.serve()
+		go app.proxy()
 
-		cleanups = append(cleanups, func() { listener.Close(); <-serveCh })
+		cleanups = append(cleanups, func() { listener.Close(); <-proxyCh })
 
 	}
 
-	// If are starting a brand new non-bootstrap node, let's add it to the
+	// If we are starting a brand new non-bootstrap node, let's add it to the
 	// cluster.
 	if !infoPathExists && info.ID != dqlite.BootstrapID {
 		// TODO: add a customizable timeout
@@ -231,16 +231,16 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	}
 
-	go app.updateStore(ctx)
+	go app.run(ctx)
 
 	return app, nil
 }
 
 // Close the application node, releasing all resources it created.
 func (a *App) Close() error {
-	// Stop the store update task.
+	// Stop the run goroutine.
 	a.stop()
-	<-a.updateStoreCh
+	<-a.runCh
 
 	// Try to transfer leadership if we are the leader.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -257,7 +257,7 @@ func (a *App) Close() error {
 
 	if a.listener != nil {
 		a.listener.Close()
-		<-a.serveCh
+		<-a.proxyCh
 	}
 	if err := a.node.Close(); err != nil {
 		return err
@@ -315,7 +315,7 @@ func (a *App) Leader(ctx context.Context) (*client.Client, error) {
 }
 
 // Proxy incoming TLS connections.
-func (a *App) serve() {
+func (a *App) proxy() {
 	wg := sync.WaitGroup{}
 	ctx, cancel := context.WithCancel(context.Background())
 	for {
@@ -323,7 +323,7 @@ func (a *App) serve() {
 		if err != nil {
 			cancel()
 			wg.Wait()
-			close(a.serveCh)
+			close(a.proxyCh)
 			return
 		}
 		address := client.RemoteAddr()
@@ -344,12 +344,12 @@ func (a *App) serve() {
 	}
 }
 
-// Periodically update the node store cache.
-func (a *App) updateStore(ctx context.Context) {
+// Run background tasks.
+func (a *App) run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			close(a.updateStoreCh)
+			close(a.runCh)
 			return
 		case <-time.After(30 * time.Second):
 			cli, err := a.Leader(ctx)
