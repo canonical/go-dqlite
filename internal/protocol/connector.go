@@ -39,7 +39,7 @@ func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *
 	}
 
 	if config.AttemptTimeout == 0 {
-		config.AttemptTimeout = 60 * time.Second
+		config.AttemptTimeout = 15 * time.Second
 	}
 
 	if config.BackoffFactor == 0 {

@@ -120,7 +120,13 @@ func WithConnectionBackoffCap(cap time.Duration) Option {
 
 // WithAttemptTimeout sets the timeout for each individual connection attempt.
 //
-// If not used, the default is 60 seconds.
+// The Connector.Connect() and Driver.Open() methods try to find the current
+// leader among the servers in the store that was passed to New(). Each time
+// they attempt to probe an individual server for leadership this timeout will
+// apply, so a server which accepts the connection but it's then unresponsive
+// won't block the line.
+//
+// If not used, the default is 15 seconds.
 func WithAttemptTimeout(timeout time.Duration) Option {
 	return func(options *options) {
 		options.AttemptTimeout = timeout
