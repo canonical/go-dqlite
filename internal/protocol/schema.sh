@@ -114,7 +114,7 @@ func Decode${cmd}(response *Message) (${returns}err error) {
 	}
 
 	if mtype != Response${cmd} {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(Response${cmd}), mtype)
                 return
 	}
 
