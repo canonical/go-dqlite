@@ -98,6 +98,13 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 		return nil, ErrNoAvailableLeader
 	}
 
+	// At this point we should have a connected protocol object, since the
+	// retry loop didn't hit any error and the given context hasn't
+	// expired.
+	if protocol == nil {
+		panic("no protocol object")
+	}
+
 	return protocol, nil
 }
 
