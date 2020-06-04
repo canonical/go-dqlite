@@ -345,11 +345,12 @@ func (a *App) run(ctx context.Context, join bool) {
 		}
 	}
 
+	nextUpdate := time.Duration(0)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(30 * time.Second):
+		case <-time.After(nextUpdate):
 			cli, err := a.Leader(ctx)
 			if err != nil {
 				continue
@@ -359,6 +360,7 @@ func (a *App) run(ctx context.Context, join bool) {
 				continue
 			}
 			a.store.Set(ctx, servers)
+			nextUpdate = 30 * time.Second
 		}
 	}
 }
