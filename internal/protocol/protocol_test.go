@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/go-dqlite/internal/logging"
 	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -146,8 +147,11 @@ func newProtocol(t *testing.T) (*protocol.Protocol, func()) {
 	address, serverCleanup := newNode(t, 0)
 
 	store := newStore(t, []string{address})
-
-	connector := newConnector(t, store)
+	config := protocol.Config{
+		AttemptTimeout: 100 * time.Millisecond,
+		BackoffFactor:  time.Millisecond,
+	}
+	connector := protocol.NewConnector(0, store, config, logging.Test(t))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()

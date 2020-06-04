@@ -20,7 +20,7 @@ func DecodeFailure(response *Message) (code uint64, message string, err error) {
 	}
 
 	if mtype != ResponseFailure {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseFailure), mtype)
                 return
 	}
 
@@ -43,7 +43,7 @@ func DecodeWelcome(response *Message) (heartbeatTimeout uint64, err error) {
 	}
 
 	if mtype != ResponseWelcome {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseWelcome), mtype)
                 return
 	}
 
@@ -65,7 +65,7 @@ func DecodeNodeLegacy(response *Message) (address string, err error) {
 	}
 
 	if mtype != ResponseNodeLegacy {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseNodeLegacy), mtype)
                 return
 	}
 
@@ -87,7 +87,7 @@ func DecodeNode(response *Message) (id uint64, address string, err error) {
 	}
 
 	if mtype != ResponseNode {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseNode), mtype)
                 return
 	}
 
@@ -110,7 +110,7 @@ func DecodeNodes(response *Message) (servers Nodes, err error) {
 	}
 
 	if mtype != ResponseNodes {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseNodes), mtype)
                 return
 	}
 
@@ -132,7 +132,7 @@ func DecodeDb(response *Message) (id uint32, err error) {
 	}
 
 	if mtype != ResponseDb {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseDb), mtype)
                 return
 	}
 
@@ -155,7 +155,7 @@ func DecodeStmt(response *Message) (db uint32, id uint32, params uint64, err err
 	}
 
 	if mtype != ResponseStmt {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseStmt), mtype)
                 return
 	}
 
@@ -179,7 +179,7 @@ func DecodeEmpty(response *Message) (err error) {
 	}
 
 	if mtype != ResponseEmpty {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseEmpty), mtype)
                 return
 	}
 
@@ -201,7 +201,7 @@ func DecodeResult(response *Message) (result Result, err error) {
 	}
 
 	if mtype != ResponseResult {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseResult), mtype)
                 return
 	}
 
@@ -223,7 +223,7 @@ func DecodeRows(response *Message) (rows Rows, err error) {
 	}
 
 	if mtype != ResponseRows {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseRows), mtype)
                 return
 	}
 
@@ -245,7 +245,7 @@ func DecodeFiles(response *Message) (files Files, err error) {
 	}
 
 	if mtype != ResponseFiles {
-		err = fmt.Errorf("unexpected response type %d", mtype)
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseFiles), mtype)
                 return
 	}
 

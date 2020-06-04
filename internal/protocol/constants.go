@@ -70,3 +70,72 @@ const (
 	ResponseEmpty      = 8
 	ResponseFiles      = 9
 )
+
+// Human-readable description of a request type.
+func requestDesc(code uint8) string {
+	switch code {
+	// Requests
+	case RequestLeader:
+		return "leader"
+	case RequestClient:
+		return "client"
+	case RequestHeartbeat:
+		return "heartbeat"
+	case RequestOpen:
+		return "open"
+	case RequestPrepare:
+		return "prepare"
+	case RequestExec:
+		return "exec"
+	case RequestQuery:
+		return "query"
+	case RequestFinalize:
+		return "finalize"
+	case RequestExecSQL:
+		return "exec-sql"
+	case RequestQuerySQL:
+		return "query-sql"
+	case RequestInterrupt:
+		return "interrupt"
+	case RequestAdd:
+		return "add"
+	case RequestAssign:
+		return "assign"
+	case RequestRemove:
+		return "remove"
+	case RequestDump:
+		return "dump"
+	case RequestCluster:
+		return "cluster"
+	case RequestTransfer:
+		return "transfer"
+	}
+	return "unknown"
+}
+
+// Human-readable description of a response type.
+func responseDesc(code uint8) string {
+	switch code {
+	case ResponseFailure:
+		return "failure"
+	case ResponseNode:
+		return "node"
+	case ResponseWelcome:
+		return "welcome"
+	case ResponseNodes:
+		return "nodes"
+	case ResponseDb:
+		return "db"
+	case ResponseStmt:
+		return "stmt"
+	case ResponseResult:
+		return "result"
+	case ResponseRows:
+		return "rows"
+	case ResponseEmpty:
+		return "empty"
+	case ResponseFiles:
+		return "files"
+	}
+	return "unknown"
+}

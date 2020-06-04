@@ -30,12 +30,16 @@ type Connector struct {
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
 func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *Connector {
+	if config.Dial == nil {
+		config.Dial = Dial
+	}
+
 	if config.DialTimeout == 0 {
-		config.DialTimeout = 10 * time.Second
+		config.DialTimeout = 5 * time.Second
 	}
 
 	if config.AttemptTimeout == 0 {
-		config.AttemptTimeout = 60 * time.Second
+		config.AttemptTimeout = 15 * time.Second
 	}
 
 	if config.BackoffFactor == 0 {
@@ -68,7 +72,7 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	// the given context is done.
 	err := retry.Retry(func(attempt uint) error {
 		log := func(l logging.Level, format string, a ...interface{}) {
-			format += fmt.Sprintf(" attempt=%d", attempt)
+			format = fmt.Sprintf("attempt %d: ", attempt) + format
 			c.log(l, format, a...)
 		}
 
@@ -98,6 +102,13 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 		return nil, ErrNoAvailableLeader
 	}
 
+	// At this point we should have a connected protocol object, since the
+	// retry loop didn't hit any error and the given context hasn't
+	// expired.
+	if protocol == nil {
+		panic("no protocol object")
+	}
+
 	return protocol, nil
 }
 
@@ -106,13 +117,13 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
 	servers, err := c.store.Get(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get cluster servers")
+		return nil, errors.Wrap(err, "get servers")
 	}
 
 	// Make an attempt for each address until we find the leader.
 	for _, server := range servers {
 		log := func(l logging.Level, format string, a ...interface{}) {
-			format += fmt.Sprintf(" address=%s", server.Address)
+			format = fmt.Sprintf("server %s: ", server.Address) + format
 			log(l, format, a...)
 		}
 
@@ -122,12 +133,13 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		version := VersionOne
 		protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
 		if err == errBadProtocol {
+			log(logging.Warn, "unsupported protocol %d, attempt with legacy", version)
 			version = VersionLegacy
 			protocol, leader, err = c.connectAttemptOne(ctx, server.Address, version)
 		}
 		if err != nil {
 			// This server is unavailable, try with the next target.
-			log(logging.Warn, "server unavailable err=%v", err)
+			log(logging.Warn, err.Error())
 			continue
 		}
 		if protocol != nil {
@@ -185,10 +197,10 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 	// Perform the protocol handshake.
 	n, err := conn.Write(protocol)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to send handshake")
+		return nil, errors.Wrap(err, "write handshake")
 	}
 	if n != 8 {
-		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
+		return nil, errors.Wrap(io.ErrShortWrite, "short handshake write")
 	}
 
 	return newProtocol(version, conn), nil
@@ -210,7 +222,7 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 	// Establish the connection.
 	conn, err := c.config.Dial(dialCtx, address)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "failed to establish network connection")
+		return nil, "", errors.Wrap(err, "dial")
 	}
 
 	protocol, err := Handshake(ctx, conn, version)
@@ -232,17 +244,17 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 		cause := errors.Cause(err)
 		// Best-effort detection of a pre-1.0 dqlite node: when sent
 		// version 1 it should close the connection immediately.
-		if _, ok := cause.(*net.OpError); ok || cause == io.EOF {
+		if err, ok := cause.(*net.OpError); ok && !err.Timeout() || cause == io.EOF {
 			return nil, "", errBadProtocol
 		}
 
-		return nil, "", errors.Wrap(err, "failed to send Leader request")
+		return nil, "", err
 	}
 
 	_, leader, err := DecodeNodeCompat(protocol, &response)
 	if err != nil {
 		protocol.Close()
-		return nil, "", errors.Wrap(err, "failed to parse Node response")
+		return nil, "", err
 	}
 
 	switch leader {
@@ -259,13 +271,13 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 
 		if err := protocol.Call(ctx, &request, &response); err != nil {
 			protocol.Close()
-			return nil, "", errors.Wrap(err, "failed to send Conn request")
+			return nil, "", err
 		}
 
 		_, err := DecodeWelcome(&response)
 		if err != nil {
 			protocol.Close()
-			return nil, "", errors.Wrap(err, "failed to parse Welcome response")
+			return nil, "", err
 		}
 
 		// TODO: enable heartbeat

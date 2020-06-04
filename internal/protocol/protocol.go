@@ -42,6 +42,16 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 		return p.netErr
 	}
 
+	defer func() {
+		if err == nil {
+			return
+		}
+		switch errors.Cause(err).(type) {
+		case *net.OpError:
+			p.netErr = err
+		}
+	}()
+
 	var budget time.Duration
 
 	// Honor the ctx deadline, if present.
@@ -51,23 +61,16 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 		defer p.conn.SetDeadline(time.Time{})
 	}
 
+	desc := requestDesc(request.mtype)
+
 	if err = p.send(request); err != nil {
-		err = errors.Wrapf(err, "send request (budget=%s)", budget)
-		goto err
+		return errors.Wrapf(err, "call %s (budget %s): send", desc, budget)
 	}
 
 	if err = p.recv(response); err != nil {
-		err = errors.Wrapf(err, "receive response (budget=%s)", budget)
-		goto err
+		return errors.Wrapf(err, "call %s (budget %s): receive", desc, budget)
 	}
 
-	return
-
-err:
-	switch errors.Cause(err).(type) {
-	case *net.OpError:
-		p.netErr = err
-	}
 	return
 }
 
@@ -119,11 +122,11 @@ func (p *Protocol) Close() error {
 
 func (p *Protocol) send(req *Message) error {
 	if err := p.sendHeader(req); err != nil {
-		return errors.Wrap(err, "failed to send header")
+		return errors.Wrap(err, "header")
 	}
 
 	if err := p.sendBody(req); err != nil {
-		return errors.Wrap(err, "failed to send body")
+		return errors.Wrap(err, "body")
 	}
 
 	return nil
@@ -132,11 +135,11 @@ func (p *Protocol) send(req *Message) error {
 func (p *Protocol) sendHeader(req *Message) error {
 	n, err := p.conn.Write(req.header[:])
 	if err != nil {
-		return errors.Wrap(err, "failed to send header")
+		return err
 	}
 
 	if n != messageHeaderSize {
-		return errors.Wrap(io.ErrShortWrite, "failed to send header")
+		return io.ErrShortWrite
 	}
 
 	return nil
@@ -146,11 +149,11 @@ func (p *Protocol) sendBody(req *Message) error {
 	buf := req.body.Bytes[:req.body.Offset]
 	n, err := p.conn.Write(buf)
 	if err != nil {
-		return errors.Wrap(err, "failed to send static body")
+		return err
 	}
 
 	if n != len(buf) {
-		return errors.Wrap(io.ErrShortWrite, "failed to write body")
+		return io.ErrShortWrite
 	}
 
 	return nil
@@ -160,11 +163,11 @@ func (p *Protocol) recv(res *Message) error {
 	res.reset()
 
 	if err := p.recvHeader(res); err != nil {
-		return errors.Wrap(err, "failed to receive header")
+		return errors.Wrap(err, "header")
 	}
 
 	if err := p.recvBody(res); err != nil {
-		return errors.Wrap(err, "failed to receive body")
+		return errors.Wrap(err, "body")
 	}
 
 	return nil
@@ -172,7 +175,7 @@ func (p *Protocol) recv(res *Message) error {
 
 func (p *Protocol) recvHeader(res *Message) error {
 	if err := p.recvPeek(res.header); err != nil {
-		return errors.Wrap(err, "failed to receive header")
+		return err
 	}
 
 	res.words = binary.LittleEndian.Uint32(res.header[0:])
@@ -195,7 +198,7 @@ func (p *Protocol) recvBody(res *Message) error {
 	buf := res.body.Bytes[:n]
 
 	if err := p.recvPeek(buf); err != nil {
-		return errors.Wrap(err, "failed to read body")
+		return err
 	}
 
 	return nil
