@@ -30,6 +30,10 @@ type Connector struct {
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
 func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *Connector {
+	if config.Dial == nil {
+		config.Dial = Dial
+	}
+
 	if config.DialTimeout == 0 {
 		config.DialTimeout = 10 * time.Second
 	}

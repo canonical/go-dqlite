@@ -4,20 +4,17 @@ import (
 	"context"
 	"crypto/tls"
 	"net"
+	"strings"
 )
 
-// TCPDial is a dial function using plain TCP to establish the network
-// connection.
-func TCPDial(ctx context.Context, address string) (net.Conn, error) {
+// Dial function handling plain TCP and Unix socket endpoints.
+func Dial(ctx context.Context, address string) (net.Conn, error) {
+	family := "tcp"
+	if strings.HasPrefix(address, "@") {
+		family = "unix"
+	}
 	dialer := net.Dialer{}
-	return dialer.DialContext(ctx, "tcp", address)
-}
-
-// UnixDial is a dial function using Unix sockets to establish the network
-// connection.
-func UnixDial(ctx context.Context, address string) (net.Conn, error) {
-	dialer := net.Dialer{}
-	return dialer.DialContext(ctx, "unix", address)
+	return dialer.DialContext(ctx, family, address)
 }
 
 // TLSCipherSuites are the cipher suites by the go-dqlite TLS helpers.

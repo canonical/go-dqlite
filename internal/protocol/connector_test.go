@@ -17,7 +17,7 @@ import (
 )
 
 // Successful connection.
-func TestConnector_Connect_Success(t *testing.T) {
+func TestConnector_Success(t *testing.T) {
 	address, cleanup := newNode(t, 0)
 	defer cleanup()
 
@@ -39,9 +39,7 @@ func TestConnector_Connect_Success(t *testing.T) {
 func TestConnector_LimitRetries(t *testing.T) {
 	store := newStore(t, []string{"@test-123"})
 	config := protocol.Config{
-		Dial:           protocol.UnixDial,
-		AttemptTimeout: 100 * time.Millisecond,
-		RetryLimit:     2,
+		RetryLimit: 2,
 	}
 	connector := newConnectorWithConfig(t, store, config)
 
@@ -52,11 +50,7 @@ func TestConnector_LimitRetries(t *testing.T) {
 // The network connection can't be established because the context expired.
 func TestConnector_ContextExpired(t *testing.T) {
 	store := newStore(t, []string{"8.8.8.8:9000"})
-	config := protocol.Config{
-		Dial:           protocol.TCPDial,
-		AttemptTimeout: 50 * time.Millisecond,
-		BackoffFactor:  time.Millisecond,
-	}
+	config := protocol.Config{}
 	connector := newConnectorWithConfig(t, store, config)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -248,7 +242,6 @@ func newConnector(t *testing.T, store protocol.NodeStore) *protocol.Connector {
 	t.Helper()
 
 	config := protocol.Config{
-		Dial:           protocol.UnixDial,
 		AttemptTimeout: 100 * time.Millisecond,
 		BackoffFactor:  time.Millisecond,
 	}
@@ -291,7 +284,8 @@ func newNode(t *testing.T, index int) (string, func()) {
 	server, err := bindings.NewNode(id, address, dir)
 	require.NoError(t, err)
 
-	server.SetBindAddress(address)
+	err = server.SetBindAddress(address)
+	require.NoError(t, err)
 
 	require.NoError(t, server.Start())
 	cleanup := func() {
