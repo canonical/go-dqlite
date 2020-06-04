@@ -35,7 +35,7 @@ func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *
 	}
 
 	if config.DialTimeout == 0 {
-		config.DialTimeout = 10 * time.Second
+		config.DialTimeout = 5 * time.Second
 	}
 
 	if config.AttemptTimeout == 0 {
