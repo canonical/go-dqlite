@@ -111,6 +111,34 @@ func TestConnector_ContextCanceled(t *testing.T) {
 	})
 }
 
+// Simulate a server which accepts the connection but doesn't reply within the
+// attempt timeout.
+func TestConnector_AttemptTimeout(t *testing.T) {
+	listener, err := net.Listen("unix", "@1234")
+	require.NoError(t, err)
+
+	store := newStore(t, []string{listener.Addr().String()})
+	config := protocol.Config{
+		AttemptTimeout: 100 * time.Millisecond,
+		RetryLimit:     1,
+	}
+	connector := protocol.NewConnector(0, store, config, logging.Test(t))
+
+	conns := []net.Conn{}
+	go func() {
+		conn, err := listener.Accept()
+		require.NoError(t, err)
+		conns = append(conns, conn)
+	}()
+
+	_, err = connector.Connect(context.Background())
+	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
+
+	for _, conn := range conns {
+		conn.Close()
+	}
+}
+
 // If an election is in progress, the connector will retry until a leader gets
 // elected.
 // func TestConnector_Connect_ElectionInProgress(t *testing.T) {
@@ -337,13 +365,4 @@ func newDir(t *testing.T) (string, func()) {
 	}
 
 	return dir, cleanup
-}
-
-func newListener(t *testing.T) net.Listener {
-	t.Helper()
-
-	listener, err := net.Listen("unix", "")
-	require.NoError(t, err)
-
-	return listener
 }

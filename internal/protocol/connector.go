@@ -133,7 +133,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		version := VersionOne
 		protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
 		if err == errBadProtocol {
-			log(logging.Warn, "unsupported protocol %d, attempt with %d", version, VersionLegacy)
+			log(logging.Warn, "unsupported protocol %d, attempt with legacy", version)
 			version = VersionLegacy
 			protocol, leader, err = c.connectAttemptOne(ctx, server.Address, version)
 		}
@@ -197,10 +197,10 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 	// Perform the protocol handshake.
 	n, err := conn.Write(protocol)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to send handshake")
+		return nil, errors.Wrap(err, "write handshake")
 	}
 	if n != 8 {
-		return nil, errors.Wrap(io.ErrShortWrite, "failed to send handshake")
+		return nil, errors.Wrap(io.ErrShortWrite, "short handshake write")
 	}
 
 	return newProtocol(version, conn), nil
@@ -244,17 +244,17 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 		cause := errors.Cause(err)
 		// Best-effort detection of a pre-1.0 dqlite node: when sent
 		// version 1 it should close the connection immediately.
-		if _, ok := cause.(*net.OpError); ok || cause == io.EOF {
+		if err, ok := cause.(*net.OpError); ok && !err.Timeout() || cause == io.EOF {
 			return nil, "", errBadProtocol
 		}
 
-		return nil, "", errors.Wrap(err, "failed to send Leader request")
+		return nil, "", err
 	}
 
 	_, leader, err := DecodeNodeCompat(protocol, &response)
 	if err != nil {
 		protocol.Close()
-		return nil, "", errors.Wrap(err, "failed to parse Node response")
+		return nil, "", err
 	}
 
 	switch leader {
@@ -271,13 +271,13 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 
 		if err := protocol.Call(ctx, &request, &response); err != nil {
 			protocol.Close()
-			return nil, "", errors.Wrap(err, "failed to send Conn request")
+			return nil, "", err
 		}
 
 		_, err := DecodeWelcome(&response)
 		if err != nil {
 			protocol.Close()
-			return nil, "", errors.Wrap(err, "failed to parse Welcome response")
+			return nil, "", err
 		}
 
 		// TODO: enable heartbeat
