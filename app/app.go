@@ -35,6 +35,7 @@ type App struct {
 	stop            context.CancelFunc // Signal App.run() to stop.
 	proxyCh         chan struct{}      // Waits for App.proxy() to return.
 	runCh           chan struct{}      // Waits for App.run() to return.
+	readyCh         chan struct{}      // Waits for startup tasks
 	voters          int
 }
 
@@ -194,6 +195,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		tls:             o.TLS,
 		stop:            stop,
 		runCh:           make(chan struct{}, 0),
+		readyCh:         make(chan struct{}, 0),
 		voters:          o.Voters,
 	}
 
@@ -261,6 +263,23 @@ func (a *App) Address() string {
 // Driver returns the name used to register the dqlite driver.
 func (a *App) Driver() string {
 	return a.driverName
+}
+
+// Ready can be used to wait for a node to complete some initial tasks that are
+// initiated at startup. For example a brand new node will attempt to join the
+// cluster, a restarted node will check if it should assume some particular
+// role, etc.
+//
+// If this method returns without error it means that those initial tasks have
+// succeeded and follow-up operations like Open() are more likely to succeeed
+// quickly.
+func (a *App) Ready(ctx context.Context) error {
+	select {
+	case <-a.readyCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Open the dqlite database with the given name
@@ -333,9 +352,15 @@ func (a *App) run(ctx context.Context, join bool) {
 	defer close(a.runCh)
 
 	delay := time.Duration(0)
+	ready := false
 	for {
 		select {
 		case <-ctx.Done():
+			// If we didn't become ready yet, close the ready
+			// channel, to unblock any call to Ready().
+			if !ready {
+				close(a.readyCh)
+			}
 			return
 		case <-time.After(delay):
 			cli, err := a.Leader(ctx)
@@ -365,6 +390,13 @@ func (a *App) run(ctx context.Context, join bool) {
 			}
 			a.store.Set(ctx, servers)
 			delay = 30 * time.Second
+
+			// If this was our initial run, let's advertise
+			// ourselves as ready.
+			if !ready {
+				ready = true
+				close(a.readyCh)
+			}
 		}
 	}
 }
