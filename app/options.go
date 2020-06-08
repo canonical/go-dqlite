@@ -58,6 +58,26 @@ func WithTLS(listen *tls.Config, dial *tls.Config) Option {
 	}
 }
 
+// WithVoters sets the number of nodes in the cluster that should have the
+// Voter role.
+//
+// When a new node is added to the cluster or it is started again after a
+// shutdown it will be assigned the Voter role in case the current number of
+// voters is below n.
+//
+// Similarly when a node with the Voter role is shutdown gracefully it will try
+// to transfer its Voter role to another non-Voter role, if one is available.
+//
+//  All App instances in a cluster must be created with the same WithVoters
+//  setting.
+//
+// The default value is 3.
+func WithVoters(n int) Option {
+	return func(options *options) {
+		options.Voters = n
+	}
+}
+
 // WithLogFunc sets a custom log function.
 func WithLogFunc(log client.LogFunc) Option {
 	return func(options *options) {
@@ -75,6 +95,7 @@ type options struct {
 	Cluster []string
 	Log     client.LogFunc
 	TLS     *tlsSetup
+	Voters  int
 }
 
 // Create a options object with sane defaults.
@@ -82,6 +103,7 @@ func defaultOptions() *options {
 	return &options{
 		Address: defaultAddress(),
 		Log:     defaultLogFunc,
+		Voters:  3,
 	}
 }
 
