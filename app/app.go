@@ -35,6 +35,7 @@ type App struct {
 	stop            context.CancelFunc // Signal App.run() to stop.
 	proxyCh         chan struct{}      // Waits for App.proxy() to return.
 	runCh           chan struct{}      // Waits for App.run() to return.
+	voters          int
 }
 
 // New creates a new application node.
@@ -193,6 +194,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		tls:             o.TLS,
 		stop:            stop,
 		runCh:           make(chan struct{}, 0),
+		voters:          o.Voters,
 	}
 
 	// Start the proxy if a TLS configuration was provided.
