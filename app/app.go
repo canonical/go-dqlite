@@ -330,37 +330,39 @@ func (a *App) proxy() {
 func (a *App) run(ctx context.Context, join bool) {
 	defer close(a.runCh)
 
-	if join {
-		cli, err := a.Leader(ctx)
-		if err != nil {
-			return
-		}
-		defer cli.Close()
-
-		err = cli.Add(
-			context.Background(),
-			client.NodeInfo{ID: a.id, Address: a.address, Role: client.Voter})
-		if err != nil {
-			return
-		}
-	}
-
-	nextUpdate := time.Duration(0)
+	delay := time.Duration(0)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(nextUpdate):
+		case <-time.After(delay):
 			cli, err := a.Leader(ctx)
 			if err != nil {
 				continue
 			}
+
+			// Attempt to join the cluster if this is a brand new node.
+			if join {
+				err := cli.Add(
+					ctx,
+					client.NodeInfo{ID: a.id, Address: a.address, Role: client.Voter})
+				if err == nil {
+					join = false
+				} else {
+					a.log(client.LogWarn, "join cluster: %v", err)
+					delay = time.Second
+					continue
+				}
+
+			}
+
+			// Refresh our node store.
 			servers, err := cli.Cluster(ctx)
 			if err != nil {
 				continue
 			}
 			a.store.Set(ctx, servers)
-			nextUpdate = 30 * time.Second
+			delay = 30 * time.Second
 		}
 	}
 }
