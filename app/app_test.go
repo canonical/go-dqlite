@@ -32,27 +32,20 @@ func TestNew_PristineJoiner(t *testing.T) {
 	app1, cleanup := newApp(t, app.WithAddress(addr1))
 	defer cleanup()
 
-	_, cleanup = newApp(t, app.WithAddress(addr2), app.WithCluster([]string{addr1}))
+	app2, cleanup := newApp(t, app.WithAddress(addr2), app.WithCluster([]string{addr1}))
 	defer cleanup()
 
-	// Eventually the joining nodes appear in the cluster list.
+	require.NoError(t, app2.Ready(context.Background()))
+
+	// Wait for initial tasks to complete, and the joining node to appear
+	// in the cluster list.
 	cli, err := app1.Leader(context.Background())
 	require.NoError(t, err)
 
-	joined := false
-	for i := 0; i < 20; i++ {
-		time.Sleep(50 * time.Millisecond)
-		cluster, err := cli.Cluster(context.Background())
-		require.NoError(t, err)
-		if len(cluster) == 2 {
-			assert.Equal(t, addr1, cluster[0].Address)
-			assert.Equal(t, addr2, cluster[1].Address)
-			joined = true
-			break
-		}
-	}
-
-	assert.True(t, joined)
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, addr1, cluster[0].Address)
+	assert.Equal(t, addr2, cluster[1].Address)
 }
 
 // Open a database on a fresh one-node cluster.
@@ -106,6 +99,20 @@ func TestProxy_Error(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	conn.Close()
 	time.Sleep(250 * time.Millisecond)
+}
+
+// If the given context is cancelled before initial tasks are completed, an
+// error is returned.
+func TestReady_Cancel(t *testing.T) {
+	app, cleanup := newApp(t, app.WithAddress("127.0.0.1:9002"), app.WithCluster([]string{"127.0.0.1:9001"}))
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := app.Ready(ctx)
+
+	assert.Equal(t, ctx.Err(), err)
 }
 
 func newApp(t *testing.T, options ...app.Option) (*app.App, func()) {
