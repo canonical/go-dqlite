@@ -372,7 +372,7 @@ func (a *App) run(ctx context.Context, join bool) {
 			if join {
 				err := cli.Add(
 					ctx,
-					client.NodeInfo{ID: a.id, Address: a.address, Role: client.Voter})
+					client.NodeInfo{ID: a.id, Address: a.address, Role: client.Spare})
 				if err == nil {
 					join = false
 				} else {
@@ -389,16 +389,74 @@ func (a *App) run(ctx context.Context, join bool) {
 				continue
 			}
 			a.store.Set(ctx, servers)
-			delay = 30 * time.Second
 
-			// If this was our initial run, let's advertise
+			// If we are starting up, let's see if we should
+			// promote ourselves.
+			if !ready {
+				if err := a.maybeChangeRole(ctx, cli, servers); err != nil {
+					a.log(client.LogWarn, "update our role: %v", err)
+					continue
+				}
+			}
+
+			// If we were just starting up, let's advertise
 			// ourselves as ready.
 			if !ready {
 				ready = true
 				close(a.readyCh)
 			}
+
+			delay = 30 * time.Second
 		}
 	}
+}
+
+// Possibly change our role at startup.
+func (a *App) maybeChangeRole(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
+	voters := 0
+	role := client.NodeRole(-1)
+
+	for _, node := range nodes {
+		if node.ID == a.id {
+			role = node.Role
+		}
+		if node.Role == client.Voter {
+			voters++
+		}
+	}
+
+	// If we are are in the list, it means we were removed, just do nothing.
+	if role == -1 {
+		return nil
+	}
+
+	// If we  already have the Voter role, or the cluster is still too small,
+	// there's nothing to do.
+	if role == client.Voter || len(nodes) < 3 {
+		return nil
+	}
+
+	// Promote ourselves.
+	a.debug("promote ourselves to voter")
+	if err := cli.Assign(ctx, a.id, client.Voter); err != nil {
+		return fmt.Errorf("assign voter role to ourselves: %v", err)
+	}
+
+	// Possibly try to promote another node as well if we've reached the 3 node
+	// threshold.
+	if voters == 1 {
+		for _, node := range nodes {
+			if node.ID == a.id || node.Role == client.Voter {
+				continue
+			}
+			a.debug("promote %s to voter", node.Address)
+			if err := cli.Assign(ctx, node.ID, client.Voter); err == nil {
+				break
+			}
+		}
+	}
+
+	return nil
 }
 
 func (a *App) debug(format string, args ...interface{}) {

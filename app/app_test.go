@@ -37,8 +37,7 @@ func TestNew_PristineJoiner(t *testing.T) {
 
 	require.NoError(t, app2.Ready(context.Background()))
 
-	// Wait for initial tasks to complete, and the joining node to appear
-	// in the cluster list.
+	// The joining node to appear in the cluster list.
 	cli, err := app1.Leader(context.Background())
 	require.NoError(t, err)
 
@@ -46,6 +45,44 @@ func TestNew_PristineJoiner(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, addr1, cluster[0].Address)
 	assert.Equal(t, addr2, cluster[1].Address)
+
+	// Initially the node joins as spare.
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Spare, cluster[1].Role)
+}
+
+// The second joiner promotes itself and also the first joiner.
+func TestNew_SecondJoiner(t *testing.T) {
+	addr1 := "127.0.0.1:9001"
+	addr2 := "127.0.0.1:9002"
+	addr3 := "127.0.0.1:9003"
+
+	app1, cleanup := newApp(t, app.WithAddress(addr1))
+	defer cleanup()
+
+	app2, cleanup := newApp(t, app.WithAddress(addr2), app.WithCluster([]string{addr1}))
+	defer cleanup()
+
+	require.NoError(t, app2.Ready(context.Background()))
+
+	app3, cleanup := newApp(t, app.WithAddress(addr3), app.WithCluster([]string{addr1}))
+	defer cleanup()
+
+	require.NoError(t, app3.Ready(context.Background()))
+
+	cli, err := app1.Leader(context.Background())
+	require.NoError(t, err)
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, addr1, cluster[0].Address)
+	assert.Equal(t, addr2, cluster[1].Address)
+	assert.Equal(t, addr3, cluster[2].Address)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
 }
 
 // Open a database on a fresh one-node cluster.
