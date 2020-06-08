@@ -26,9 +26,9 @@ start_node() {
     i=0
     while ! nc -z 127.0.0.1 800${n} 2>/dev/null; do
         i=$(expr $i + 1)
-        sleep 0.1
-        if [ $i -eq 10 ]; then
-            echo "Error: node ${n} not yet up after a second"
+        sleep 0.2
+        if [ $i -eq 25 ]; then
+            echo "Error: node ${n} not yet up after 5 seconds"
             exit 1
         fi
     done
@@ -112,9 +112,6 @@ echo "=> Get key from node 1"
 if [ "$(curl -s http://127.0.0.1:8001/my-value)" != "my-key" ]; then
     echo "Error: get key from node 1"
 fi
-
-# Wait a bit for membership to settle
-sleep 1
 
 echo "=> Kill node 1"
 kill_node 1

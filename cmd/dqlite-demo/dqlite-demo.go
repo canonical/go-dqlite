@@ -33,18 +33,22 @@ func main() {
 
 Complete documentation is available at https://github.com/canonical/go-dqlite`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := filepath.Join(dir, db)
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return errors.Wrapf(err, "can't create %s", dir)
+			}
 			logFunc := func(l client.LogLevel, format string, a ...interface{}) {
 				if !verbose {
 					return
 				}
 				log.Printf(fmt.Sprintf("%s: %s: %s\n", api, l.String(), format), a...)
 			}
-			dir := filepath.Join(dir, db)
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				return errors.Wrapf(err, "can't create %s", dir)
-			}
 			app, err := app.New(dir, app.WithAddress(db), app.WithCluster(*join), app.WithLogFunc(logFunc))
 			if err != nil {
+				return err
+			}
+
+			if err := app.Ready(context.Background()); err != nil {
 				return err
 			}
 
