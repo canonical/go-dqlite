@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"github.com/canonical/go-dqlite/client"
 )
@@ -66,15 +67,27 @@ func WithTLS(listen *tls.Config, dial *tls.Config) Option {
 // voters is below n.
 //
 // Similarly when a node with the Voter role is shutdown gracefully it will try
-// to transfer its Voter role to another non-Voter role, if one is available.
+// to transfer its Voter role to another non-Voter node, if one is available.
 //
-//  All App instances in a cluster must be created with the same WithVoters
-//  setting.
+// All App instances in a cluster must be created with the same WithVoters
+// setting.
 //
 // The default value is 3.
 func WithVoters(n int) Option {
 	return func(options *options) {
 		options.Voters = n
+	}
+}
+
+// WithRolesAdjustmentFrequency sets the frequency at which the current cluster
+// leader will check if the roles of the various nodes in the cluster matches
+// the desired setup and perform promotions/demotions to adjust the situation
+// if needed.
+//
+// The default is 30 seconds.
+func WithRolesAdjustmentFrequency(frequency time.Duration) Option {
+	return func(options *options) {
+		options.RolesAdjustmentFrequency = frequency
 	}
 }
 
@@ -91,19 +104,21 @@ type tlsSetup struct {
 }
 
 type options struct {
-	Address string
-	Cluster []string
-	Log     client.LogFunc
-	TLS     *tlsSetup
-	Voters  int
+	Address                  string
+	Cluster                  []string
+	Log                      client.LogFunc
+	TLS                      *tlsSetup
+	Voters                   int
+	RolesAdjustmentFrequency time.Duration
 }
 
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		Address: defaultAddress(),
-		Log:     defaultLogFunc,
-		Voters:  3,
+		Address:                  defaultAddress(),
+		Log:                      defaultLogFunc,
+		Voters:                   3,
+		RolesAdjustmentFrequency: 30 * time.Second,
 	}
 }
 
