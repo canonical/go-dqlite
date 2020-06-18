@@ -222,7 +222,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	}
 
-	go app.run(ctx, joinFileExists)
+	go app.run(ctx, o.RolesAdjustmentFrequency, joinFileExists)
 
 	return app, nil
 }
@@ -350,7 +350,7 @@ func (a *App) proxy() {
 
 // Run background tasks. The join flag is true if the node is a brand new one
 // and should join the cluster.
-func (a *App) run(ctx context.Context, join bool) {
+func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 	defer close(a.runCh)
 
 	delay := time.Duration(0)
@@ -401,11 +401,23 @@ func (a *App) run(ctx context.Context, join bool) {
 					continue
 				}
 				ready = true
-				delay = 30 * time.Second
+				delay = frequency
 				close(a.readyCh)
 				continue
 			}
 
+			// If we are the leader, let's see if there's any
+			// adjustment we should make to node roles.
+			info, err := cli.Leader(ctx)
+			if err != nil {
+				continue
+			}
+			if info.ID != a.id {
+				continue
+			}
+			if err := a.maybeAdjustRoles(ctx, cli, servers); err != nil {
+				a.warn("%v", err)
+			}
 		}
 	}
 }
@@ -454,13 +466,131 @@ func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nod
 			if err := cli.Assign(ctx, node.ID, client.Voter); err == nil {
 				break
 			} else {
-				a.warn("promote %s to voter: %v", node.Address, err)
+				a.warn("promote %s from %s to voter: %v", node.Address, node.Role, err)
 			}
 		}
 	}
 
 	return nil
+}
+
+// Check if any adjustment needs to be made to existing roles.
+func (a *App) maybeAdjustRoles(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
+	if len(nodes) == 1 {
+		return nil
+	}
+again:
+	// Group all nodes by role, and divide them between online an not
+	// online.
+	index := map[client.NodeRole][2][]client.NodeInfo{
+		client.Spare:   {{}, {}},
+		client.StandBy: {{}, {}},
+		client.Voter:   {{}, {}},
+	}
+	const (
+		online  = 0
+		offline = 1
+	)
+	for _, node := range nodes {
+		state := offline
+		if node.ID == a.id {
+			state = online
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			cli, err := client.New(ctx, node.Address, a.clientOptions()...)
+			if err == nil {
+				state = online
+				cli.Close()
 			}
+		}
+		role := index[node.Role]
+		role[state] = append(role[state], node)
+		index[node.Role] = role
+	}
+
+	// If we have exactly the desired number of voters, and they are all
+	// online, we're good.
+	if (len(index[client.Voter][offline]) == 0 && len(index[client.Voter][online]) == a.voters) || len(nodes) < minVoters {
+		return nil
+	}
+
+	// If we have less online voters than desired, let's try to promote
+	// some other node.
+	if n := len(index[client.Voter][online]); n < a.voters {
+		candidates := index[client.Spare][online]
+		candidates = append(candidates, index[client.StandBy][online]...)
+
+		if len(candidates) == 0 {
+			return fmt.Errorf("no online node available to be promoted")
+		}
+
+		for i, node := range candidates {
+			if err := cli.Assign(ctx, node.ID, client.Voter); err != nil {
+				a.warn("promote %s from %s to voter: %v", node.Address, node.Role, err)
+				if i == len(candidates)-1 {
+					// We could not promote any node
+					return fmt.Errorf("could not promote any online node to voter")
+				}
+				continue
+			}
+			a.debug("promoted %s from %s to voter", node.Address, node.Role)
+			break
+		}
+
+		// If we are still below the desired number, start over again.
+		if n+1 < a.voters {
+			goto again
+		}
+	}
+
+	// If we have more online voters than desired, let's demote one of
+	// them.
+	if n := len(index[client.Voter][online]); n > a.voters {
+		voters := index[client.Voter][online]
+		for i, node := range voters {
+			// Don't demote ourselves.
+			if node.ID == a.id {
+				continue
+			}
+			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
+				a.warn("demote online %s from voter to %s: %v", node.Address, client.Spare, err)
+				if i == len(nodes)-1 {
+					// We could not demote any node
+					return fmt.Errorf("could not demote any redundant online voter")
+				}
+				continue
+			}
+			a.debug("demoted %s from voter to %s", node.Address, client.Spare)
+			break
+		}
+
+		// If we are still above the desired number, start over again.
+		if n+1 > a.voters {
+			goto again
+		}
+	}
+
+	// If we have offline voters, let's demote one of them.
+	if n := len(index[client.Voter][offline]); n > 0 {
+		voters := index[client.Voter][offline]
+		for i, node := range voters {
+			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
+				a.warn("demote offline %s from voter to %s: %v", node.Address, client.Spare, err)
+				if i == len(nodes)-1 {
+					// We could not promote any node
+					return fmt.Errorf("could not demote any offline voter node")
+				}
+				continue
+			}
+			a.debug("demoted offline voter %s", node.Address)
+			break
+		}
+
+		// If there are still offline voters, start over again.
+		if n-1 > 0 {
+			goto again
 		}
 	}
 

@@ -228,7 +228,7 @@ func newAppWithDir(t *testing.T, dir string, options ...app.Option) (*app.App, f
 	appIndex++
 
 	log := func(l client.LogLevel, format string, a ...interface{}) {
-		format = fmt.Sprintf("%d: %s: %s", appIndex, l.String(), format)
+		format = fmt.Sprintf("%s - %d: %s: %s", time.Now(), appIndex, l.String(), format)
 		t.Logf(format, a...)
 	}
 
