@@ -391,11 +391,11 @@ func (a *App) run(ctx context.Context, join bool) {
 			// If we are starting up, let's see if we should
 			// promote ourselves.
 			if !ready {
-				if err := a.maybeChangeRole(ctx, cli, servers); err != nil {
-					a.log(client.LogWarn, "update our role: %v", err)
+				if err := a.maybePromoteOurselves(ctx, cli, servers); err != nil {
+					a.warn("%v", err)
+					delay = time.Second
 					continue
 				}
-			}
 
 			// If we were just starting up, let's advertise
 			// ourselves as ready.
@@ -409,8 +409,8 @@ func (a *App) run(ctx context.Context, join bool) {
 	}
 }
 
-// Possibly change our role at startup.
-func (a *App) maybeChangeRole(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
+// Possibly change our own role at startup.
+func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
 	voters := 0
 	role := client.NodeRole(-1)
 
