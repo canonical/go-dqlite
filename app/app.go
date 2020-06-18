@@ -311,11 +311,7 @@ func (a *App) Open(ctx context.Context, database string) (*sql.DB, error) {
 
 // Leader returns a client connected to the current cluster leader, if any.
 func (a *App) Leader(ctx context.Context) (*client.Client, error) {
-	dial := client.DefaultDialFunc
-	if a.tls != nil {
-		dial = client.DialFuncWithTLS(dial, a.tls.Dial)
-	}
-	return client.FindLeader(ctx, a.store, client.WithDialFunc(dial), client.WithLogFunc(a.log))
+	return client.FindLeader(ctx, a.store, a.clientOptions()...)
 }
 
 // Proxy incoming TLS connections.
@@ -459,6 +455,15 @@ func (a *App) maybeChangeRole(ctx context.Context, cli *client.Client, nodes []c
 	}
 
 	return nil
+}
+
+// Return the options to use for client.FindLeader() or client.New()
+func (a *App) clientOptions() []client.Option {
+	dial := client.DefaultDialFunc
+	if a.tls != nil {
+		dial = client.DialFuncWithTLS(dial, a.tls.Dial)
+	}
+	return []client.Option{client.WithDialFunc(dial), client.WithLogFunc(a.log)}
 }
 
 func (a *App) debug(format string, args ...interface{}) {
