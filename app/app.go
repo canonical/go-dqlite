@@ -442,16 +442,24 @@ func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nod
 		return fmt.Errorf("assign voter role to ourselves: %v", err)
 	}
 
-	// Possibly try to promote another node as well if we've reached the 3 node
-	// threshold.
+	// Possibly try to promote another node as well if we've reached the 3
+	// node threshold. If we don't succeed in doing that, errors are
+	// ignored since the leader will eventually notice that don't have
+	// enough voters and will retry.
 	if voters == 1 {
 		for _, node := range nodes {
 			if node.ID == a.id || node.Role == client.Voter {
 				continue
 			}
-			a.debug("promote %s to voter", node.Address)
 			if err := cli.Assign(ctx, node.ID, client.Voter); err == nil {
 				break
+			} else {
+				a.warn("promote %s to voter: %v", node.Address, err)
+			}
+		}
+	}
+
+	return nil
 			}
 		}
 	}
