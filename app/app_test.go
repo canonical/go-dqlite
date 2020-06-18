@@ -140,6 +140,95 @@ func TestNew_ThirdJoiner(t *testing.T) {
 	assert.Equal(t, client.Spare, cluster[3].Role)
 }
 
+// Transfer voting rights to another online node.
+func TestHandover_Voter(t *testing.T) {
+	n := 4
+	apps := make([]*app.App, n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{app.WithAddress(addr)}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+		defer cleanup()
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+	}
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+	assert.Equal(t, client.Spare, cluster[3].Role)
+
+	require.NoError(t, apps[2].Handover(context.Background()))
+
+	cluster, err = cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Spare, cluster[2].Role)
+	assert.Equal(t, client.Voter, cluster[3].Role)
+}
+
+// Transfer leadership and voting rights to another node.
+func TestHandover_TransferLeadership(t *testing.T) {
+	n := 4
+	apps := make([]*app.App, n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{app.WithAddress(addr)}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+		defer cleanup()
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+	}
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+
+	leader, err := cli.Leader(context.Background())
+	require.NoError(t, err)
+
+	require.NotNil(t, leader)
+	require.Equal(t, apps[0].ID(), leader.ID)
+	require.NoError(t, apps[0].Handover(context.Background()))
+
+	cli, err = apps[0].Leader(context.Background())
+	require.NoError(t, err)
+
+	leader, err = cli.Leader(context.Background())
+	require.NoError(t, err)
+
+	assert.NotEqual(t, apps[0].ID(), leader.ID)
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Spare, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+	assert.Equal(t, client.Voter, cluster[3].Role)
+}
+
 // Open a database on a fresh one-node cluster.
 func TestOpen(t *testing.T) {
 	app, cleanup := newApp(t)

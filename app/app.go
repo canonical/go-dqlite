@@ -227,24 +227,92 @@ func New(dir string, options ...Option) (app *App, err error) {
 	return app, nil
 }
 
+// Handover transfers all responsibilities for this node (such has leadership
+// and voting rights) to another node, if one is available.
+//
+// This method should always be called before invoking Close(), in order to
+// gracefully shutdown a node.
+func (a *App) Handover(ctx context.Context) error {
+	cli, err := a.Leader(ctx)
+	if err != nil {
+		return fmt.Errorf("find leader: %w", err)
+	}
+	defer cli.Close()
+
+	// Check if we are the current leader and transfer leadership if so.
+	leader, err := cli.Leader(ctx)
+	if err != nil {
+		return fmt.Errorf("leader address: %w", err)
+	}
+
+	if leader != nil && leader.Address == a.address {
+		if err := cli.Transfer(ctx, 0); err != nil {
+			return fmt.Errorf("transfer leadership: %w", err)
+		}
+		cli, err = a.Leader(ctx)
+		if err != nil {
+			return fmt.Errorf("find new leader: %w", err)
+		}
+		defer cli.Close()
+	}
+
+	// Possibly transfer our role.
+	nodes, err := cli.Cluster(ctx)
+	if err != nil {
+		return fmt.Errorf("cluster servers: %w", err)
+	}
+
+	role := client.NodeRole(-1)
+	for _, node := range nodes {
+		if node.ID == a.id {
+			role = node.Role
+		}
+	}
+
+	// If we are not in the list, it means we were removed, just do
+	// nothing.
+	if role == -1 {
+		return nil
+	}
+
+	// If we are a voter, let's transfer our role if possible.
+	if role == client.Voter {
+		index := a.probeNodes(nodes)
+		candidates := index[client.Spare][online]
+		candidates = append(candidates, index[client.StandBy][online]...)
+
+		if len(candidates) == 0 {
+			// No online node available to be promoted.
+			return nil
+		}
+
+		for i, node := range candidates {
+			if err := cli.Assign(ctx, node.ID, client.Voter); err != nil {
+				a.warn("promote %s from %s to voter: %v", node.Address, node.Role, err)
+				if i == len(candidates)-1 {
+					// We could not promote any node
+					return fmt.Errorf("could not promote any online node to voter")
+				}
+				continue
+			}
+			a.debug("promoted %s from %s to voter", node.Address, node.Role)
+			break
+		}
+
+		// Demote ourselves.
+		if err := cli.Assign(ctx, a.ID(), client.Spare); err != nil {
+			return fmt.Errorf("demote ourselves: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // Close the application node, releasing all resources it created.
 func (a *App) Close() error {
 	// Stop the run goroutine.
 	a.stop()
 	<-a.runCh
-
-	// Try to transfer leadership if we are the leader.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	cli, err := client.New(ctx, a.nodeBindAddress)
-	if err == nil {
-		leader, err := cli.Leader(ctx)
-		if err == nil && leader != nil && leader.Address == a.address {
-			cli.Transfer(ctx, 0)
-		}
-		cli.Close()
-	}
 
 	if a.listener != nil {
 		a.listener.Close()
@@ -480,35 +548,7 @@ func (a *App) maybeAdjustRoles(ctx context.Context, cli *client.Client, nodes []
 		return nil
 	}
 again:
-	// Group all nodes by role, and divide them between online an not
-	// online.
-	index := map[client.NodeRole][2][]client.NodeInfo{
-		client.Spare:   {{}, {}},
-		client.StandBy: {{}, {}},
-		client.Voter:   {{}, {}},
-	}
-	const (
-		online  = 0
-		offline = 1
-	)
-	for _, node := range nodes {
-		state := offline
-		if node.ID == a.id {
-			state = online
-		} else {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-
-			cli, err := client.New(ctx, node.Address, a.clientOptions()...)
-			if err == nil {
-				state = online
-				cli.Close()
-			}
-		}
-		role := index[node.Role]
-		role[state] = append(role[state], node)
-		index[node.Role] = role
-	}
+	index := a.probeNodes(nodes)
 
 	// If we have exactly the desired number of voters, and they are all
 	// online, we're good.
@@ -595,6 +635,43 @@ again:
 	}
 
 	return nil
+}
+
+const (
+	online  = 0
+	offline = 1
+)
+
+// Probe all given nodes for connectivity, grouping them by role and by
+// online/offline state.
+func (a *App) probeNodes(nodes []client.NodeInfo) map[client.NodeRole][2][]client.NodeInfo {
+	// Group all nodes by role, and divide them between online an not
+	// online.
+	index := map[client.NodeRole][2][]client.NodeInfo{
+		client.Spare:   {{}, {}},
+		client.StandBy: {{}, {}},
+		client.Voter:   {{}, {}},
+	}
+	for _, node := range nodes {
+		state := offline
+		if node.ID == a.id {
+			state = online
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			cli, err := client.New(ctx, node.Address, a.clientOptions()...)
+			if err == nil {
+				state = online
+				cli.Close()
+			}
+		}
+		role := index[node.Role]
+		role[state] = append(role[state], node)
+		index[node.Role] = role
+	}
+
+	return index
 }
 
 // Return the options to use for client.FindLeader() or client.New()

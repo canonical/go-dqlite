@@ -101,6 +101,8 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 
 			listener.Close()
 			db.Close()
+
+			app.Handover(context.Background())
 			app.Close()
 
 			return nil
