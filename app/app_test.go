@@ -51,6 +51,29 @@ func TestNew_PristineJoiner(t *testing.T) {
 	assert.Equal(t, client.Spare, cluster[1].Role)
 }
 
+// Restart a node that had previously joined the cluster successfully.
+func TestNew_JoinerRestart(t *testing.T) {
+	addr1 := "127.0.0.1:9001"
+	addr2 := "127.0.0.1:9002"
+
+	app1, cleanup := newApp(t, app.WithAddress(addr1))
+	defer cleanup()
+
+	require.NoError(t, app1.Ready(context.Background()))
+
+	dir2, cleanup := newDir(t)
+	defer cleanup()
+
+	app2, cleanup := newAppWithDir(t, dir2, app.WithAddress(addr2), app.WithCluster([]string{addr1}))
+	require.NoError(t, app2.Ready(context.Background()))
+	cleanup()
+
+	app2, cleanup = newAppWithDir(t, dir2, app.WithAddress(addr2))
+	defer cleanup()
+
+	require.NoError(t, app2.Ready(context.Background()))
+}
+
 // The second joiner promotes itself and also the first joiner.
 func TestNew_SecondJoiner(t *testing.T) {
 	addr1 := "127.0.0.1:9001"
@@ -155,9 +178,22 @@ func TestReady_Cancel(t *testing.T) {
 func newApp(t *testing.T, options ...app.Option) (*app.App, func()) {
 	t.Helper()
 
-	appIndex++
-
 	dir, dirCleanup := newDir(t)
+
+	app, appCleanup := newAppWithDir(t, dir, options...)
+
+	cleanup := func() {
+		appCleanup()
+		dirCleanup()
+	}
+
+	return app, cleanup
+}
+
+func newAppWithDir(t *testing.T, dir string, options ...app.Option) (*app.App, func()) {
+	t.Helper()
+
+	appIndex++
 
 	log := func(l client.LogLevel, format string, a ...interface{}) {
 		format = fmt.Sprintf("%d: %s: %s", appIndex, l.String(), format)
@@ -172,7 +208,6 @@ func newApp(t *testing.T, options ...app.Option) (*app.App, func()) {
 
 	cleanup := func() {
 		require.NoError(t, app.Close())
-		dirCleanup()
 	}
 
 	return app, cleanup

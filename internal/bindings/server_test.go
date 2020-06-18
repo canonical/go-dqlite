@@ -44,6 +44,29 @@ func TestNode_Start(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestNode_Restart(t *testing.T) {
+	dir, cleanup := newDir(t)
+	defer cleanup()
+
+	server, err := bindings.NewNode(1, "1", dir)
+	require.NoError(t, err)
+
+	require.NoError(t, server.SetBindAddress("@abc"))
+	require.NoError(t, server.Start())
+
+	require.NoError(t, server.Stop())
+	server.Close()
+
+	server, err = bindings.NewNode(1, "1", dir)
+	require.NoError(t, err)
+
+	require.NoError(t, server.SetBindAddress("@abc"))
+	require.NoError(t, server.Start())
+
+	require.NoError(t, server.Stop())
+	server.Close()
+}
+
 func TestNode_Start_Inet(t *testing.T) {
 	dir, cleanup := newDir(t)
 	defer cleanup()
