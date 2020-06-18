@@ -24,6 +24,7 @@ import (
 type App struct {
 	id              uint64
 	address         string
+	dir             string
 	node            *dqlite.Node
 	nodeBindAddress string
 	listener        net.Listener
@@ -186,6 +187,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 	app = &App{
 		id:              info.ID,
 		address:         o.Address,
+		dir:             dir,
 		node:            node,
 		nodeBindAddress: nodeBindAddress,
 		store:           store,
@@ -370,15 +372,15 @@ func (a *App) run(ctx context.Context, join bool) {
 
 			// Attempt to join the cluster if this is a brand new node.
 			if join {
-				err := cli.Add(
-					ctx,
-					client.NodeInfo{ID: a.id, Address: a.address, Role: client.Spare})
-				if err == nil {
-					join = false
-				} else {
-					a.log(client.LogWarn, "join cluster: %v", err)
+				info := client.NodeInfo{ID: a.id, Address: a.address, Role: client.Spare}
+				if err := cli.Add(ctx, info); err != nil {
+					a.warn("join cluster: %v", err)
 					delay = time.Second
 					continue
+				}
+				join = false
+				if err := fileRemove(a.dir, joinFile); err != nil {
+					a.error("remove join file: %v", err)
 				}
 
 			}

@@ -138,7 +138,7 @@ func (s *Node) SetBindAddress(address string) error {
 	caddress := C.CString(address)
 	defer C.free(unsafe.Pointer(caddress))
 	if rc := C.dqlite_node_set_bind_address(server, caddress); rc != 0 {
-		return fmt.Errorf("failed to set bind address")
+		return fmt.Errorf("failed to set bind address %q: %d", address, rc)
 	}
 	return nil
 }
