@@ -184,6 +184,10 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	ctx, stop := context.WithCancel(context.Background())
 
+	if o.Voters < 3 || o.Voters%2 == 0 {
+		return nil, fmt.Errorf("invalid voters count %d: must be an odd number greater than 1", o.Voters)
+	}
+
 	app = &App{
 		id:              info.ID,
 		address:         o.Address,
