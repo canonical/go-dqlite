@@ -406,6 +406,8 @@ func (a *App) run(ctx context.Context, join bool) {
 	}
 }
 
+const minVoters = 3
+
 // Possibly change our own role at startup.
 func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
 	voters := 0
@@ -420,19 +422,18 @@ func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nod
 		}
 	}
 
-	// If we are are in the list, it means we were removed, just do nothing.
+	// If we are not in the list, it means we were removed, just do nothing.
 	if role == -1 {
 		return nil
 	}
 
-	// If we  already have the Voter role, or the cluster is still too small,
-	// there's nothing to do.
-	if role == client.Voter || len(nodes) < 3 {
+	// If we already have the Voter role, or we reached a.voters, or the
+	// cluster is still too small, there's nothing to do.
+	if role == client.Voter || voters >= a.voters || len(nodes) < minVoters {
 		return nil
 	}
 
 	// Promote ourselves.
-	a.debug("promote ourselves to voter")
 	if err := cli.Assign(ctx, a.id, client.Voter); err != nil {
 		return fmt.Errorf("assign voter role to ourselves: %v", err)
 	}
