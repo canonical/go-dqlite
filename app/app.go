@@ -396,15 +396,12 @@ func (a *App) run(ctx context.Context, join bool) {
 					delay = time.Second
 					continue
 				}
-
-			// If we were just starting up, let's advertise
-			// ourselves as ready.
-			if !ready {
 				ready = true
+				delay = 30 * time.Second
 				close(a.readyCh)
+				continue
 			}
 
-			delay = 30 * time.Second
 		}
 	}
 }
