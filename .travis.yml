@@ -28,6 +28,7 @@ script:
   - $GOPATH/bin/overalls -project $project -covermode=count -- -tags libsqlite3 -timeout 240s
   - $GOPATH/bin/goveralls -coverprofile overalls.coverprofile -service=travis-ci
   - VERBOSE=1 ./test/dqlite-demo.sh
+  - VERBOSE=1 ./test/roles.sh
 
 go:
   - "1.13"
