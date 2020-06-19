@@ -584,20 +584,25 @@ func (a *App) maybeAdjustRoles(ctx context.Context, cli *client.Client, nodes []
 again:
 	index := a.probeNodes(nodes)
 
-	// If we have exactly the desired number of voters, and they are all
+	// If the cluster is too small, do nothing.
+	if len(nodes) < minVoters {
+		return nil
+	}
+
+	// If we have exactly the desired number of voters and stand-bys, and they are all
 	// online, we're good.
-	if (len(index[client.Voter][offline]) == 0 && len(index[client.Voter][online]) == a.voters) || len(nodes) < minVoters {
+	if len(index[client.Voter][offline]) == 0 && len(index[client.Voter][online]) == a.voters && len(index[client.StandBy][offline]) == 0 && len(index[client.StandBy][online]) == a.standbys {
 		return nil
 	}
 
 	// If we have less online voters than desired, let's try to promote
 	// some other node.
 	if n := len(index[client.Voter][online]); n < a.voters {
-		candidates := index[client.Spare][online]
-		candidates = append(candidates, index[client.StandBy][online]...)
+		candidates := index[client.StandBy][online]
+		candidates = append(candidates, index[client.Spare][online]...)
 
 		if len(candidates) == 0 {
-			return fmt.Errorf("no online node available to be promoted")
+			return nil
 		}
 
 		for i, node := range candidates {
@@ -613,10 +618,8 @@ again:
 			break
 		}
 
-		// If we are still below the desired number, start over again.
-		if n+1 < a.voters {
-			goto again
-		}
+		// Check again if we need more adjustments
+		goto again
 	}
 
 	// If we have more online voters than desired, let's demote one of
@@ -629,21 +632,19 @@ again:
 				continue
 			}
 			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
-				a.warn("demote online %s from voter to %s: %v", node.Address, client.Spare, err)
+				a.warn("demote online %s from voter to spare: %v", node.Address, err)
 				if i == len(nodes)-1 {
 					// We could not demote any node
 					return fmt.Errorf("could not demote any redundant online voter")
 				}
 				continue
 			}
-			a.debug("demoted %s from voter to %s", node.Address, client.Spare)
+			a.debug("demoted %s from voter to spare", node.Address)
 			break
 		}
 
-		// If we are still above the desired number, start over again.
-		if n+1 > a.voters {
-			goto again
-		}
+		// Check again if we need more adjustments
+		goto again
 	}
 
 	// If we have offline voters, let's demote one of them.
@@ -651,7 +652,7 @@ again:
 		voters := index[client.Voter][offline]
 		for i, node := range voters {
 			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
-				a.warn("demote offline %s from voter to %s: %v", node.Address, client.Spare, err)
+				a.warn("demote offline %s from voter to spare: %v", node.Address, err)
 				if i == len(nodes)-1 {
 					// We could not promote any node
 					return fmt.Errorf("could not demote any offline voter node")
@@ -662,10 +663,79 @@ again:
 			break
 		}
 
-		// If there are still offline voters, start over again.
-		if n-1 > 0 {
-			goto again
+		// Check again if we need more adjustments
+		goto again
+	}
+
+	// If we have less online stand-ys than desired, let's try to promote
+	// some other node.
+	if n := len(index[client.StandBy][online]); n < a.standbys {
+		candidates := index[client.Spare][online]
+
+		if len(candidates) == 0 {
+			return nil
 		}
+
+		for i, node := range candidates {
+			if err := cli.Assign(ctx, node.ID, client.StandBy); err != nil {
+				a.warn("promote %s to stand-by: %v", node.Address, err)
+				if i == len(candidates)-1 {
+					// We could not promote any node
+					return fmt.Errorf("could not promote any online node to stand-by")
+				}
+				continue
+			}
+			a.debug("promoted %s to stand-by", node.Address)
+			break
+		}
+
+		// Check again if we need more adjustments
+		goto again
+	}
+
+	// If we have more online stand-bys than desired, let's demote one of
+	// them.
+	if n := len(index[client.StandBy][online]); n > a.standbys {
+		standbys := index[client.StandBy][online]
+		for i, node := range standbys {
+			// Don't demote ourselves.
+			if node.ID == a.id {
+				continue
+			}
+			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
+				a.warn("demote online %s from stand-by to spare: %v", node.Address, err)
+				if i == len(nodes)-1 {
+					// We could not demote any node
+					return fmt.Errorf("could not demote any redundant online stand-by")
+				}
+				continue
+			}
+			a.debug("demoted %s from stand-by to spare", node.Address)
+			break
+		}
+
+		// Check again if we need more adjustments
+		goto again
+	}
+
+	// If we have offline stand-bys, let's demote one of them.
+	if n := len(index[client.StandBy][offline]); n > 0 {
+		standbys := index[client.StandBy][offline]
+		for i, node := range standbys {
+			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
+				a.warn("demote offline %s from stand-by to spare: %v", node.Address, err)
+				if i == len(nodes)-1 {
+					// We could not promote any node
+					return fmt.Errorf("could not demote any offline stand-by node")
+				}
+				continue
+			}
+			a.debug("demoted offline stand-y %s", node.Address)
+			break
+		}
+
+		// Check again if we need more adjustments
+		goto again
 	}
 
 	return nil
