@@ -6,7 +6,6 @@ GO=${GO:-go}
 VERBOSE=${VERBOSE:-0}
 
 $GO build -tags libsqlite3 ./cmd/dqlite-demo/
-$GO build -tags libsqlite3 ./cmd/dqlite/
 
 DIR=$(mktemp -d)
 

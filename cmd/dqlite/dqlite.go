@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
@@ -22,9 +23,9 @@ func main() {
 	var servers *[]string
 
 	cmd := &cobra.Command{
-		Use:   "dqlite -s <servers> <database>",
+		Use:   "dqlite -s <servers> <database> [command]",
 		Short: "Standard dqlite shell",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			infos := make([]client.NodeInfo, len(*servers))
 			for i, address := range *servers {
@@ -64,6 +65,18 @@ func main() {
 			sh, err := shell.New(args[0], store, shell.WithDialFunc(dial))
 			if err != nil {
 				return err
+			}
+
+			if len(args) > 1 {
+				for _, input := range strings.Split(args[1], ";") {
+					result, err := sh.Process(context.Background(), input)
+					if err != nil {
+						return err
+					} else if result != "" {
+						fmt.Println(result)
+					}
+				}
+				return nil
 			}
 
 			line := liner.NewLiner()

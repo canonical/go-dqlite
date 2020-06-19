@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"github.com/canonical/go-dqlite/client"
 )
@@ -65,16 +66,54 @@ func WithTLS(listen *tls.Config, dial *tls.Config) Option {
 // shutdown it will be assigned the Voter role in case the current number of
 // voters is below n.
 //
-// Similarly when a node with the Voter role is shutdown gracefully it will try
-// to transfer its Voter role to another non-Voter role, if one is available.
+// Similarly when a node with the Voter role is shutdown gracefully by calling
+// the Handover() method, it will try to transfer its Voter role to another
+// non-Voter node, if one is available.
 //
-//  All App instances in a cluster must be created with the same WithVoters
-//  setting.
+// All App instances in a cluster must be created with the same WithVoters
+// setting.
+//
+// The given value must be an odd number greater than one.
 //
 // The default value is 3.
 func WithVoters(n int) Option {
 	return func(options *options) {
 		options.Voters = n
+	}
+}
+
+// WithStandBys sets the number of nodes in the cluster that should have the
+// StandBy role.
+//
+// When a new node is added to the cluster or it is started again after a
+// shutdown it will be assigned the StandBy role in case there are already
+// enough online voters, but the current number of stand-bys is below n.
+//
+// Similarly when a node with the StandBy role is shutdown gracefully by
+// calling the Handover() method, it will try to transfer its StandBy role to
+// another non-StandBy node, if one is available.
+//
+// All App instances in a cluster must be created with the same WithStandBys
+// setting.
+//
+// The given value must be an even number greater than zero.
+//
+// The default value is 2.
+func WithStandBys(n int) Option {
+	return func(options *options) {
+		options.StandBys = n
+	}
+}
+
+// WithRolesAdjustmentFrequency sets the frequency at which the current cluster
+// leader will check if the roles of the various nodes in the cluster matches
+// the desired setup and perform promotions/demotions to adjust the situation
+// if needed.
+//
+// The default is 30 seconds.
+func WithRolesAdjustmentFrequency(frequency time.Duration) Option {
+	return func(options *options) {
+		options.RolesAdjustmentFrequency = frequency
 	}
 }
 
@@ -91,19 +130,23 @@ type tlsSetup struct {
 }
 
 type options struct {
-	Address string
-	Cluster []string
-	Log     client.LogFunc
-	TLS     *tlsSetup
-	Voters  int
+	Address                  string
+	Cluster                  []string
+	Log                      client.LogFunc
+	TLS                      *tlsSetup
+	Voters                   int
+	StandBys                 int
+	RolesAdjustmentFrequency time.Duration
 }
 
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		Address: defaultAddress(),
-		Log:     defaultLogFunc,
-		Voters:  3,
+		Address:                  defaultAddress(),
+		Log:                      defaultLogFunc,
+		Voters:                   3,
+		StandBys:                 2,
+		RolesAdjustmentFrequency: 30 * time.Second,
 	}
 }
 
