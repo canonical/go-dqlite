@@ -183,8 +183,6 @@ func New(dir string, options ...Option) (app *App, err error) {
 	driverName := fmt.Sprintf("dqlite-%d", driverIndex)
 	sql.Register(driverName, driver)
 
-	ctx, stop := context.WithCancel(context.Background())
-
 	if o.Voters < 3 || o.Voters%2 == 0 {
 		return nil, fmt.Errorf("invalid voters %d: must be an odd number greater than 1", o.Voters)
 	}
@@ -192,6 +190,8 @@ func New(dir string, options ...Option) (app *App, err error) {
 	if o.StandBys < 0 || o.StandBys%2 != 0 {
 		return nil, fmt.Errorf("invalid stand-bys %d: must be an even number greater than 0", o.StandBys)
 	}
+
+	ctx, stop := context.WithCancel(context.Background())
 
 	app = &App{
 		id:              info.ID,
