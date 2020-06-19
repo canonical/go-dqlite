@@ -229,6 +229,97 @@ func TestHandover_TransferLeadership(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[3].Role)
 }
 
+// If a voter goes offline, another node takes its place.
+func TestRolesAdjustment_ReplaceVoter(t *testing.T) {
+	n := 4
+	apps := make([]*app.App, n)
+	cleanups := make([]func(), n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+		cleanups[i] = cleanup
+	}
+
+	defer cleanups[0]()
+	defer cleanups[1]()
+	defer cleanups[3]()
+
+	// A voter goes offline.
+	cleanups[2]()
+
+	time.Sleep(2 * time.Second)
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Spare, cluster[2].Role)
+	assert.Equal(t, client.Voter, cluster[3].Role)
+}
+
+// If a voter goes offline, but no another node can its place, then nothing
+// chagnes.
+func TestRolesAdjustment_CantReplaceVoter(t *testing.T) {
+	n := 4
+	apps := make([]*app.App, n)
+	cleanups := make([]func(), n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+		cleanups[i] = cleanup
+	}
+
+	defer cleanups[0]()
+	defer cleanups[1]()
+
+	// A voter and a spare go offline.
+	cleanups[3]()
+	cleanups[2]()
+
+	time.Sleep(2 * time.Second)
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+	assert.Equal(t, client.Spare, cluster[3].Role)
+}
+
 // Open a database on a fresh one-node cluster.
 func TestOpen(t *testing.T) {
 	app, cleanup := newApp(t)
@@ -316,8 +407,9 @@ func newAppWithDir(t *testing.T, dir string, options ...app.Option) (*app.App, f
 
 	appIndex++
 
+	index := appIndex
 	log := func(l client.LogLevel, format string, a ...interface{}) {
-		format = fmt.Sprintf("%s - %d: %s: %s", time.Now(), appIndex, l.String(), format)
+		format = fmt.Sprintf("%s - %d: %s: %s", time.Now().Format("15:04:01.000"), index, l.String(), format)
 		t.Logf(format, a...)
 	}
 

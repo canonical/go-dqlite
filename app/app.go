@@ -484,7 +484,7 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 				continue
 			}
 			if err := a.maybeAdjustRoles(ctx, cli, servers); err != nil {
-				a.warn("%v", err)
+				a.warn("adjust roles: %v", err)
 			}
 		}
 	}
