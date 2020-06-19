@@ -281,11 +281,19 @@ func (a *App) Handover(ctx context.Context) error {
 		return nil
 	}
 
-	// If we are a voter, let's transfer our role if possible.
-	if role == client.Voter {
+	// If we are a voter or a stand-by, let's transfer our role if
+	// possible.
+	if role == client.Voter || role == client.StandBy {
 		index := a.probeNodes(nodes)
+
+		// Spare nodes are always candidates.
 		candidates := index[client.Spare][online]
-		candidates = append(candidates, index[client.StandBy][online]...)
+
+		// Stand-by nodes are candidate if we need to transfer voting
+		// rights, and they are preferred over spares.
+		if role == client.Voter {
+			candidates = append(index[client.StandBy][online], candidates...)
+		}
 
 		if len(candidates) == 0 {
 			// No online node available to be promoted.
@@ -293,15 +301,15 @@ func (a *App) Handover(ctx context.Context) error {
 		}
 
 		for i, node := range candidates {
-			if err := cli.Assign(ctx, node.ID, client.Voter); err != nil {
-				a.warn("promote %s from %s to voter: %v", node.Address, node.Role, err)
+			if err := cli.Assign(ctx, node.ID, role); err != nil {
+				a.warn("promote %s from %s to %s: %v", node.Address, node.Role, role, err)
 				if i == len(candidates)-1 {
 					// We could not promote any node
-					return fmt.Errorf("could not promote any online node to voter")
+					return fmt.Errorf("could not promote any online node to %s", role)
 				}
 				continue
 			}
-			a.debug("promoted %s from %s to voter", node.Address, node.Role)
+			a.debug("promoted %s from %s to %s", node.Address, node.Role, role)
 			break
 		}
 
