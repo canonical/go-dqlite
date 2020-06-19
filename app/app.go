@@ -189,7 +189,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		return nil, fmt.Errorf("invalid voters %d: must be an odd number greater than 1", o.Voters)
 	}
 
-	if o.StandBys < 0 || o.Voters%2 != 0 {
+	if o.StandBys < 0 || o.StandBys%2 != 0 {
 		return nil, fmt.Errorf("invalid stand-bys %d: must be an even number greater than 0", o.StandBys)
 	}
 
@@ -500,15 +500,24 @@ const minVoters = 3
 
 // Possibly change our own role at startup.
 func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
+	// If the cluster is still to small, do nothing.
+	if len(nodes) < minVoters {
+		return nil
+	}
+
 	voters := 0
+	standbys := 0
 	role := client.NodeRole(-1)
 
 	for _, node := range nodes {
 		if node.ID == a.id {
 			role = node.Role
 		}
-		if node.Role == client.Voter {
+		switch node.Role {
+		case client.Voter:
 			voters++
+		case client.StandBy:
+			standbys++
 		}
 	}
 
@@ -517,22 +526,33 @@ func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nod
 		return nil
 	}
 
-	// If we already have the Voter role, or we reached a.voters, or the
-	// cluster is still too small, there's nothing to do.
-	if role == client.Voter || voters >= a.voters || len(nodes) < minVoters {
+	// If we already have the Voter or StandBy role, there's nothing to do.
+	if role == client.Voter || role == client.StandBy {
 		return nil
 	}
 
+	// If we have already reached the desired number of voters and
+	// stand-bys, there's nothing to do.
+	if voters >= a.voters && standbys >= a.standbys {
+		return nil
+	}
+
+	// Figure if we need to become stand-by or voter.
+	role = client.StandBy
+	if voters < a.voters {
+		role = client.Voter
+	}
+
 	// Promote ourselves.
-	if err := cli.Assign(ctx, a.id, client.Voter); err != nil {
-		return fmt.Errorf("assign voter role to ourselves: %v", err)
+	if err := cli.Assign(ctx, a.id, role); err != nil {
+		return fmt.Errorf("assign %s role to ourselves: %v", role, err)
 	}
 
 	// Possibly try to promote another node as well if we've reached the 3
 	// node threshold. If we don't succeed in doing that, errors are
 	// ignored since the leader will eventually notice that don't have
 	// enough voters and will retry.
-	if voters == 1 {
+	if role == client.Voter && voters == 1 {
 		for _, node := range nodes {
 			if node.ID == a.id || node.Role == client.Voter {
 				continue

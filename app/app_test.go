@@ -108,7 +108,7 @@ func TestNew_SecondJoiner(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[2].Role)
 }
 
-// The third joiner does not get the voter role.
+// The third joiner gets the stand-by role.
 func TestNew_ThirdJoiner(t *testing.T) {
 	apps := []*app.App{}
 
@@ -137,7 +137,74 @@ func TestNew_ThirdJoiner(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[0].Role)
 	assert.Equal(t, client.Voter, cluster[1].Role)
 	assert.Equal(t, client.Voter, cluster[2].Role)
-	assert.Equal(t, client.Spare, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+}
+
+// The fourth joiner gets the stand-by role.
+func TestNew_FourthJoiner(t *testing.T) {
+	apps := []*app.App{}
+
+	for i := 0; i < 5; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{app.WithAddress(addr)}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+		defer cleanup()
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps = append(apps, app)
+
+	}
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[4].Role)
+}
+
+// The fifth joiner gets the spare role.
+func TestNew_FifthJoiner(t *testing.T) {
+	apps := []*app.App{}
+
+	for i := 0; i < 6; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{app.WithAddress(addr)}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+		defer cleanup()
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps = append(apps, app)
+
+	}
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[4].Role)
+	assert.Equal(t, client.Spare, cluster[5].Role)
 }
 
 // Transfer voting rights to another online node.
@@ -169,7 +236,7 @@ func TestHandover_Voter(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[0].Role)
 	assert.Equal(t, client.Voter, cluster[1].Role)
 	assert.Equal(t, client.Voter, cluster[2].Role)
-	assert.Equal(t, client.Spare, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
 
 	require.NoError(t, apps[2].Handover(context.Background()))
 
@@ -317,7 +384,7 @@ func TestRolesAdjustment_CantReplaceVoter(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[0].Role)
 	assert.Equal(t, client.Voter, cluster[1].Role)
 	assert.Equal(t, client.Voter, cluster[2].Role)
-	assert.Equal(t, client.Spare, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
 }
 
 // Open a database on a fresh one-node cluster.
