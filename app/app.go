@@ -38,6 +38,7 @@ type App struct {
 	runCh           chan struct{}      // Waits for App.run() to return.
 	readyCh         chan struct{}      // Waits for startup tasks
 	voters          int
+	standbys        int
 }
 
 // New creates a new application node.
@@ -185,7 +186,11 @@ func New(dir string, options ...Option) (app *App, err error) {
 	ctx, stop := context.WithCancel(context.Background())
 
 	if o.Voters < 3 || o.Voters%2 == 0 {
-		return nil, fmt.Errorf("invalid voters count %d: must be an odd number greater than 1", o.Voters)
+		return nil, fmt.Errorf("invalid voters %d: must be an odd number greater than 1", o.Voters)
+	}
+
+	if o.StandBys < 0 || o.Voters%2 != 0 {
+		return nil, fmt.Errorf("invalid stand-bys %d: must be an even number greater than 0", o.StandBys)
 	}
 
 	app = &App{
@@ -203,6 +208,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		runCh:           make(chan struct{}, 0),
 		readyCh:         make(chan struct{}, 0),
 		voters:          o.Voters,
+		standbys:        o.StandBys,
 	}
 
 	// Start the proxy if a TLS configuration was provided.
