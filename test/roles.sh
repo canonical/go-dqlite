@@ -1,4 +1,4 @@
-#!/bin/sh -eu
+#!/bin/bash -eu
 #
 # Test dynamic roles management.
 
@@ -8,6 +8,7 @@ VERBOSE=${VERBOSE:-0}
 DIR=$(mktemp -d)
 BINARY=$DIR/main
 CLUSTER=127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003,127.0.0.1:9004,127.0.0.1:9005,127.0.0.1:9006
+N=6
 
 $GO build -tags libsqlite3 ./cmd/dqlite/
 
@@ -29,6 +30,9 @@ import (
 )
 
 func main() {
+     ch := make(chan os.Signal)
+     signal.Notify(ch, unix.SIGINT)
+     signal.Notify(ch, unix.SIGTERM)
      dir := filepath.Join("$DIR", os.Args[1])
      index, _ := strconv.Atoi(os.Args[1])
      verbose := $VERBOSE
@@ -51,7 +55,7 @@ func main() {
          app.WithAddress(addr),
          app.WithCluster(join),
          app.WithLogFunc(logFunc),
-         app.WithRolesAdjustmentFrequency(5 * time.Second),
+         app.WithRolesAdjustmentFrequency(3 * time.Second),
      )
      if err != nil {
          panic(err)
@@ -59,11 +63,6 @@ func main() {
      if err := app.Ready(context.Background()); err != nil {
          panic(err)
      }
-     ch := make(chan os.Signal)
-     signal.Notify(ch, unix.SIGPWR)
-     signal.Notify(ch, unix.SIGINT)
-     signal.Notify(ch, unix.SIGQUIT)
-     signal.Notify(ch, unix.SIGTERM)
      <-ch
      ctx, cancel := context.WithTimeout(context.Background(), 2 * time.Second)
      defer cancel()
@@ -131,7 +130,7 @@ wait_role() {
             break
         fi
         if [ $i -eq 40 ]; then
-            echo "Error: stand-by node $index has role $current instead of $role"
+            echo "Error: node $index has role $current instead of $role"
             ./dqlite -s $CLUSTER test .cluster
             exit 1
         fi
@@ -148,12 +147,9 @@ set_up_node() {
 set_up() {
     echo "=> Set up test cluster"
     set_up_binary
-    set_up_node 1
-    set_up_node 2
-    set_up_node 3
-    set_up_node 4
-    set_up_node 5
-    set_up_node 6
+    for i in $(seq $N); do
+        set_up_node $i
+    done
 }
 
 tear_down_node() {
@@ -168,12 +164,9 @@ tear_down() {
 
     echo "=> Tear down test cluster"
 
-    tear_down_node 6
-    tear_down_node 5
-    tear_down_node 4
-    tear_down_node 3
-    tear_down_node 2
-    tear_down_node 1
+    for i in $(seq $N -1 1); do
+        tear_down_node $i
+    done
 
     rm -rf $DIR
 
@@ -193,23 +186,65 @@ set_up
 echo "=> Wait for roles to get stable"
 wait_stable
 
-echo "=> Stop a stand-by gracefully"
+# Stop one node at a time gracefully, then check that the cluster is stable.
+for i in $(seq 10); do
+    index=$((1 + RANDOM % $N))
+    echo "=> Stop node $index"
+    kill_node $index TERM
+    echo "=> Wait for roles to get stable"
+    wait_role $index spare
+    wait_stable
+    echo "=> Restart node $index"
+    start_node $index
+    sleep 0.5
+done
 
-index=$(./dqlite -s $CLUSTER test .cluster | grep stand-by | tail -1 | cut -b 31)
-kill_node $index TERM
+# Kill one node at a time ungracefully, then check that the cluster is stable.
+for i in $(seq 1); do
+    index=$((1 + RANDOM % $N))
+    echo "=> Kill node $index"
+    kill_node $index KILL
+    echo "=> Wait for roles to get stable"
+    wait_role $index spare
+    wait_stable
+    echo "=> Restart node $index"
+    start_node $index
+    sleep 0.5
+done
 
-wait_role $index spare
-wait_stable
-start_node $index
+# Stop two nodes at a time gracefully, then check that the cluster is stable.
+for i in $(seq 10); do
+    index1=$((1 + RANDOM % $N))
+    index2=$((1 + (index1 + $((RANDOM % 5))) % 6))
+    echo "=> Stop nodes $index1 and $index2"
+    kill_node $index1 TERM
+    kill_node $index2 TERM
+    sleep 2
+    echo "=> Restart nodes $index1 and $index2"
+    start_node $index1
+    start_node $index2
+    echo "=> Wait for roles to get stable"
+    wait_stable
+    sleep 1
+done
 
-echo "=> Stop a stand-by ungracefully"
-
-index=$(./dqlite -s $CLUSTER test .cluster | grep stand-by | tail -1 | cut -b 31)
-kill_node $index KILL
-
-wait_role $index spare
-wait_stable
-
-#start_node $index
+# Kill two nodes at a time ungracefully, then check that the cluster is stable.
+for i in $(seq 10); do
+    index1=$((1 + RANDOM % $N))
+    index2=$((1 + (index1 + $((RANDOM % 5))) % 6))
+    echo "=> Stop nodes $index1 and $index2"
+    kill_node $index1 KILL
+    kill_node $index2 KILL
+    sleep 5
+    echo "=> Restart nodes $index1 and $index2"
+    start_node $index1
+    start_node $index2
+    echo "=> Wait for roles to get stable"
+    wait_stable
+    sleep 1
+done
 
 echo "=> Test successful"
+
+
+
