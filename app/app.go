@@ -465,6 +465,7 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 				if err := cli.Add(ctx, info); err != nil {
 					a.warn("join cluster: %v", err)
 					delay = time.Second
+					cli.Close()
 					continue
 				}
 				join = false
@@ -477,6 +478,7 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 			// Refresh our node store.
 			servers, err := cli.Cluster(ctx)
 			if err != nil {
+				cli.Close()
 				continue
 			}
 			a.store.Set(ctx, servers)
@@ -487,11 +489,13 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 				if err := a.maybePromoteOurselves(ctx, cli, servers); err != nil {
 					a.warn("%v", err)
 					delay = time.Second
+					cli.Close()
 					continue
 				}
 				ready = true
 				delay = frequency
 				close(a.readyCh)
+				cli.Close()
 				continue
 			}
 
@@ -499,14 +503,17 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 			// adjustment we should make to node roles.
 			info, err := cli.Leader(ctx)
 			if err != nil {
+				cli.Close()
 				continue
 			}
 			if info.ID != a.id {
+				cli.Close()
 				continue
 			}
 			if err := a.maybeAdjustRoles(ctx, cli, servers); err != nil {
 				a.warn("adjust roles: %v", err)
 			}
+			cli.Close()
 		}
 	}
 }
