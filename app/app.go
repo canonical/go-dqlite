@@ -501,16 +501,7 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 
 			// If we are the leader, let's see if there's any
 			// adjustment we should make to node roles.
-			info, err := cli.Leader(ctx)
-			if err != nil {
-				cli.Close()
-				continue
-			}
-			if info.ID != a.id {
-				cli.Close()
-				continue
-			}
-			if err := a.maybeAdjustRoles(ctx, cli, servers); err != nil {
+			if err := a.maybeAdjustRoles(ctx, cli); err != nil {
 				a.warn("adjust roles: %v", err)
 			}
 			cli.Close()
@@ -591,17 +582,39 @@ func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nod
 }
 
 // Check if any adjustment needs to be made to existing roles.
-func (a *App) maybeAdjustRoles(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
+func (a *App) maybeAdjustRoles(ctx context.Context, cli *client.Client) error {
+again:
+	info, err := cli.Leader(ctx)
+	if err != nil {
+		return err
+	}
+	if info.ID != a.id {
+		return nil
+	}
+
+	nodes, err := cli.Cluster(ctx)
+	if err != nil {
+		return err
+	}
+
 	if len(nodes) == 1 {
 		return nil
 	}
-again:
-	index := a.probeNodes(nodes)
 
-	// If the cluster is too small, do nothing.
+	// If the cluster is too small, make sure we have just one voter (us).
 	if len(nodes) < minVoters {
+		for _, node := range nodes {
+			if node.ID == a.ID() || node.Role != client.Voter {
+				continue
+			}
+			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
+				a.warn("demote %s from %s to spare: %v", node.Address, node.Role, err)
+			}
+		}
 		return nil
 	}
+
+	index := a.probeNodes(nodes)
 
 	// If we have exactly the desired number of voters and stand-bys, and they are all
 	// online, we're good.
