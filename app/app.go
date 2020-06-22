@@ -239,6 +239,13 @@ func New(dir string, options ...Option) (app *App, err error) {
 // This method should always be called before invoking Close(), in order to
 // gracefully shutdown a node.
 func (a *App) Handover(ctx context.Context) error {
+	// Set a hard limit of one minute, in case the user-provided context
+	// has no expiration. That avoids the call to hang forever in case a
+	// majority of the cluster is down and no leader is available.
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
 	cli, err := a.Leader(ctx)
 	if err != nil {
 		return fmt.Errorf("find leader: %w", err)
