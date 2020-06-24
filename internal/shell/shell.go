@@ -65,6 +65,9 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	case ".leader":
 		return s.processLeader(ctx, line)
 	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".remove") {
+		return s.processRemove(ctx, line)
+	}
 	if strings.HasPrefix(strings.ToUpper(strings.TrimLeft(line, " ")), "SELECT") {
 		return s.processSelect(ctx, line)
 	} else {
@@ -116,6 +119,33 @@ func (s *Shell) processLeader(ctx context.Context, line string) (string, error) 
 		return "", nil
 	}
 	return leader.Address, nil
+}
+
+func (s *Shell) processRemove(ctx context.Context, line string) (string, error) {
+	parts := strings.Split(line, " ")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("bad command format, should be: .remove <address>")
+	}
+	address := parts[1]
+	cli, err := client.FindLeader(ctx, s.store, client.WithDialFunc(s.dial))
+	if err != nil {
+		return "", err
+	}
+	cluster, err := cli.Cluster(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, node := range cluster {
+		if node.Address != address {
+			continue
+		}
+		if err := cli.Remove(ctx, node.ID); err != nil {
+			return "", fmt.Errorf("remove node %q: %w", address, err)
+		}
+		return "", nil
+	}
+
+	return "", fmt.Errorf("no node has address %q", address)
 }
 
 func (s *Shell) processSelect(ctx context.Context, line string) (string, error) {
