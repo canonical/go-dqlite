@@ -21,6 +21,7 @@ func main() {
 	var crt string
 	var key string
 	var servers *[]string
+	var format string
 
 	cmd := &cobra.Command{
 		Use:   "dqlite -s <servers> <database> [command]",
@@ -62,7 +63,7 @@ func main() {
 
 			}
 
-			sh, err := shell.New(args[0], store, shell.WithDialFunc(dial))
+			sh, err := shell.New(args[0], store, shell.WithDialFunc(dial), shell.WithFormat(format))
 			if err != nil {
 				return err
 			}
@@ -107,6 +108,7 @@ func main() {
 	servers = flags.StringSliceP("servers", "s", nil, "comma-separated list of db servers")
 	flags.StringVarP(&crt, "cert", "c", "", "public TLS cert")
 	flags.StringVarP(&key, "key", "k", "", "private TLS key")
+	flags.StringVarP(&format, "format", "f", "tabular", "output format (tabular, json)")
 
 	cmd.MarkFlagRequired("servers")
 

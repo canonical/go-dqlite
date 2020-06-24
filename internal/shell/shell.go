@@ -1,8 +1,10 @@
 package shell
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -13,9 +15,10 @@ import (
 // Shell can be used to implement interactive prompts for inspecting a dqlite
 // database.
 type Shell struct {
-	store client.NodeStore
-	dial  client.DialFunc
-	db    *sql.DB
+	store  client.NodeStore
+	dial   client.DialFunc
+	db     *sql.DB
+	format string
 }
 
 // New creates a new Shell connected to the given database.
@@ -24,6 +27,13 @@ func New(database string, store client.NodeStore, options ...Option) (*Shell, er
 
 	for _, option := range options {
 		option(o)
+	}
+
+	switch o.Format {
+	case formatTabular:
+	case formatJson:
+	default:
+		return nil, fmt.Errorf("unknown format %s", o.Format)
 	}
 
 	driver, err := driver.New(store, driver.WithDialFunc(o.Dial))
@@ -38,9 +48,10 @@ func New(database string, store client.NodeStore, options ...Option) (*Shell, er
 	}
 
 	shell := &Shell{
-		store: store,
-		dial:  o.Dial,
-		db:    db,
+		store:  store,
+		dial:   o.Dial,
+		db:     db,
+		format: o.Format,
 	}
 
 	return shell, nil
@@ -71,11 +82,22 @@ func (s *Shell) processCluster(ctx context.Context, line string) (string, error)
 		return "", err
 	}
 	result := ""
-	for i, server := range cluster {
-		if i > 0 {
-			result += "\n"
+	switch s.format {
+	case formatTabular:
+		for i, server := range cluster {
+			if i > 0 {
+				result += "\n"
+			}
+			result += fmt.Sprintf("%x|%s|%s", server.ID, server.Address, server.Role)
 		}
-		result += fmt.Sprintf("%x|%s|%s", server.ID, server.Address, server.Role)
+	case formatJson:
+		data, err := json.Marshal(cluster)
+		if err != nil {
+			return "", err
+		}
+		var indented bytes.Buffer
+		json.Indent(&indented, data, "", "\t")
+		result = string(indented.Bytes())
 	}
 
 	return result, nil
