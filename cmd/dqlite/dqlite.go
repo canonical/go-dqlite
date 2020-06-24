@@ -21,19 +21,37 @@ func main() {
 	var crt string
 	var key string
 	var servers *[]string
+	var format string
 
 	cmd := &cobra.Command{
 		Use:   "dqlite -s <servers> <database> [command]",
 		Short: "Standard dqlite shell",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			infos := make([]client.NodeInfo, len(*servers))
-			for i, address := range *servers {
-				infos[i].Address = address
+			if len(*servers) == 0 {
+				return fmt.Errorf("no servers provided")
 			}
+			var store client.NodeStore
+			var err error
 
-			store := client.NewInmemNodeStore()
-			store.Set(context.Background(), infos)
+			first := (*servers)[0]
+			if strings.HasPrefix(first, "file://") {
+				if len(*servers) > 1 {
+					return fmt.Errorf("can't mix server store and explicit list")
+				}
+				path := first[len("file://"):]
+				store, err = client.DefaultNodeStore(path)
+				if err != nil {
+					return fmt.Errorf("open servers store: %w", err)
+				}
+			} else {
+				infos := make([]client.NodeInfo, len(*servers))
+				for i, address := range *servers {
+					infos[i].Address = address
+				}
+				store = client.NewInmemNodeStore()
+				store.Set(context.Background(), infos)
+			}
 
 			if (crt != "" && key == "") || (key != "" && crt == "") {
 				return fmt.Errorf("both TLS certificate and key must be given")
@@ -62,7 +80,7 @@ func main() {
 
 			}
 
-			sh, err := shell.New(args[0], store, shell.WithDialFunc(dial))
+			sh, err := shell.New(args[0], store, shell.WithDialFunc(dial), shell.WithFormat(format))
 			if err != nil {
 				return err
 			}
@@ -104,9 +122,10 @@ func main() {
 	}
 
 	flags := cmd.Flags()
-	servers = flags.StringSliceP("servers", "s", nil, "comma-separated list of db servers")
+	servers = flags.StringSliceP("servers", "s", nil, "comma-separated list of db servers, or file://<store>")
 	flags.StringVarP(&crt, "cert", "c", "", "public TLS cert")
 	flags.StringVarP(&key, "key", "k", "", "private TLS key")
+	flags.StringVarP(&format, "format", "f", "tabular", "output format (tabular, json)")
 
 	cmd.MarkFlagRequired("servers")
 

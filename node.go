@@ -94,6 +94,9 @@ func (s *Node) Start() error {
 }
 
 // Recover a node by forcing a new cluster configuration.
+//
+// DEPRECATED: Use ReconfigureMembership instead, which does not require
+// instantiating a new Node object.
 func (s *Node) Recover(cluster []NodeInfo) error {
 	return s.server.Recover(cluster)
 }
@@ -126,6 +129,20 @@ const BootstrapID = 0x2dc171858c3155be
 // address and the current time.
 func GenerateID(address string) uint64 {
 	return bindings.GenerateID(address)
+}
+
+// ReconfigureMembership can be used to recover a cluster whose majority of
+// nodes have died, and therefore has become unavailable.
+//
+// It forces appending a new configuration to the raft log stored in the given
+// directory, effectively replacing the current configuration.
+func ReconfigureMembership(dir string, cluster []NodeInfo) error {
+	server, err := bindings.NewNode(1, "1", dir)
+	if err != nil {
+		return err
+	}
+	defer server.Close()
+	return server.Recover(cluster)
 }
 
 // Create a options object with sane defaults.

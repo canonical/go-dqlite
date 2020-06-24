@@ -1,8 +1,10 @@
 package shell
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -13,9 +15,10 @@ import (
 // Shell can be used to implement interactive prompts for inspecting a dqlite
 // database.
 type Shell struct {
-	store client.NodeStore
-	dial  client.DialFunc
-	db    *sql.DB
+	store  client.NodeStore
+	dial   client.DialFunc
+	db     *sql.DB
+	format string
 }
 
 // New creates a new Shell connected to the given database.
@@ -24,6 +27,13 @@ func New(database string, store client.NodeStore, options ...Option) (*Shell, er
 
 	for _, option := range options {
 		option(o)
+	}
+
+	switch o.Format {
+	case formatTabular:
+	case formatJson:
+	default:
+		return nil, fmt.Errorf("unknown format %s", o.Format)
 	}
 
 	driver, err := driver.New(store, driver.WithDialFunc(o.Dial))
@@ -38,9 +48,10 @@ func New(database string, store client.NodeStore, options ...Option) (*Shell, er
 	}
 
 	shell := &Shell{
-		store: store,
-		dial:  o.Dial,
-		db:    db,
+		store:  store,
+		dial:   o.Dial,
+		db:     db,
+		format: o.Format,
 	}
 
 	return shell, nil
@@ -53,6 +64,9 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 		return s.processCluster(ctx, line)
 	case ".leader":
 		return s.processLeader(ctx, line)
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".remove") {
+		return s.processRemove(ctx, line)
 	}
 	if strings.HasPrefix(strings.ToUpper(strings.TrimLeft(line, " ")), "SELECT") {
 		return s.processSelect(ctx, line)
@@ -71,11 +85,22 @@ func (s *Shell) processCluster(ctx context.Context, line string) (string, error)
 		return "", err
 	}
 	result := ""
-	for i, server := range cluster {
-		if i > 0 {
-			result += "\n"
+	switch s.format {
+	case formatTabular:
+		for i, server := range cluster {
+			if i > 0 {
+				result += "\n"
+			}
+			result += fmt.Sprintf("%x|%s|%s", server.ID, server.Address, server.Role)
 		}
-		result += fmt.Sprintf("%x|%s|%s", server.ID, server.Address, server.Role)
+	case formatJson:
+		data, err := json.Marshal(cluster)
+		if err != nil {
+			return "", err
+		}
+		var indented bytes.Buffer
+		json.Indent(&indented, data, "", "\t")
+		result = string(indented.Bytes())
 	}
 
 	return result, nil
@@ -94,6 +119,33 @@ func (s *Shell) processLeader(ctx context.Context, line string) (string, error) 
 		return "", nil
 	}
 	return leader.Address, nil
+}
+
+func (s *Shell) processRemove(ctx context.Context, line string) (string, error) {
+	parts := strings.Split(line, " ")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("bad command format, should be: .remove <address>")
+	}
+	address := parts[1]
+	cli, err := client.FindLeader(ctx, s.store, client.WithDialFunc(s.dial))
+	if err != nil {
+		return "", err
+	}
+	cluster, err := cli.Cluster(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, node := range cluster {
+		if node.Address != address {
+			continue
+		}
+		if err := cli.Remove(ctx, node.ID); err != nil {
+			return "", fmt.Errorf("remove node %q: %w", address, err)
+		}
+		return "", nil
+	}
+
+	return "", fmt.Errorf("no node has address %q", address)
 }
 
 func (s *Shell) processSelect(ctx context.Context, line string) (string, error) {

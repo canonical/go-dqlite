@@ -67,6 +67,9 @@ func New(dir string, options ...Option) (app *App, err error) {
 		return nil, err
 	}
 	if !infoFileExists {
+		if o.Address == "" {
+			o.Address = defaultAddress()
+		}
 		if len(o.Cluster) == 0 {
 			info.ID = dqlite.BootstrapID
 		} else {
@@ -122,7 +125,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		// the given cluster addresses (for joining nodes).
 		nodes := []client.NodeInfo{}
 		if info.ID == dqlite.BootstrapID {
-			nodes = append(nodes, client.NodeInfo{Address: o.Address})
+			nodes = append(nodes, client.NodeInfo{Address: info.Address})
 		} else {
 			if len(o.Cluster) == 0 {
 				return nil, fmt.Errorf("no cluster addresses provided")
@@ -153,11 +156,11 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 		nodeDial = makeNodeDialFunc(o.TLS.Dial)
 	} else {
-		nodeBindAddress = o.Address
+		nodeBindAddress = info.Address
 		nodeDial = client.DefaultDialFunc
 	}
 	node, err := dqlite.New(
-		info.ID, o.Address, dir,
+		info.ID, info.Address, dir,
 		dqlite.WithBindAddress(nodeBindAddress),
 		dqlite.WithDialFunc(nodeDial),
 	)
@@ -195,7 +198,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	app = &App{
 		id:              info.ID,
-		address:         o.Address,
+		address:         info.Address,
 		dir:             dir,
 		node:            node,
 		nodeBindAddress: nodeBindAddress,
@@ -213,9 +216,9 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	// Start the proxy if a TLS configuration was provided.
 	if o.TLS != nil {
-		listener, err := net.Listen("tcp", o.Address)
+		listener, err := net.Listen("tcp", info.Address)
 		if err != nil {
-			return nil, fmt.Errorf("listen to %s: %w", o.Address, err)
+			return nil, fmt.Errorf("listen to %s: %w", info.Address, err)
 		}
 		proxyCh := make(chan struct{}, 0)
 

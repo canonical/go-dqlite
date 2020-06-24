@@ -20,9 +20,17 @@ func WithDriverName(name string) Option {
 	}
 }
 
+// WithFormat specifies the output format.
+func WithFormat(format string) Option {
+	return func(options *options) {
+		options.Format = format
+	}
+}
+
 type options struct {
 	Dial       client.DialFunc
 	DriverName string
+	Format     string
 }
 
 // Create a client options object with sane defaults.
@@ -30,5 +38,11 @@ func defaultOptions() *options {
 	return &options{
 		Dial:       client.DefaultDialFunc,
 		DriverName: "dqlite",
+		Format:     formatTabular,
 	}
 }
+
+const (
+	formatTabular = "tabular"
+	formatJson    = "json"
+)
