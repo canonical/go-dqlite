@@ -142,7 +142,6 @@ type options struct {
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		Address:                  defaultAddress(),
 		Log:                      defaultLogFunc,
 		Voters:                   3,
 		StandBys:                 2,

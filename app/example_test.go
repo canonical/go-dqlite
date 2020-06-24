@@ -42,6 +42,7 @@ func Example() {
 
 	fmt.Printf("0x%x %s\n", node.ID(), node.Address())
 	// Output: 0x2dc171858c3155be 127.0.0.1:9001
+	// 0x2dc171858c3155be 127.0.0.1:9001
 }
 
 // After starting the very first node, a second node can be started by passing
