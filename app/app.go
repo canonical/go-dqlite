@@ -295,15 +295,15 @@ func (a *App) Handover(ctx context.Context) error {
 	// If we are a voter or a stand-by, let's transfer our role if
 	// possible.
 	if role == client.Voter || role == client.StandBy {
-		index := a.probeNodes(nodes)
+		cluster := a.probeNodes(nodes)
 
-		// Spare nodes are always candidates.
-		candidates := index[client.Spare][online]
+		// Online spare nodes are always candidates.
+		candidates := cluster.List(client.Spare, true)
 
-		// Stand-by nodes are candidate if we need to transfer voting
+		// Stand-by nodes are candidates if we need to transfer voting
 		// rights, and they are preferred over spares.
 		if role == client.Voter {
-			candidates = append(index[client.StandBy][online], candidates...)
+			candidates = append(cluster.List(client.StandBy, true), candidates...)
 		}
 
 		if len(candidates) == 0 {
@@ -513,8 +513,6 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 	}
 }
 
-const minVoters = 3
-
 // Possibly change our own role at startup.
 func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
 	// If the cluster is still to small, do nothing.
@@ -618,19 +616,21 @@ again:
 		return nil
 	}
 
-	index := a.probeNodes(nodes)
+	cluster := a.probeNodes(nodes)
 
 	// If we have exactly the desired number of voters and stand-bys, and they are all
 	// online, we're good.
-	if len(index[client.Voter][offline]) == 0 && len(index[client.Voter][online]) == a.voters && len(index[client.StandBy][offline]) == 0 && len(index[client.StandBy][online]) == a.standbys {
+	if cluster.Count(client.Voter, false) == 0 && cluster.Count(client.Voter, true) == a.voters && cluster.Count(client.StandBy, false) == 0 && cluster.Count(client.StandBy, true) == a.standbys {
 		return nil
 	}
 
+	onlineVoters := cluster.List(client.Voter, true)
+
 	// If we have less online voters than desired, let's try to promote
 	// some other node.
-	if n := len(index[client.Voter][online]); n < a.voters {
-		candidates := index[client.StandBy][online]
-		candidates = append(candidates, index[client.Spare][online]...)
+	if n := len(onlineVoters); n < a.voters {
+		candidates := cluster.List(client.StandBy, true)
+		candidates = append(candidates, cluster.List(client.Spare, true)...)
 
 		if len(candidates) == 0 {
 			return nil
@@ -653,11 +653,8 @@ again:
 		goto again
 	}
 
-	// If we have more online voters than desired, let's demote one of
-	// them.
-	if n := len(index[client.Voter][online]); n > a.voters {
-		voters := index[client.Voter][online]
-		for i, node := range voters {
+	if n := len(onlineVoters); n > a.voters {
+		for i, node := range onlineVoters {
 			// Don't demote ourselves.
 			if node.ID == a.id {
 				continue
@@ -678,10 +675,11 @@ again:
 		goto again
 	}
 
+	offlineVoters := cluster.List(client.Voter, false)
+
 	// If we have offline voters, let's demote one of them.
-	if n := len(index[client.Voter][offline]); n > 0 {
-		voters := index[client.Voter][offline]
-		for i, node := range voters {
+	if n := len(offlineVoters); n > 0 {
+		for i, node := range offlineVoters {
 			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
 				a.warn("demote offline %s from voter to spare: %v", node.Address, err)
 				if i == len(nodes)-1 {
@@ -698,10 +696,12 @@ again:
 		goto again
 	}
 
-	// If we have less online stand-ys than desired, let's try to promote
+	onlineStandbys := cluster.List(client.StandBy, true)
+
+	// If we have less online stand-bys than desired, let's try to promote
 	// some other node.
-	if n := len(index[client.StandBy][online]); n < a.standbys {
-		candidates := index[client.Spare][online]
+	if n := len(onlineStandbys); n < a.standbys {
+		candidates := cluster.List(client.Spare, true)
 
 		if len(candidates) == 0 {
 			return nil
@@ -726,9 +726,8 @@ again:
 
 	// If we have more online stand-bys than desired, let's demote one of
 	// them.
-	if n := len(index[client.StandBy][online]); n > a.standbys {
-		standbys := index[client.StandBy][online]
-		for i, node := range standbys {
+	if n := len(onlineStandbys); n > a.standbys {
+		for i, node := range onlineStandbys {
 			// Don't demote ourselves.
 			if node.ID == a.id {
 				continue
@@ -749,10 +748,11 @@ again:
 		goto again
 	}
 
+	offlineStandbys := cluster.List(client.StandBy, false)
+
 	// If we have offline stand-bys, let's demote one of them.
-	if n := len(index[client.StandBy][offline]); n > 0 {
-		standbys := index[client.StandBy][offline]
-		for i, node := range standbys {
+	if n := len(offlineStandbys); n > 0 {
+		for i, node := range offlineStandbys {
 			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
 				a.warn("demote offline %s from stand-by to spare: %v", node.Address, err)
 				if i == len(nodes)-1 {
@@ -772,41 +772,26 @@ again:
 	return nil
 }
 
-const (
-	online  = 0
-	offline = 1
-)
+// Probe all given nodes for connectivity, fetching their metadata as well.
+func (a *App) probeNodes(nodes []client.NodeInfo) clusterState {
+	cluster := clusterState{}
 
-// Probe all given nodes for connectivity, grouping them by role and by
-// online/offline state.
-func (a *App) probeNodes(nodes []client.NodeInfo) map[client.NodeRole][2][]client.NodeInfo {
-	// Group all nodes by role, and divide them between online an not
-	// online.
-	index := map[client.NodeRole][2][]client.NodeInfo{
-		client.Spare:   {{}, {}},
-		client.StandBy: {{}, {}},
-		client.Voter:   {{}, {}},
-	}
 	for _, node := range nodes {
-		state := offline
-		if node.ID == a.id {
-			state = online
-		} else {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
+		cluster[node] = nil
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
 
-			cli, err := client.New(ctx, node.Address, a.clientOptions()...)
+		cli, err := client.New(ctx, node.Address, a.clientOptions()...)
+		if err == nil {
+			metadata, err := cli.Describe(ctx)
 			if err == nil {
-				state = online
-				cli.Close()
+				cluster[node] = metadata
 			}
+			cli.Close()
 		}
-		role := index[node.Role]
-		role[state] = append(role[state], node)
-		index[node.Role] = role
 	}
 
-	return index
+	return cluster
 }
 
 // Return the options to use for client.FindLeader() or client.New()
