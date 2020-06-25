@@ -130,6 +130,32 @@ func TestClient_Transfer(t *testing.T) {
 
 }
 
+func TestClient_Describe(t *testing.T) {
+	node, cleanup := newNode(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	cli, err := client.New(ctx, node.BindAddress())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	metadata, err := cli.Describe(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, uint64(0), metadata.FailureDomain)
+	assert.Equal(t, uint64(0), metadata.Weight)
+
+	require.NoError(t, cli.Weight(context.Background(), 123))
+
+	metadata, err = cli.Describe(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, uint64(0), metadata.FailureDomain)
+	assert.Equal(t, uint64(123), metadata.Weight)
+}
+
 func newNode(t *testing.T) (*dqlite.Node, func()) {
 	t.Helper()
 	dir, dirCleanup := newDir(t)

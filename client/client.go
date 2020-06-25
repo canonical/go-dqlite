@@ -246,6 +246,62 @@ func (c *Client) Remove(ctx context.Context, id uint64) error {
 		return err
 	}
 
+	if err := protocol.DecodeEmpty(&response); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// NodeMetadata user-defined node-level metadata.
+type NodeMetadata struct {
+	FailureDomain uint64
+	Weight        uint64
+}
+
+// Describe returns metadata about the node we're connected with.
+func (c *Client) Describe(ctx context.Context) (*NodeMetadata, error) {
+	request := protocol.Message{}
+	request.Init(4096)
+	response := protocol.Message{}
+	response.Init(4096)
+
+	protocol.EncodeDescribe(&request, protocol.RequestDescribeFormatV0)
+
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+		return nil, err
+	}
+
+	domain, weight, err := protocol.DecodeMetadata(&response)
+	if err != nil {
+		return nil, err
+	}
+
+	metadata := &NodeMetadata{
+		FailureDomain: domain,
+		Weight:        weight,
+	}
+
+	return metadata, nil
+}
+
+// Weight updates the weight associated to the node we're connected with.
+func (c *Client) Weight(ctx context.Context, weight uint64) error {
+	request := protocol.Message{}
+	request.Init(4096)
+	response := protocol.Message{}
+	response.Init(4096)
+
+	protocol.EncodeWeight(&request, weight)
+
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+		return err
+	}
+
+	if err := protocol.DecodeEmpty(&response); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -253,3 +253,26 @@ func DecodeFiles(response *Message) (files Files, err error) {
 
 	return
 }
+
+// DecodeMetadata decodes a Metadata response.
+func DecodeMetadata(response *Message) (failureDomain uint64, weight uint64, err error) {
+	mtype, _ := response.getHeader()
+
+	if mtype == ResponseFailure {
+		e := ErrRequest{}
+		e.Code = response.getUint64()
+		e.Description = response.getString()
+                err = e
+                return
+	}
+
+	if mtype != ResponseMetadata {
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseMetadata), mtype)
+                return
+	}
+
+	failureDomain = response.getUint64()
+	weight = response.getUint64()
+
+	return
+}
