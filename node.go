@@ -45,6 +45,13 @@ func WithNetworkLatency(latency time.Duration) Option {
 	}
 }
 
+// WithFailureDomain sets the code of the failure domain the node belongs to.
+func WithFailureDomain(code uint64) Option {
+	return func(options *options) {
+		options.FailureDomain = code
+	}
+}
+
 // New creates a new Node instance.
 func New(id uint64, address string, dir string, options ...Option) (*Node, error) {
 	o := defaultOptions()
@@ -69,6 +76,11 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 	}
 	if o.NetworkLatency != 0 {
 		if err := server.SetNetworkLatency(o.NetworkLatency); err != nil {
+			return nil, err
+		}
+	}
+	if o.FailureDomain != 0 {
+		if err := server.SetFailureDomain(o.FailureDomain); err != nil {
 			return nil, err
 		}
 	}
@@ -107,6 +119,7 @@ type options struct {
 	DialFunc       client.DialFunc
 	BindAddress    string
 	NetworkLatency uint64
+	FailureDomain  uint64
 }
 
 // Close the server, releasing all resources it created.

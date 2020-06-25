@@ -15,6 +15,7 @@ package bindings
 #define EMIT_BUF_LEN 1024
 
 typedef unsigned long long nanoseconds_t;
+typedef unsigned long long failure_domain_t;
 
 // Duplicate a file descriptor and prevent it from being cloned into child processes.
 static int dupCloexec(int oldfd) {
@@ -148,6 +149,15 @@ func (s *Node) SetNetworkLatency(nanoseconds uint64) error {
 	cnanoseconds := C.nanoseconds_t(nanoseconds)
 	if rc := C.dqlite_node_set_network_latency(server, cnanoseconds); rc != 0 {
 		return fmt.Errorf("failed to set network latency")
+	}
+	return nil
+}
+
+func (s *Node) SetFailureDomain(code uint64) error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	ccode := C.failure_domain_t(code)
+	if rc := C.dqlite_node_set_failure_domain(server, ccode); rc != 0 {
+		return fmt.Errorf("set failure domain: %d", rc)
 	}
 	return nil
 }
