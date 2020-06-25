@@ -39,6 +39,7 @@ type App struct {
 	readyCh         chan struct{}      // Waits for startup tasks
 	voters          int
 	standbys        int
+	roles           *rolesAdjustmentAlgorithm
 }
 
 // New creates a new application node.
@@ -213,6 +214,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		readyCh:         make(chan struct{}, 0),
 		voters:          o.Voters,
 		standbys:        o.StandBys,
+		roles:           &rolesAdjustmentAlgorithm{voters: o.Voters, standbys: o.StandBys},
 	}
 
 	// Start the proxy if a TLS configuration was provided.
@@ -279,55 +281,30 @@ func (a *App) Handover(ctx context.Context) error {
 		return fmt.Errorf("cluster servers: %w", err)
 	}
 
-	role := client.NodeRole(-1)
-	for _, node := range nodes {
-		if node.ID == a.id {
-			role = node.Role
-		}
-	}
+	cluster := a.probeNodes(nodes)
 
-	// If we are not in the list, it means we were removed, just do
-	// nothing.
+	role, candidates := a.roles.Handover(a.id, cluster)
+
 	if role == -1 {
 		return nil
 	}
 
-	// If we are a voter or a stand-by, let's transfer our role if
-	// possible.
-	if role == client.Voter || role == client.StandBy {
-		cluster := a.probeNodes(nodes)
-
-		// Online spare nodes are always candidates.
-		candidates := cluster.List(client.Spare, true)
-
-		// Stand-by nodes are candidates if we need to transfer voting
-		// rights, and they are preferred over spares.
-		if role == client.Voter {
-			candidates = append(cluster.List(client.StandBy, true), candidates...)
-		}
-
-		if len(candidates) == 0 {
-			// No online node available to be promoted.
-			return nil
-		}
-
-		for i, node := range candidates {
-			if err := cli.Assign(ctx, node.ID, role); err != nil {
-				a.warn("promote %s from %s to %s: %v", node.Address, node.Role, role, err)
-				if i == len(candidates)-1 {
-					// We could not promote any node
-					return fmt.Errorf("could not promote any online node to %s", role)
-				}
-				continue
+	for i, node := range candidates {
+		if err := cli.Assign(ctx, node.ID, role); err != nil {
+			a.warn("promote %s from %s to %s: %v", node.Address, node.Role, role, err)
+			if i == len(candidates)-1 {
+				// We could not promote any node
+				return fmt.Errorf("could not promote any online node to %s", role)
 			}
-			a.debug("promoted %s from %s to %s", node.Address, node.Role, role)
-			break
+			continue
 		}
+		a.debug("promoted %s from %s to %s", node.Address, node.Role, role)
+		break
+	}
 
-		// Demote ourselves.
-		if err := cli.Assign(ctx, a.ID(), client.Spare); err != nil {
-			return fmt.Errorf("demote ourselves: %w", err)
-		}
+	// Demote ourselves.
+	if err := cli.Assign(ctx, a.ID(), client.Spare); err != nil {
+		return fmt.Errorf("demote ourselves: %w", err)
 	}
 
 	return nil
@@ -490,7 +467,8 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 			// If we are starting up, let's see if we should
 			// promote ourselves.
 			if !ready {
-				if err := a.maybePromoteOurselves(ctx, cli, servers); err != nil {
+				cluster := a.probeNodes(servers)
+				if err := a.maybePromoteOurselves(ctx, cli, cluster); err != nil {
 					a.warn("%v", err)
 					delay = time.Second
 					cli.Close()
@@ -514,48 +492,11 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 }
 
 // Possibly change our own role at startup.
-func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
-	// If the cluster is still to small, do nothing.
-	if len(nodes) < minVoters {
-		return nil
-	}
+func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, cluster clusterState) error {
+	role := a.roles.Startup(a.id, cluster)
 
-	voters := 0
-	standbys := 0
-	role := client.NodeRole(-1)
-
-	for _, node := range nodes {
-		if node.ID == a.id {
-			role = node.Role
-		}
-		switch node.Role {
-		case client.Voter:
-			voters++
-		case client.StandBy:
-			standbys++
-		}
-	}
-
-	// If we are not in the list, it means we were removed, just do nothing.
 	if role == -1 {
 		return nil
-	}
-
-	// If we already have the Voter or StandBy role, there's nothing to do.
-	if role == client.Voter || role == client.StandBy {
-		return nil
-	}
-
-	// If we have already reached the desired number of voters and
-	// stand-bys, there's nothing to do.
-	if voters >= a.voters && standbys >= a.standbys {
-		return nil
-	}
-
-	// Figure if we need to become stand-by or voter.
-	role = client.StandBy
-	if voters < a.voters {
-		role = client.Voter
 	}
 
 	// Promote ourselves.
@@ -567,8 +508,8 @@ func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nod
 	// node threshold. If we don't succeed in doing that, errors are
 	// ignored since the leader will eventually notice that don't have
 	// enough voters and will retry.
-	if role == client.Voter && voters == 1 {
-		for _, node := range nodes {
+	if role == client.Voter && cluster.Count(client.Voter, true) == 1 {
+		for node := range cluster {
 			if node.ID == a.id || node.Role == client.Voter {
 				continue
 			}
@@ -599,177 +540,26 @@ again:
 		return err
 	}
 
-	if len(nodes) == 1 {
-		return nil
-	}
-
-	// If the cluster is too small, make sure we have just one voter (us).
-	if len(nodes) < minVoters {
-		for _, node := range nodes {
-			if node.ID == a.ID() || node.Role != client.Voter {
-				continue
-			}
-			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
-				a.warn("demote %s from %s to spare: %v", node.Address, node.Role, err)
-			}
-		}
-		return nil
-	}
-
 	cluster := a.probeNodes(nodes)
 
-	// If we have exactly the desired number of voters and stand-bys, and they are all
-	// online, we're good.
-	if cluster.Count(client.Voter, false) == 0 && cluster.Count(client.Voter, true) == a.voters && cluster.Count(client.StandBy, false) == 0 && cluster.Count(client.StandBy, true) == a.standbys {
+	role, nodes := a.roles.Adjust(a.id, cluster)
+	if role == -1 {
 		return nil
 	}
 
-	onlineVoters := cluster.List(client.Voter, true)
-
-	// If we have less online voters than desired, let's try to promote
-	// some other node.
-	if n := len(onlineVoters); n < a.voters {
-		candidates := cluster.List(client.StandBy, true)
-		candidates = append(candidates, cluster.List(client.Spare, true)...)
-
-		if len(candidates) == 0 {
-			return nil
-		}
-
-		for i, node := range candidates {
-			if err := cli.Assign(ctx, node.ID, client.Voter); err != nil {
-				a.warn("promote %s from %s to voter: %v", node.Address, node.Role, err)
-				if i == len(candidates)-1 {
-					// We could not promote any node
-					return fmt.Errorf("could not promote any online node to voter")
-				}
-				continue
+	for i, node := range nodes {
+		if err := cli.Assign(ctx, node.ID, role); err != nil {
+			a.warn("change %s from %s to %s: %v", node.Address, node.Role, role, err)
+			if i == len(nodes)-1 {
+				// We could not change any node
+				return fmt.Errorf("could not assign role %s to any node", role)
 			}
-			a.debug("promoted %s from %s to voter", node.Address, node.Role)
-			break
+			continue
 		}
-
-		// Check again if we need more adjustments
-		goto again
+		break
 	}
 
-	if n := len(onlineVoters); n > a.voters {
-		for i, node := range onlineVoters {
-			// Don't demote ourselves.
-			if node.ID == a.id {
-				continue
-			}
-			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
-				a.warn("demote online %s from voter to spare: %v", node.Address, err)
-				if i == len(nodes)-1 {
-					// We could not demote any node
-					return fmt.Errorf("could not demote any redundant online voter")
-				}
-				continue
-			}
-			a.debug("demoted %s from voter to spare", node.Address)
-			break
-		}
-
-		// Check again if we need more adjustments
-		goto again
-	}
-
-	offlineVoters := cluster.List(client.Voter, false)
-
-	// If we have offline voters, let's demote one of them.
-	if n := len(offlineVoters); n > 0 {
-		for i, node := range offlineVoters {
-			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
-				a.warn("demote offline %s from voter to spare: %v", node.Address, err)
-				if i == len(nodes)-1 {
-					// We could not promote any node
-					return fmt.Errorf("could not demote any offline voter node")
-				}
-				continue
-			}
-			a.debug("demoted offline voter %s", node.Address)
-			break
-		}
-
-		// Check again if we need more adjustments
-		goto again
-	}
-
-	onlineStandbys := cluster.List(client.StandBy, true)
-
-	// If we have less online stand-bys than desired, let's try to promote
-	// some other node.
-	if n := len(onlineStandbys); n < a.standbys {
-		candidates := cluster.List(client.Spare, true)
-
-		if len(candidates) == 0 {
-			return nil
-		}
-
-		for i, node := range candidates {
-			if err := cli.Assign(ctx, node.ID, client.StandBy); err != nil {
-				a.warn("promote %s to stand-by: %v", node.Address, err)
-				if i == len(candidates)-1 {
-					// We could not promote any node
-					return fmt.Errorf("could not promote any online node to stand-by")
-				}
-				continue
-			}
-			a.debug("promoted %s to stand-by", node.Address)
-			break
-		}
-
-		// Check again if we need more adjustments
-		goto again
-	}
-
-	// If we have more online stand-bys than desired, let's demote one of
-	// them.
-	if n := len(onlineStandbys); n > a.standbys {
-		for i, node := range onlineStandbys {
-			// Don't demote ourselves.
-			if node.ID == a.id {
-				continue
-			}
-			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
-				a.warn("demote online %s from stand-by to spare: %v", node.Address, err)
-				if i == len(nodes)-1 {
-					// We could not demote any node
-					return fmt.Errorf("could not demote any redundant online stand-by")
-				}
-				continue
-			}
-			a.debug("demoted %s from stand-by to spare", node.Address)
-			break
-		}
-
-		// Check again if we need more adjustments
-		goto again
-	}
-
-	offlineStandbys := cluster.List(client.StandBy, false)
-
-	// If we have offline stand-bys, let's demote one of them.
-	if n := len(offlineStandbys); n > 0 {
-		for i, node := range offlineStandbys {
-			if err := cli.Assign(ctx, node.ID, client.Spare); err != nil {
-				a.warn("demote offline %s from stand-by to spare: %v", node.Address, err)
-				if i == len(nodes)-1 {
-					// We could not promote any node
-					return fmt.Errorf("could not demote any offline stand-by node")
-				}
-				continue
-			}
-			a.debug("demoted offline stand-y %s", node.Address)
-			break
-		}
-
-		// Check again if we need more adjustments
-		goto again
-	}
-
-	return nil
+	goto again
 }
 
 // Probe all given nodes for connectivity, fetching their metadata as well.
