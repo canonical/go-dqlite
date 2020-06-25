@@ -124,6 +124,16 @@ func WithLogFunc(log client.LogFunc) Option {
 	}
 }
 
+// WithFailureDomain sets the node's failure domain.
+//
+// Failure domains are taken into account when deciding which nodes to promote
+// to Voter or StandBy when needed.
+func WithFailureDomain(code uint64) Option {
+	return func(options *options) {
+		options.FailureDomain = code
+	}
+}
+
 type tlsSetup struct {
 	Listen *tls.Config
 	Dial   *tls.Config
@@ -137,6 +147,7 @@ type options struct {
 	Voters                   int
 	StandBys                 int
 	RolesAdjustmentFrequency time.Duration
+	FailureDomain            uint64
 }
 
 // Create a options object with sane defaults.
