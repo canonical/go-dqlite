@@ -574,6 +574,65 @@ func TestRolesAdjustment_ReplaceStandBy(t *testing.T) {
 	assert.Equal(t, client.StandBy, cluster[6].Role)
 }
 
+// If a stand-by goes offline, another node takes its place. If possible, pick
+// a stand-by from a failure domain which differs from the one of the two other
+// stand-bys.
+func TestRolesAdjustment_ReplaceStandByHonorFailureDomains(t *testing.T) {
+	n := 9
+	apps := make([]*app.App, n)
+	cleanups := make([]func(), n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithFailureDomain(uint64(i % 3)),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+		cleanups[i] = cleanup
+	}
+
+	defer cleanups[0]()
+	defer cleanups[1]()
+	defer cleanups[2]()
+	defer cleanups[3]()
+	defer cleanups[5]()
+	defer cleanups[6]()
+	defer cleanups[7]()
+	defer cleanups[8]()
+
+	// A stand-by from failure domain 1 goes offline.
+	cleanups[4]()
+
+	time.Sleep(2 * time.Second)
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	// The replacement was picked in the same failure domain.
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.Spare, cluster[4].Role)
+	assert.Equal(t, client.StandBy, cluster[5].Role)
+	assert.Equal(t, client.Spare, cluster[6].Role)
+	assert.Equal(t, client.StandBy, cluster[7].Role)
+	assert.Equal(t, client.Spare, cluster[8].Role)
+}
+
 // Open a database on a fresh one-node cluster.
 func TestOpen(t *testing.T) {
 	app, cleanup := newApp(t)

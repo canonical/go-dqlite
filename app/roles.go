@@ -237,6 +237,9 @@ func (a *rolesAdjustmentAlgorithm) Adjust(leader uint64, cluster clusterState) (
 			return -1, nil
 		}
 
+		domains := cluster.FailureDomains(onlineStandbys)
+		cluster.SortCandidates(candidates, domains)
+
 		return client.StandBy, candidates
 	}
 
