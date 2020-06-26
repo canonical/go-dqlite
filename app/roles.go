@@ -1,6 +1,8 @@
 package app
 
 import (
+	"sort"
+
 	"github.com/canonical/go-dqlite/client"
 )
 
@@ -37,6 +39,51 @@ func (c clusterState) Get(id uint64) *client.NodeInfo {
 		}
 	}
 	return nil
+}
+
+// Metadata returns the metadata of the given node, if any.
+func (c clusterState) Metadata(node client.NodeInfo) *client.NodeMetadata {
+	return c[node]
+}
+
+// FailureDomains returns a map of the failure domains associated with the
+// given nodes.
+func (c clusterState) FailureDomains(nodes []client.NodeInfo) map[uint64]bool {
+	domains := map[uint64]bool{}
+	for _, node := range nodes {
+		metadata := c[node]
+		if metadata == nil {
+			continue
+		}
+		domains[metadata.FailureDomain] = true
+	}
+	return domains
+}
+
+// Sort the given candidates according to their failure domain and
+// weight. Candidates belonging to a failure domain different from the given
+// domains take precedence.
+func (c clusterState) SortCandidates(candidates []client.NodeInfo, domains map[uint64]bool) {
+	less := func(i, j int) bool {
+		metadata1 := c.Metadata(candidates[i])
+		metadata2 := c.Metadata(candidates[j])
+
+		// If i's failure domain is not in the given list, but j's is,
+		// then i takes precedence.
+		if !domains[metadata1.FailureDomain] && domains[metadata2.FailureDomain] {
+			return true
+		}
+
+		// If j's failure domain is not in the given list, but i's is,
+		// then j takes precedence.
+		if !domains[metadata2.FailureDomain] && domains[metadata1.FailureDomain] {
+			return false
+		}
+
+		return false
+	}
+
+	sort.Slice(candidates, less)
 }
 
 const minVoters = 3
@@ -88,7 +135,6 @@ func (a *rolesAdjustmentAlgorithm) Startup(id uint64, cluster clusterState) clie
 // should receive it, in order of preference.
 func (a *rolesAdjustmentAlgorithm) Handover(id uint64, cluster clusterState) (client.NodeRole, []client.NodeInfo) {
 	node := cluster.Get(id)
-
 	// If we are not in the cluster, it means we were removed, just do nothing.
 	if node == nil {
 		return -1, nil
@@ -155,6 +201,9 @@ func (a *rolesAdjustmentAlgorithm) Adjust(leader uint64, cluster clusterState) (
 		if len(candidates) == 0 {
 			return -1, nil
 		}
+
+		domains := cluster.FailureDomains(onlineVoters)
+		cluster.SortCandidates(candidates, domains)
 
 		return client.Voter, candidates
 	}

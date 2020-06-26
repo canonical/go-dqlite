@@ -424,6 +424,59 @@ func TestRolesAdjustment_ReplaceVoter(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[3].Role)
 }
 
+// If a voter goes offline, another node takes its place. If possible, pick a
+// voter from a failure domain which differs from the one of the two other
+// voters.
+func TestRolesAdjustment_ReplaceVoterHonorFailureDomain(t *testing.T) {
+	n := 6
+	apps := make([]*app.App, n)
+	cleanups := make([]func(), n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithFailureDomain(uint64(i % 3)),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+		cleanups[i] = cleanup
+	}
+
+	defer cleanups[0]()
+	defer cleanups[1]()
+	defer cleanups[3]()
+	defer cleanups[4]()
+	defer cleanups[5]()
+
+	// A voter in failure domain 2 goes offline.
+	cleanups[2]()
+
+	time.Sleep(2 * time.Second)
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	// The replacement was picked in the same failure domain.
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Spare, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[4].Role)
+	assert.Equal(t, client.Voter, cluster[5].Role)
+}
+
 // If a voter goes offline, but no another node can its place, then nothing
 // chagnes.
 func TestRolesAdjustment_CantReplaceVoter(t *testing.T) {
