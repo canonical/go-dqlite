@@ -291,6 +291,50 @@ func TestHandover_Voter(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[3].Role)
 }
 
+// Transfer voting rights to another online node. Failure domains are taken
+// into account.
+func TestHandover_VoterHonorFailureDomain(t *testing.T) {
+	n := 6
+	apps := make([]*app.App, n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithFailureDomain(uint64(i % 3)),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+		defer cleanup()
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+	}
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	require.NoError(t, apps[2].Handover(context.Background()))
+
+	cluster, err = cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Spare, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[4].Role)
+	assert.Equal(t, client.Voter, cluster[5].Role)
+}
+
 // Transfer the stand-by role to another online node.
 func TestHandover_StandBy(t *testing.T) {
 	n := 7

@@ -145,6 +145,17 @@ func (a *rolesAdjustmentAlgorithm) Handover(id uint64, cluster clusterState) (cl
 		return -1, nil
 	}
 
+	// Make a list of all online nodes with the same role and get their
+	// failure domains.
+	peers := cluster.List(node.Role, true)
+	for i := range peers {
+		if peers[i].ID == node.ID {
+			peers = append(peers[:i], peers[i+1:]...)
+			break
+		}
+	}
+	domains := cluster.FailureDomains(peers)
+
 	// Online spare nodes are always candidates.
 	candidates := cluster.List(client.Spare, true)
 
@@ -158,6 +169,8 @@ func (a *rolesAdjustmentAlgorithm) Handover(id uint64, cluster clusterState) (cl
 		// No online node available to be promoted.
 		return -1, nil
 	}
+
+	cluster.SortCandidates(candidates, domains)
 
 	return node.Role, candidates
 }
