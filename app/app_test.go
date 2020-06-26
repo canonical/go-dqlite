@@ -40,6 +40,7 @@ func TestNew_PristineJoiner(t *testing.T) {
 	// The joining node to appear in the cluster list.
 	cli, err := app1.Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -95,6 +96,7 @@ func TestNew_SecondJoiner(t *testing.T) {
 
 	cli, err := app1.Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -130,6 +132,7 @@ func TestNew_ThirdJoiner(t *testing.T) {
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -162,6 +165,7 @@ func TestNew_FourthJoiner(t *testing.T) {
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -173,7 +177,7 @@ func TestNew_FourthJoiner(t *testing.T) {
 	assert.Equal(t, client.StandBy, cluster[4].Role)
 }
 
-// The fifth joiner gets the spare role.
+// The fifth joiner gets the stand-by role.
 func TestNew_FifthJoiner(t *testing.T) {
 	apps := []*app.App{}
 
@@ -195,6 +199,7 @@ func TestNew_FifthJoiner(t *testing.T) {
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -204,7 +209,43 @@ func TestNew_FifthJoiner(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[2].Role)
 	assert.Equal(t, client.StandBy, cluster[3].Role)
 	assert.Equal(t, client.StandBy, cluster[4].Role)
-	assert.Equal(t, client.Spare, cluster[5].Role)
+	assert.Equal(t, client.StandBy, cluster[5].Role)
+}
+
+// The sixth joiner gets the spare role.
+func TestNew_SixthJoiner(t *testing.T) {
+	apps := []*app.App{}
+
+	for i := 0; i < 7; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{app.WithAddress(addr)}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+		defer cleanup()
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps = append(apps, app)
+
+	}
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[4].Role)
+	assert.Equal(t, client.StandBy, cluster[5].Role)
+	assert.Equal(t, client.Spare, cluster[6].Role)
 }
 
 // Transfer voting rights to another online node.
@@ -229,6 +270,7 @@ func TestHandover_Voter(t *testing.T) {
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -249,9 +291,53 @@ func TestHandover_Voter(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[3].Role)
 }
 
+// Transfer voting rights to another online node. Failure domains are taken
+// into account.
+func TestHandover_VoterHonorFailureDomain(t *testing.T) {
+	n := 6
+	apps := make([]*app.App, n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithFailureDomain(uint64(i % 3)),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+		defer cleanup()
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+	}
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	require.NoError(t, apps[2].Handover(context.Background()))
+
+	cluster, err = cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Spare, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[4].Role)
+	assert.Equal(t, client.Voter, cluster[5].Role)
+}
+
 // Transfer the stand-by role to another online node.
 func TestHandover_StandBy(t *testing.T) {
-	n := 6
+	n := 7
 	apps := make([]*app.App, n)
 
 	for i := 0; i < n; i++ {
@@ -271,6 +357,7 @@ func TestHandover_StandBy(t *testing.T) {
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -280,7 +367,8 @@ func TestHandover_StandBy(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[2].Role)
 	assert.Equal(t, client.StandBy, cluster[3].Role)
 	assert.Equal(t, client.StandBy, cluster[4].Role)
-	assert.Equal(t, client.Spare, cluster[5].Role)
+	assert.Equal(t, client.StandBy, cluster[5].Role)
+	assert.Equal(t, client.Spare, cluster[6].Role)
 
 	require.NoError(t, apps[4].Handover(context.Background()))
 
@@ -293,6 +381,7 @@ func TestHandover_StandBy(t *testing.T) {
 	assert.Equal(t, client.StandBy, cluster[3].Role)
 	assert.Equal(t, client.Spare, cluster[4].Role)
 	assert.Equal(t, client.StandBy, cluster[5].Role)
+	assert.Equal(t, client.StandBy, cluster[6].Role)
 }
 
 // Transfer leadership and voting rights to another node.
@@ -317,6 +406,7 @@ func TestHandover_TransferLeadership(t *testing.T) {
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	leader, err := cli.Leader(context.Background())
 	require.NoError(t, err)
@@ -327,6 +417,7 @@ func TestHandover_TransferLeadership(t *testing.T) {
 
 	cli, err = apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	leader, err = cli.Leader(context.Background())
 	require.NoError(t, err)
@@ -377,6 +468,7 @@ func TestRolesAdjustment_ReplaceVoter(t *testing.T) {
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -385,6 +477,127 @@ func TestRolesAdjustment_ReplaceVoter(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[1].Role)
 	assert.Equal(t, client.Spare, cluster[2].Role)
 	assert.Equal(t, client.Voter, cluster[3].Role)
+}
+
+// If a voter goes offline, another node takes its place. If possible, pick a
+// voter from a failure domain which differs from the one of the two other
+// voters.
+func TestRolesAdjustment_ReplaceVoterHonorFailureDomain(t *testing.T) {
+	n := 6
+	apps := make([]*app.App, n)
+	cleanups := make([]func(), n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithFailureDomain(uint64(i % 3)),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+		cleanups[i] = cleanup
+	}
+
+	defer cleanups[0]()
+	defer cleanups[1]()
+	defer cleanups[3]()
+	defer cleanups[4]()
+	defer cleanups[5]()
+
+	// A voter in failure domain 2 goes offline.
+	cleanups[2]()
+
+	time.Sleep(2 * time.Second)
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	// The replacement was picked in the same failure domain.
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Spare, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.StandBy, cluster[4].Role)
+	assert.Equal(t, client.Voter, cluster[5].Role)
+}
+
+// If a voter goes offline, another node takes its place. Preference will be
+// given to candidates with lower weights.
+func TestRolesAdjustment_ReplaceVoterHonorWeight(t *testing.T) {
+	n := 6
+	apps := make([]*app.App, n)
+	cleanups := make([]func(), n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+		cleanups[i] = cleanup
+	}
+
+	defer cleanups[0]()
+	defer cleanups[1]()
+	defer cleanups[3]()
+	defer cleanups[4]()
+	defer cleanups[5]()
+
+	// A voter in failure domain 2 goes offline.
+	cleanups[2]()
+
+	cli, err := apps[3].Client(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, cli.Weight(context.Background(), uint64(15)))
+	defer cli.Close()
+
+	cli, err = apps[4].Client(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, cli.Weight(context.Background(), uint64(5)))
+	defer cli.Close()
+
+	cli, err = apps[5].Client(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, cli.Weight(context.Background(), uint64(10)))
+	defer cli.Close()
+
+	time.Sleep(2 * time.Second)
+
+	cli, err = apps[0].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	// The stand-by with the lowest weight was picked.
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Spare, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.Voter, cluster[4].Role)
+	assert.Equal(t, client.StandBy, cluster[5].Role)
 }
 
 // If a voter goes offline, but no another node can its place, then nothing
@@ -423,6 +636,7 @@ func TestRolesAdjustment_CantReplaceVoter(t *testing.T) {
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -435,7 +649,7 @@ func TestRolesAdjustment_CantReplaceVoter(t *testing.T) {
 
 // If a stand-by goes offline, another node takes its place.
 func TestRolesAdjustment_ReplaceStandBy(t *testing.T) {
-	n := 6
+	n := 7
 	apps := make([]*app.App, n)
 	cleanups := make([]func(), n)
 
@@ -462,6 +676,7 @@ func TestRolesAdjustment_ReplaceStandBy(t *testing.T) {
 	defer cleanups[2]()
 	defer cleanups[3]()
 	defer cleanups[5]()
+	defer cleanups[6]()
 
 	// A stand-by goes offline.
 	cleanups[4]()
@@ -470,6 +685,7 @@ func TestRolesAdjustment_ReplaceStandBy(t *testing.T) {
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
+	defer cli.Close()
 
 	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
@@ -480,6 +696,67 @@ func TestRolesAdjustment_ReplaceStandBy(t *testing.T) {
 	assert.Equal(t, client.StandBy, cluster[3].Role)
 	assert.Equal(t, client.Spare, cluster[4].Role)
 	assert.Equal(t, client.StandBy, cluster[5].Role)
+	assert.Equal(t, client.StandBy, cluster[6].Role)
+}
+
+// If a stand-by goes offline, another node takes its place. If possible, pick
+// a stand-by from a failure domain which differs from the one of the two other
+// stand-bys.
+func TestRolesAdjustment_ReplaceStandByHonorFailureDomains(t *testing.T) {
+	n := 9
+	apps := make([]*app.App, n)
+	cleanups := make([]func(), n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithFailureDomain(uint64(i % 3)),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+		cleanups[i] = cleanup
+	}
+
+	defer cleanups[0]()
+	defer cleanups[1]()
+	defer cleanups[2]()
+	defer cleanups[3]()
+	defer cleanups[5]()
+	defer cleanups[6]()
+	defer cleanups[7]()
+	defer cleanups[8]()
+
+	// A stand-by from failure domain 1 goes offline.
+	cleanups[4]()
+
+	time.Sleep(2 * time.Second)
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	// The replacement was picked in the same failure domain.
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.Spare, cluster[4].Role)
+	assert.Equal(t, client.StandBy, cluster[5].Role)
+	assert.Equal(t, client.Spare, cluster[6].Role)
+	assert.Equal(t, client.StandBy, cluster[7].Role)
+	assert.Equal(t, client.Spare, cluster[8].Role)
 }
 
 // Open a database on a fresh one-node cluster.

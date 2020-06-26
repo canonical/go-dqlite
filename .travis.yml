@@ -31,5 +31,4 @@ script:
   - VERBOSE=1 ./test/roles.sh
 
 go:
-  - "1.13"
   - "1.14"

@@ -54,6 +54,13 @@ const (
 	RequestDump      = 15
 	RequestCluster   = 16
 	RequestTransfer  = 17
+	RequestDescribe  = 18
+	RequestWeight    = 19
+)
+
+// Formats
+const (
+	RequestDescribeFormatV0 = 0
 )
 
 // Response types.
@@ -69,6 +76,7 @@ const (
 	ResponseRows       = 7
 	ResponseEmpty      = 8
 	ResponseFiles      = 9
+	ResponseMetadata   = 10
 )
 
 // Human-readable description of a request type.
@@ -109,6 +117,8 @@ func requestDesc(code uint8) string {
 		return "cluster"
 	case RequestTransfer:
 		return "transfer"
+	case RequestDescribe:
+		return "describe"
 	}
 	return "unknown"
 }
@@ -136,6 +146,8 @@ func responseDesc(code uint8) string {
 		return "empty"
 	case ResponseFiles:
 		return "files"
+	case ResponseMetadata:
+		return "metadata"
 	}
 	return "unknown"
 }

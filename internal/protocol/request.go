@@ -154,3 +154,19 @@ func EncodeTransfer(request *Message, id uint64) {
 
 	request.putHeader(RequestTransfer)
 }
+
+// EncodeDescribe encodes a Describe request.
+func EncodeDescribe(request *Message, format uint64) {
+	request.reset()
+	request.putUint64(format)
+
+	request.putHeader(RequestDescribe)
+}
+
+// EncodeWeight encodes a Weight request.
+func EncodeWeight(request *Message, weight uint64) {
+	request.reset()
+	request.putUint64(weight)
+
+	request.putHeader(RequestWeight)
+}
