@@ -96,9 +96,9 @@ func WithVoters(n int) Option {
 // All App instances in a cluster must be created with the same WithStandBys
 // setting.
 //
-// The given value must be an even number greater than zero.
+// The given value must be an odd number.
 //
-// The default value is 2.
+// The default value is 3.
 func WithStandBys(n int) Option {
 	return func(options *options) {
 		options.StandBys = n
@@ -155,7 +155,7 @@ func defaultOptions() *options {
 	return &options{
 		Log:                      defaultLogFunc,
 		Voters:                   3,
-		StandBys:                 2,
+		StandBys:                 3,
 		RolesAdjustmentFrequency: 30 * time.Second,
 	}
 }

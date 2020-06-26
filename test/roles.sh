@@ -8,7 +8,7 @@ VERBOSE=${VERBOSE:-0}
 DIR=$(mktemp -d)
 BINARY=$DIR/main
 CLUSTER=127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003,127.0.0.1:9004,127.0.0.1:9005,127.0.0.1:9006
-N=6
+N=7
 
 $GO build -tags libsqlite3 ./cmd/dqlite/
 
@@ -106,7 +106,7 @@ wait_stable() {
     voters=$(./dqlite -s $CLUSTER test .cluster | grep voter | wc -l)
     standbys=$(./dqlite -s $CLUSTER test .cluster | grep stand-by | wc -l)
     spares=$(./dqlite -s $CLUSTER test .cluster | grep spare | wc -l)
-    if [ $voters -eq 3 ] && [ $standbys -eq 2 ] &&  [ $spares -eq 1 ] ; then
+    if [ $voters -eq 3 ] && [ $standbys -eq 3 ] &&  [ $spares -eq 1 ] ; then
         break
     fi
     if [ $i -eq 40 ]; then
@@ -215,7 +215,7 @@ done
 # Stop two nodes at a time gracefully, then check that the cluster is stable.
 for i in $(seq 10); do
     index1=$((1 + RANDOM % $N))
-    index2=$((1 + (index1 + $((RANDOM % 5))) % 6))
+    index2=$((1 + (index1 + $((RANDOM % ($N - 1)))) % $N))
     echo "=> Stop nodes $index1 and $index2"
     kill_node $index1 TERM
     kill_node $index2 TERM
@@ -231,7 +231,7 @@ done
 # Kill two nodes at a time ungracefully, then check that the cluster is stable.
 for i in $(seq 10); do
     index1=$((1 + RANDOM % $N))
-    index2=$((1 + (index1 + $((RANDOM % 5))) % 6))
+    index2=$((1 + (index1 + $((RANDOM % ($N - 1)))) % $N))
     echo "=> Stop nodes $index1 and $index2"
     kill_node $index1 KILL
     kill_node $index2 KILL
