@@ -80,7 +80,7 @@ func (c clusterState) SortCandidates(candidates []client.NodeInfo, domains map[u
 			return false
 		}
 
-		return false
+		return metadata1.Weight < metadata2.Weight
 	}
 
 	sort.Slice(candidates, less)

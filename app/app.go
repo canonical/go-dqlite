@@ -388,6 +388,11 @@ func (a *App) Leader(ctx context.Context) (*client.Client, error) {
 	return client.FindLeader(ctx, a.store, a.clientOptions()...)
 }
 
+// Client returns a client connected to the local node.
+func (a *App) Client(ctx context.Context) (*client.Client, error) {
+	return client.New(ctx, a.nodeBindAddress)
+}
+
 // Proxy incoming TLS connections.
 func (a *App) proxy() {
 	wg := sync.WaitGroup{}
