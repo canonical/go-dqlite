@@ -39,7 +39,7 @@ type App struct {
 	readyCh         chan struct{}      // Waits for startup tasks
 	voters          int
 	standbys        int
-	roles           *rolesAdjustmentAlgorithm
+	roles           RolesConfig
 }
 
 // New creates a new application node.
@@ -214,7 +214,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		readyCh:         make(chan struct{}, 0),
 		voters:          o.Voters,
 		standbys:        o.StandBys,
-		roles:           &rolesAdjustmentAlgorithm{voters: o.Voters, standbys: o.StandBys},
+		roles:           RolesConfig{Voters: o.Voters, StandBys: o.StandBys},
 	}
 
 	// Start the proxy if a TLS configuration was provided.
@@ -281,10 +281,9 @@ func (a *App) Handover(ctx context.Context) error {
 		return fmt.Errorf("cluster servers: %w", err)
 	}
 
-	cluster := a.probeNodes(nodes)
+	changes := a.makeRolesChanges(nodes)
 
-	role, candidates := a.roles.Handover(a.id, cluster)
-
+	role, candidates := changes.Handover(a.id)
 	if role == -1 {
 		return nil
 	}
@@ -472,8 +471,7 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 			// If we are starting up, let's see if we should
 			// promote ourselves.
 			if !ready {
-				cluster := a.probeNodes(servers)
-				if err := a.maybePromoteOurselves(ctx, cli, cluster); err != nil {
+				if err := a.maybePromoteOurselves(ctx, cli, servers); err != nil {
 					a.warn("%v", err)
 					delay = time.Second
 					cli.Close()
@@ -497,9 +495,10 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 }
 
 // Possibly change our own role at startup.
-func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, cluster clusterState) error {
-	role := a.roles.Startup(a.id, cluster)
+func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, nodes []client.NodeInfo) error {
+	roles := a.makeRolesChanges(nodes)
 
+	role := roles.Assume(a.id)
 	if role == -1 {
 		return nil
 	}
@@ -513,8 +512,8 @@ func (a *App) maybePromoteOurselves(ctx context.Context, cli *client.Client, clu
 	// node threshold. If we don't succeed in doing that, errors are
 	// ignored since the leader will eventually notice that don't have
 	// enough voters and will retry.
-	if role == client.Voter && cluster.Count(client.Voter, true) == 1 {
-		for node := range cluster {
+	if role == client.Voter && roles.count(client.Voter, true) == 1 {
+		for node := range roles.State {
 			if node.ID == a.id || node.Role == client.Voter {
 				continue
 			}
@@ -545,9 +544,9 @@ again:
 		return err
 	}
 
-	cluster := a.probeNodes(nodes)
+	roles := a.makeRolesChanges(nodes)
 
-	role, nodes := a.roles.Adjust(a.id, cluster)
+	role, nodes := roles.Adjust(a.id)
 	if role == -1 {
 		return nil
 	}
@@ -567,12 +566,13 @@ again:
 	goto again
 }
 
-// Probe all given nodes for connectivity, fetching their metadata as well.
-func (a *App) probeNodes(nodes []client.NodeInfo) clusterState {
-	cluster := clusterState{}
+// Probe all given nodes for connectivity and metadata, then return a
+// RolesChanges object.
+func (a *App) makeRolesChanges(nodes []client.NodeInfo) RolesChanges {
+	state := map[client.NodeInfo]*client.NodeMetadata{}
 
 	for _, node := range nodes {
-		cluster[node] = nil
+		state[node] = nil
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
@@ -580,13 +580,13 @@ func (a *App) probeNodes(nodes []client.NodeInfo) clusterState {
 		if err == nil {
 			metadata, err := cli.Describe(ctx)
 			if err == nil {
-				cluster[node] = metadata
+				state[node] = metadata
 			}
 			cli.Close()
 		}
 	}
 
-	return cluster
+	return RolesChanges{Config: a.roles, State: state}
 }
 
 // Return the options to use for client.FindLeader() or client.New()
