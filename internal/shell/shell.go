@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/canonical/go-dqlite/client"
@@ -67,6 +68,12 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	}
 	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".remove") {
 		return s.processRemove(ctx, line)
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".describe") {
+		return s.processDescribe(ctx, line)
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".weight") {
+		return s.processWeight(ctx, line)
 	}
 	if strings.HasPrefix(strings.ToUpper(strings.TrimLeft(line, " ")), "SELECT") {
 		return s.processSelect(ctx, line)
@@ -146,6 +153,60 @@ func (s *Shell) processRemove(ctx context.Context, line string) (string, error) 
 	}
 
 	return "", fmt.Errorf("no node has address %q", address)
+}
+
+func (s *Shell) processDescribe(ctx context.Context, line string) (string, error) {
+	parts := strings.Split(line, " ")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("bad command format, should be: .describe <address>")
+	}
+	address := parts[1]
+	cli, err := client.New(ctx, address, client.WithDialFunc(s.dial))
+	if err != nil {
+		return "", err
+	}
+	metadata, err := cli.Describe(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	result := ""
+	switch s.format {
+	case formatTabular:
+		result += fmt.Sprintf("%s|%d|%d", address, metadata.FailureDomain, metadata.Weight)
+	case formatJson:
+		data, err := json.Marshal(metadata)
+		if err != nil {
+			return "", err
+		}
+		var indented bytes.Buffer
+		json.Indent(&indented, data, "", "\t")
+		result = string(indented.Bytes())
+	}
+
+	return result, nil
+}
+
+func (s *Shell) processWeight(ctx context.Context, line string) (string, error) {
+	parts := strings.Split(line, " ")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("bad command format, should be: .weight <address> <n>")
+	}
+	address := parts[1]
+	weight, err := strconv.Atoi(parts[2])
+	if err != nil || weight < 0 {
+		return "", fmt.Errorf("bad weight %q", parts[2])
+	}
+
+	cli, err := client.New(ctx, address, client.WithDialFunc(s.dial))
+	if err != nil {
+		return "", err
+	}
+	if err := cli.Weight(ctx, uint64(weight)); err != nil {
+		return "", err
+	}
+
+	return "", nil
 }
 
 func (s *Shell) processSelect(ctx context.Context, line string) (string, error) {
