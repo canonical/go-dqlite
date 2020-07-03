@@ -68,6 +68,9 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".remove") {
 		return s.processRemove(ctx, line)
 	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".describe") {
+		return s.processDescribe(ctx, line)
+	}
 	if strings.HasPrefix(strings.ToUpper(strings.TrimLeft(line, " ")), "SELECT") {
 		return s.processSelect(ctx, line)
 	} else {
@@ -146,6 +149,38 @@ func (s *Shell) processRemove(ctx context.Context, line string) (string, error) 
 	}
 
 	return "", fmt.Errorf("no node has address %q", address)
+}
+
+func (s *Shell) processDescribe(ctx context.Context, line string) (string, error) {
+	parts := strings.Split(line, " ")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("bad command format, should be: .describe <address>")
+	}
+	address := parts[1]
+	cli, err := client.New(ctx, address, client.WithDialFunc(s.dial))
+	if err != nil {
+		return "", err
+	}
+	metadata, err := cli.Describe(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	result := ""
+	switch s.format {
+	case formatTabular:
+		result += fmt.Sprintf("%s|%d|%d", address, metadata.FailureDomain, metadata.Weight)
+	case formatJson:
+		data, err := json.Marshal(metadata)
+		if err != nil {
+			return "", err
+		}
+		var indented bytes.Buffer
+		json.Indent(&indented, data, "", "\t")
+		result = string(indented.Bytes())
+	}
+
+	return result, nil
 }
 
 func (s *Shell) processSelect(ctx context.Context, line string) (string, error) {
