@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/canonical/go-dqlite/client"
@@ -70,6 +71,9 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	}
 	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".describe") {
 		return s.processDescribe(ctx, line)
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".weight") {
+		return s.processWeight(ctx, line)
 	}
 	if strings.HasPrefix(strings.ToUpper(strings.TrimLeft(line, " ")), "SELECT") {
 		return s.processSelect(ctx, line)
@@ -181,6 +185,28 @@ func (s *Shell) processDescribe(ctx context.Context, line string) (string, error
 	}
 
 	return result, nil
+}
+
+func (s *Shell) processWeight(ctx context.Context, line string) (string, error) {
+	parts := strings.Split(line, " ")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("bad command format, should be: .weight <address> <n>")
+	}
+	address := parts[1]
+	weight, err := strconv.Atoi(parts[2])
+	if err != nil || weight < 0 {
+		return "", fmt.Errorf("bad weight %q", parts[2])
+	}
+
+	cli, err := client.New(ctx, address, client.WithDialFunc(s.dial))
+	if err != nil {
+		return "", err
+	}
+	if err := cli.Weight(ctx, uint64(weight)); err != nil {
+		return "", err
+	}
+
+	return "", nil
 }
 
 func (s *Shell) processSelect(ctx context.Context, line string) (string, error) {
