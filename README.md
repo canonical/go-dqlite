@@ -10,7 +10,7 @@ Usage
 
 The best way to understand how to use the ```go-dqlite``` package is probably by
 looking at the source code of the [demo
-program](https://github.com/canonical/go-dqlite/tree/master/cmd/dqlite-demo/main.go) and
+program](https://github.com/canonical/go-dqlite/blob/master/cmd/dqlite-demo/dqlite-demo.go) and
 use it as example.
 
 In general your application will use code such as:
