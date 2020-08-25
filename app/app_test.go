@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql"
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
@@ -291,6 +292,41 @@ func TestHandover_Voter(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[3].Role)
 }
 
+// In a two-node cluster only one of them is a voter. When Handover() is called
+// on the voter, the role and leadership are transfered.
+func TestHandover_TwoNodes(t *testing.T) {
+	n := 2
+	apps := make([]*app.App, n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{app.WithAddress(addr)}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+		defer cleanup()
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+	}
+
+	err := apps[0].Handover(context.Background())
+	require.NoError(t, err)
+
+	cli, err := apps[1].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Spare, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+}
+
 // Transfer voting rights to another online node. Failure domains are taken
 // into account.
 func TestHandover_VoterHonorFailureDomain(t *testing.T) {
@@ -333,6 +369,63 @@ func TestHandover_VoterHonorFailureDomain(t *testing.T) {
 	assert.Equal(t, client.StandBy, cluster[3].Role)
 	assert.Equal(t, client.StandBy, cluster[4].Role)
 	assert.Equal(t, client.Voter, cluster[5].Role)
+}
+
+// Handover with a sinle node.
+func TestHandover_SingleNode(t *testing.T) {
+	dir, cleanup := newDir(t)
+	defer cleanup()
+
+	app, err := app.New(dir, app.WithAddress("127.0.0.1:9001"))
+	require.NoError(t, err)
+
+	require.NoError(t, app.Ready(context.Background()))
+
+	require.NoError(t, app.Handover(context.Background()))
+	require.NoError(t, app.Close())
+}
+
+// Exercise a sequential graceful shutdown of a 3-node cluster.
+func TestHandover_GracefulShutdown(t *testing.T) {
+	n := 3
+	apps := make([]*app.App, n)
+
+	for i := 0; i < n; i++ {
+		dir, cleanup := newDir(t)
+		defer cleanup()
+
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, err := app.New(dir, options...)
+		require.NoError(t, err)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+	}
+
+	db, err := sql.Open(apps[0].Driver(), "test.db")
+	require.NoError(t, err)
+
+	_, err = db.Exec("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	require.NoError(t, db.Close())
+
+	require.NoError(t, apps[0].Handover(context.Background()))
+	require.NoError(t, apps[0].Close())
+
+	require.NoError(t, apps[1].Handover(context.Background()))
+	require.NoError(t, apps[1].Close())
+
+	require.NoError(t, apps[2].Handover(context.Background()))
+	require.NoError(t, apps[2].Close())
 }
 
 // Transfer the stand-by role to another online node.

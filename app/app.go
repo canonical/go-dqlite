@@ -258,23 +258,6 @@ func (a *App) Handover(ctx context.Context) error {
 	}
 	defer cli.Close()
 
-	// Check if we are the current leader and transfer leadership if so.
-	leader, err := cli.Leader(ctx)
-	if err != nil {
-		return fmt.Errorf("leader address: %w", err)
-	}
-
-	if leader != nil && leader.Address == a.address {
-		if err := cli.Transfer(ctx, 0); err != nil {
-			return fmt.Errorf("transfer leadership: %w", err)
-		}
-		cli, err = a.Leader(ctx)
-		if err != nil {
-			return fmt.Errorf("find new leader: %w", err)
-		}
-		defer cli.Close()
-	}
-
 	// Possibly transfer our role.
 	nodes, err := cli.Cluster(ctx)
 	if err != nil {
@@ -284,26 +267,58 @@ func (a *App) Handover(ctx context.Context) error {
 	changes := a.makeRolesChanges(nodes)
 
 	role, candidates := changes.Handover(a.id)
-	if role == -1 {
-		return nil
-	}
 
-	for i, node := range candidates {
-		if err := cli.Assign(ctx, node.ID, role); err != nil {
-			a.warn("promote %s from %s to %s: %v", node.Address, node.Role, role, err)
-			if i == len(candidates)-1 {
-				// We could not promote any node
-				return fmt.Errorf("could not promote any online node to %s", role)
+	if role != -1 {
+		for i, node := range candidates {
+			if err := cli.Assign(ctx, node.ID, role); err != nil {
+				a.warn("promote %s from %s to %s: %v", node.Address, node.Role, role, err)
+				if i == len(candidates)-1 {
+					// We could not promote any node
+					return fmt.Errorf("could not promote any online node to %s", role)
+				}
+				continue
 			}
-			continue
+			a.debug("promoted %s from %s to %s", node.Address, node.Role, role)
+			break
 		}
-		a.debug("promoted %s from %s to %s", node.Address, node.Role, role)
-		break
 	}
 
-	// Demote ourselves.
-	if err := cli.Assign(ctx, a.ID(), client.Spare); err != nil {
-		return fmt.Errorf("demote ourselves: %w", err)
+	// Check if we are the current leader and transfer leadership if so.
+	leader, err := cli.Leader(ctx)
+	if err != nil {
+		return fmt.Errorf("leader address: %w", err)
+	}
+	if leader != nil && leader.Address == a.address {
+		nodes, err := cli.Cluster(ctx)
+		if err != nil {
+			return fmt.Errorf("cluster servers: %w", err)
+		}
+		changes := a.makeRolesChanges(nodes)
+		voters := changes.list(client.Voter, true)
+
+		for i, voter := range voters {
+			if voter.Address == a.address {
+				continue
+			}
+			if err := cli.Transfer(ctx, voter.ID); err != nil {
+				a.warn("transfer leadership to %s: %v", voter.Address, err)
+				if i == len(voters)-1 {
+					return fmt.Errorf("transfer leadership: %w", err)
+				}
+			}
+			cli, err = a.Leader(ctx)
+			if err != nil {
+				return fmt.Errorf("find new leader: %w", err)
+			}
+			defer cli.Close()
+		}
+	}
+
+	// Demote ourselves if we have promoted someone else.
+	if role != -1 {
+		if err := cli.Assign(ctx, a.ID(), client.Spare); err != nil {
+			return fmt.Errorf("demote ourselves: %w", err)
+		}
 	}
 
 	return nil
