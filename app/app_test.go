@@ -291,6 +291,41 @@ func TestHandover_Voter(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[3].Role)
 }
 
+// In a two-node cluster only one of them is a voter. When Handover() is called
+// on the voter, the role and leadership are transfered.
+func TestHandover_TwoNodes(t *testing.T) {
+	n := 2
+	apps := make([]*app.App, n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{app.WithAddress(addr)}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+		defer cleanup()
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+	}
+
+	err := apps[0].Handover(context.Background())
+	require.NoError(t, err)
+
+	cli, err := apps[1].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Spare, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+}
+
 // Transfer voting rights to another online node. Failure domains are taken
 // into account.
 func TestHandover_VoterHonorFailureDomain(t *testing.T) {

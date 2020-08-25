@@ -258,12 +258,36 @@ func (a *App) Handover(ctx context.Context) error {
 	}
 	defer cli.Close()
 
+	// Possibly transfer our role.
+	nodes, err := cli.Cluster(ctx)
+	if err != nil {
+		return fmt.Errorf("cluster servers: %w", err)
+	}
+
+	changes := a.makeRolesChanges(nodes)
+
+	role, candidates := changes.Handover(a.id)
+
+	if role != -1 {
+		for i, node := range candidates {
+			if err := cli.Assign(ctx, node.ID, role); err != nil {
+				a.warn("promote %s from %s to %s: %v", node.Address, node.Role, role, err)
+				if i == len(candidates)-1 {
+					// We could not promote any node
+					return fmt.Errorf("could not promote any online node to %s", role)
+				}
+				continue
+			}
+			a.debug("promoted %s from %s to %s", node.Address, node.Role, role)
+			break
+		}
+	}
+
 	// Check if we are the current leader and transfer leadership if so.
 	leader, err := cli.Leader(ctx)
 	if err != nil {
 		return fmt.Errorf("leader address: %w", err)
 	}
-
 	if leader != nil && leader.Address == a.address {
 		if err := cli.Transfer(ctx, 0); err != nil {
 			return fmt.Errorf("transfer leadership: %w", err)
@@ -275,35 +299,11 @@ func (a *App) Handover(ctx context.Context) error {
 		defer cli.Close()
 	}
 
-	// Possibly transfer our role.
-	nodes, err := cli.Cluster(ctx)
-	if err != nil {
-		return fmt.Errorf("cluster servers: %w", err)
-	}
-
-	changes := a.makeRolesChanges(nodes)
-
-	role, candidates := changes.Handover(a.id)
-	if role == -1 {
-		return nil
-	}
-
-	for i, node := range candidates {
-		if err := cli.Assign(ctx, node.ID, role); err != nil {
-			a.warn("promote %s from %s to %s: %v", node.Address, node.Role, role, err)
-			if i == len(candidates)-1 {
-				// We could not promote any node
-				return fmt.Errorf("could not promote any online node to %s", role)
-			}
-			continue
+	// Demote ourselves if we have promoted someone else.
+	if role != -1 {
+		if err := cli.Assign(ctx, a.ID(), client.Spare); err != nil {
+			return fmt.Errorf("demote ourselves: %w", err)
 		}
-		a.debug("promoted %s from %s to %s", node.Address, node.Role, role)
-		break
-	}
-
-	// Demote ourselves.
-	if err := cli.Assign(ctx, a.ID(), client.Spare); err != nil {
-		return fmt.Errorf("demote ourselves: %w", err)
 	}
 
 	return nil
