@@ -289,14 +289,29 @@ func (a *App) Handover(ctx context.Context) error {
 		return fmt.Errorf("leader address: %w", err)
 	}
 	if leader != nil && leader.Address == a.address {
-		if err := cli.Transfer(ctx, 0); err != nil {
-			return fmt.Errorf("transfer leadership: %w", err)
-		}
-		cli, err = a.Leader(ctx)
+		nodes, err := cli.Cluster(ctx)
 		if err != nil {
-			return fmt.Errorf("find new leader: %w", err)
+			return fmt.Errorf("cluster servers: %w", err)
 		}
-		defer cli.Close()
+		changes := a.makeRolesChanges(nodes)
+		voters := changes.list(client.Voter, true)
+
+		for i, voter := range voters {
+			if voter.Address == a.address {
+				continue
+			}
+			if err := cli.Transfer(ctx, voter.ID); err != nil {
+				a.warn("transfer leadership to %s: %v", voter.Address, err)
+				if i == len(voters)-1 {
+					return fmt.Errorf("transfer leadership: %w", err)
+				}
+			}
+			cli, err = a.Leader(ctx)
+			if err != nil {
+				return fmt.Errorf("find new leader: %w", err)
+			}
+			defer cli.Close()
+		}
 	}
 
 	// Demote ourselves if we have promoted someone else.
