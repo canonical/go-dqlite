@@ -10,7 +10,6 @@ addons:
     - libsqlite3-dev
     - libuv1-dev
     - libraft-dev
-    - libco-dev
     - libdqlite-dev
 
 before_install:
