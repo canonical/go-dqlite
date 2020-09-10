@@ -134,6 +134,13 @@ func WithFailureDomain(code uint64) Option {
 	}
 }
 
+// WithNetworkLatency sets the average one-way network latency.
+func WithNetworkLatency(latency time.Duration) Option {
+	return func(options *options) {
+		options.NetworkLatency = latency
+	}
+}
+
 type tlsSetup struct {
 	Listen *tls.Config
 	Dial   *tls.Config
@@ -148,6 +155,7 @@ type options struct {
 	StandBys                 int
 	RolesAdjustmentFrequency time.Duration
 	FailureDomain            uint64
+	NetworkLatency           time.Duration
 }
 
 // Create a options object with sane defaults.
