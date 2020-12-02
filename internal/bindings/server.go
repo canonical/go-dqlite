@@ -27,6 +27,7 @@ static int dupCloexec(int oldfd) {
 	}
 
 	if (fcntl(newfd, F_SETFD, FD_CLOEXEC) < 0) {
+		close(newfd);
 		return -1;
 	}
 
