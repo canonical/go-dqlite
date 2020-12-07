@@ -79,6 +79,7 @@ func proxy(ctx context.Context, remote net.Conn, local net.Conn, config *tls.Con
 		if err := <-remoteToLocal; err != nil {
 			errs[1] = fmt.Errorf("remote -> local: %v", err)
 		}
+		remote.Close()
 		local.Close()
 
 	}
