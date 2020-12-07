@@ -122,7 +122,7 @@ func setKeepalive(conn *net.TCPConn) error {
 
 // Returns a pair of connected unix sockets.
 func socketpair() (net.Conn, net.Conn, error) {
-	fds, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_STREAM, 0)
+	fds, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_STREAM|syscall.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return nil, nil, err
 	}
