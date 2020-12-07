@@ -1,3 +1,5 @@
+#### DO NOT MERGE
+
 go-dqlite [![Build Status](https://travis-ci.org/canonical/go-dqlite.png)](https://travis-ci.org/canonical/go-dqlite) [![Coverage Status](https://coveralls.io/repos/github/canonical/go-dqlite/badge.svg?branch=master)](https://coveralls.io/github/canonical/go-dqlite?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/canonical/go-dqlite)](https://goreportcard.com/report/github.com/canonical/go-dqlite) [![GoDoc](https://godoc.org/github.com/canonical/go-dqlite?status.svg)](https://godoc.org/github.com/canonical/go-dqlite)
 ======
 
