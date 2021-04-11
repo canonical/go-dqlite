@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -198,6 +199,11 @@ func New(dir string, options ...Option) (app *App, err error) {
 	}
 
 	ctx, stop := context.WithCancel(context.Background())
+
+	if runtime.GOOS != "linux" && nodeBindAddress[0] == '@' {
+		// Do not use abstract socket on other platforms and left trim "@"
+		nodeBindAddress = nodeBindAddress[1:]
+	}
 
 	app = &App{
 		id:              info.ID,
