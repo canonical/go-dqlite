@@ -6,6 +6,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -74,6 +77,9 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	}
 	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".weight") {
 		return s.processWeight(ctx, line)
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".dump") {
+		return s.processDump(ctx, line)
 	}
 	if strings.HasPrefix(strings.ToUpper(strings.TrimLeft(line, " ")), "SELECT") {
 		return s.processSelect(ctx, line)
@@ -185,6 +191,38 @@ func (s *Shell) processDescribe(ctx context.Context, line string) (string, error
 	}
 
 	return result, nil
+}
+
+func (s *Shell) processDump(ctx context.Context, line string) (string, error) {
+	parts := strings.Split(line, " ")
+	if len(parts) != 2 {
+		return "NOK", fmt.Errorf("bad command format, should be: .dump <address>")
+	}
+	address := parts[1]
+	cli, err := client.New(ctx, address, client.WithDialFunc(s.dial))
+	if err != nil {
+		return "NOK", fmt.Errorf("dial failed")
+	}
+
+	files, err := cli.Dump(ctx, "db.bin")
+	if err != nil {
+		return "NOK", fmt.Errorf("dump failed")
+	}
+
+	dir, err := os.Getwd()
+	if err != nil {
+		return "NOK", fmt.Errorf("os.Getwd() failed")
+	}
+
+	for _, file := range files {
+		path := filepath.Join(dir, file.Name)
+		err := ioutil.WriteFile(path, file.Data, 0600)
+		if err != nil {
+			return "NOK", fmt.Errorf("WriteFile failed on path %s", path)
+		}
+	}
+
+	return "OK", nil
 }
 
 func (s *Shell) processWeight(ctx context.Context, line string) (string, error) {
