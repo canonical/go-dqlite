@@ -195,8 +195,8 @@ func (s *Shell) processDescribe(ctx context.Context, line string) (string, error
 
 func (s *Shell) processDump(ctx context.Context, line string) (string, error) {
 	parts := strings.Split(line, " ")
-	if len(parts) != 2 {
-		return "NOK", fmt.Errorf("bad command format, should be: .dump <address>")
+	if len(parts) < 2 || len(parts) > 3 {
+		return "NOK", fmt.Errorf("bad command format, should be: .dump <address> [<database>]")
 	}
 	address := parts[1]
 	cli, err := client.New(ctx, address, client.WithDialFunc(s.dial))
@@ -204,7 +204,11 @@ func (s *Shell) processDump(ctx context.Context, line string) (string, error) {
 		return "NOK", fmt.Errorf("dial failed")
 	}
 
-	files, err := cli.Dump(ctx, "db.bin")
+	database := "db.bin"
+	if len(parts) == 3 {
+		database = parts[2]
+	}
+	files, err := cli.Dump(ctx, database)
 	if err != nil {
 		return "NOK", fmt.Errorf("dump failed")
 	}
