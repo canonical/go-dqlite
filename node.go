@@ -1,6 +1,7 @@
 package dqlite
 
 import (
+	"net"
 	"time"
 
 	"github.com/canonical/go-dqlite/client"
@@ -70,8 +71,25 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 		}
 	}
 	if o.BindAddress != "" {
-		if err := server.SetBindAddress(o.BindAddress); err != nil {
+		// Ensure a hostname is resolved to IP address before given to SetBindAddress
+		host, port, err := net.SplitHostPort(o.BindAddress)
+		if err != nil {
 			return nil, err
+		}
+
+		addrs, err := net.LookupHost(host)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(addrs) == 0 {
+			if err := server.SetBindAddress(o.BindAddress); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := server.SetBindAddress(net.JoinHostPort(addrs[0], port)); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if o.NetworkLatency != 0 {
