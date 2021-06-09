@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/go-dqlite/internal/bindings"
 )
 
 // Option can be used to tweak app parameters.
@@ -141,6 +142,13 @@ func WithNetworkLatency(latency time.Duration) Option {
 	}
 }
 
+// WithSnapshotParams sets the raft snapshot parameters.
+func WithSnapshotParams(params bindings.SnapshotParams) Option {
+	return func(options *options) {
+		options.SnapshotParams = params
+	}
+}
+
 type tlsSetup struct {
 	Listen *tls.Config
 	Dial   *tls.Config
@@ -156,6 +164,7 @@ type options struct {
 	RolesAdjustmentFrequency time.Duration
 	FailureDomain            uint64
 	NetworkLatency           time.Duration
+	SnapshotParams           bindings.SnapshotParams
 }
 
 // Create a options object with sane defaults.

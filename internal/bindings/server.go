@@ -84,6 +84,11 @@ import (
 
 type Node C.dqlite_node
 
+type SnapshotParams struct {
+	Threshold uint64
+	Trailing  uint64
+}
+
 // Initializes state.
 func init() {
 	// FIXME: ignore SIGPIPE, see https://github.com/joyent/libuv/issues/1254
@@ -150,6 +155,16 @@ func (s *Node) SetNetworkLatency(nanoseconds uint64) error {
 	cnanoseconds := C.nanoseconds_t(nanoseconds)
 	if rc := C.dqlite_node_set_network_latency(server, cnanoseconds); rc != 0 {
 		return fmt.Errorf("failed to set network latency")
+	}
+	return nil
+}
+
+func (s *Node) SetSnapshotParams(params SnapshotParams) error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	cthreshold := C.unsigned(params.Threshold)
+	ctrailing := C.unsigned(params.Trailing)
+	if rc := C.dqlite_node_set_snapshot_params(server, cthreshold, ctrailing); rc != 0 {
+		return fmt.Errorf("failed to set snapshot params")
 	}
 	return nil
 }
