@@ -253,8 +253,8 @@ func New(dir string, options ...Option) (app *App, err error) {
 // gracefully shutdown a node.
 func (a *App) Handover(ctx context.Context) error {
 	// Set a hard limit of one minute, in case the user-provided context
-	// has no expiration. That avoids the call to hang forever in case a
-	// majority of the cluster is down and no leader is available.
+	// has no expiration. That avoids the call to stop responding forever
+	// in case a majority of the cluster is down and no leader is available.
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
