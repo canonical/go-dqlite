@@ -15,18 +15,18 @@ start_node() {
     join="${2}"
     verbose=""
 
-    if [ $VERBOSE -eq 1 ]; then
+    if [ "$VERBOSE" -eq 1 ]; then
         verbose="--verbose"
     fi
 
-    ./dqlite-demo --dir $DIR --api=127.0.0.1:800${n} --db=127.0.0.1:900${n} $join $verbose &
+    ./dqlite-demo --dir "$DIR" --api=127.0.0.1:800"${n}" --db=127.0.0.1:900"${n}" "$join" $verbose &
     echo "${!}" > "${pidfile}"
 
     i=0
-    while ! nc -z 127.0.0.1 800${n} 2>/dev/null; do
+    while ! nc -z 127.0.0.1 800"${n}" 2>/dev/null; do
         i=$(expr $i + 1)
         sleep 0.2
-        if [ $i -eq 25 ]; then
+        if [ "$i" -eq 25 ]; then
             echo "Error: node ${n} not yet up after 5 seconds"
             exit 1
         fi
@@ -37,22 +37,22 @@ kill_node() {
     n=$1
     pidfile="${DIR}/pid.${n}"
 
-    if ! [ -e $pidfile ]; then
+    if ! [ -e "$pidfile" ]; then
         return
     fi
 
-    pid=$(cat ${pidfile})
+    pid=$(cat "${pidfile}")
 
-    kill -TERM $pid
-    wait $pid
+    kill -TERM "$pid"
+    wait "$pid"
 
-    rm ${pidfile}
+    rm "${pidfile}"
 }
 
 set_up_node() {
     n=$1
     join=""
-    if [ $n -ne 1 ]; then
+    if [ "$n" -ne 1 ]; then
         join=--join=127.0.0.1:9001
     fi
 
@@ -66,7 +66,7 @@ tear_down_node() {
 
     echo "=> Tear down dqlite-demo node $n"
 
-    kill_node $n
+    kill_node "$n"
 }
 
 set_up() {
@@ -85,7 +85,7 @@ tear_down() {
     tear_down_node 2
     tear_down_node 1
 
-    rm -rf $DIR
+    rm -rf "$DIR"
 
     exit $err
 }
