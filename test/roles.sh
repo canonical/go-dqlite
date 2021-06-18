@@ -196,7 +196,7 @@ for i in $(seq 10); do
     wait_stable
     echo "=> Restart node $index"
     start_node $index
-    sleep 0.5
+    sleep 2
 done
 
 # Kill one node at a time ungracefully, then check that the cluster is stable.
@@ -209,7 +209,7 @@ for i in $(seq 1); do
     wait_stable
     echo "=> Restart node $index"
     start_node $index
-    sleep 0.5
+    sleep 2
 done
 
 # Stop two nodes at a time gracefully, then check that the cluster is stable.
