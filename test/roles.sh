@@ -30,7 +30,7 @@ import (
 )
 
 func main() {
-     ch := make(chan os.Signal)
+     ch := make(chan os.Signal, 5)
      signal.Notify(ch, unix.SIGINT)
      signal.Notify(ch, unix.SIGTERM)
      dir := filepath.Join("$DIR", os.Args[1])
