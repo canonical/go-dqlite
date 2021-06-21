@@ -125,7 +125,7 @@ wait_role() {
     i=0
     while true; do
         i=$(expr $i + 1)
-        current=$(./dqlite -s $CLUSTER test .cluster | grep "900${index}" | cut -f 3 -d "|")
+        current=$(./dqlite -s "$CLUSTER" test .cluster | grep "127.0.0.1:900${index}" | cut -f 3 -d "|")
         if [ "$current" = "$role" ]; then
             break
         fi
