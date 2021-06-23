@@ -60,7 +60,8 @@ func main() {
      if err != nil {
          panic(err)
      }
-     if err := app.Ready(context.Background()); err != nil {
+     ctx, _ := context.WithTimeout(context.Background(), 30 * time.Second)
+     if err := app.Ready(ctx); err != nil {
          panic(err)
      }
      <-ch
