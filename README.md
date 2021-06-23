@@ -45,6 +45,7 @@ system, along with its dependencies. You then need to pass the ```-tags```
 argument to the Go tools when building or testing your packages, for example:
 
 ```bash
+export CGO_LDFLAGS_ALLOW="-Wl,-z,now"
 go build -tags libsqlite3
 go test -tags libsqlite3
 ```

@@ -167,6 +167,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		dqlite.WithDialFunc(nodeDial),
 		dqlite.WithFailureDomain(o.FailureDomain),
 		dqlite.WithNetworkLatency(o.NetworkLatency),
+		dqlite.WithSnapshotParams(o.SnapshotParams),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create node: %w", err)

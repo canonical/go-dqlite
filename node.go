@@ -52,6 +52,13 @@ func WithFailureDomain(code uint64) Option {
 	}
 }
 
+// WithSnapshotParams sets the snapshot parameters of the node.
+func WithSnapshotParams(params bindings.SnapshotParams) Option {
+	return func(options *options) {
+		options.SnapshotParams = params
+	}
+}
+
 // New creates a new Node instance.
 func New(id uint64, address string, dir string, options ...Option) (*Node, error) {
 	o := defaultOptions()
@@ -81,6 +88,11 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 	}
 	if o.FailureDomain != 0 {
 		if err := server.SetFailureDomain(o.FailureDomain); err != nil {
+			return nil, err
+		}
+	}
+	if o.SnapshotParams.Threshold != 0 || o.SnapshotParams.Trailing != 0 {
+		if err := server.SetSnapshotParams(o.SnapshotParams); err != nil {
 			return nil, err
 		}
 	}
@@ -120,6 +132,7 @@ type options struct {
 	BindAddress    string
 	NetworkLatency uint64
 	FailureDomain  uint64
+	SnapshotParams bindings.SnapshotParams
 }
 
 // Close the server, releasing all resources it created.
