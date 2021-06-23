@@ -13,7 +13,7 @@ N=7
 $GO build -tags libsqlite3 ./cmd/dqlite/
 
 set_up_binary() {
-    cat > $DIR/main.go <<EOF
+    cat > "$DIR"/main.go <<EOF
 package main
 
 import (
@@ -30,7 +30,7 @@ import (
 )
 
 func main() {
-     ch := make(chan os.Signal)
+     ch := make(chan os.Signal, 5)
      signal.Notify(ch, unix.SIGINT)
      signal.Notify(ch, unix.SIGTERM)
      dir := filepath.Join("$DIR", os.Args[1])
@@ -60,7 +60,8 @@ func main() {
      if err != nil {
          panic(err)
      }
-     if err := app.Ready(context.Background()); err != nil {
+     ctx, _ := context.WithTimeout(context.Background(), 30 * time.Second)
+     if err := app.Ready(ctx); err != nil {
          panic(err)
      }
      <-ch
@@ -70,14 +71,14 @@ func main() {
      app.Close()
 }
 EOF
-    $GO build -o $BINARY -tags libsqlite3 $DIR/main.go
+    $GO build -o "$BINARY" -tags libsqlite3 "$DIR"/main.go
 }
 
 start_node() {
     n="${1}"
     pidfile="${DIR}/pid.${n}"
 
-    $BINARY $n &
+    $BINARY "$n" &
     echo "${!}" > "${pidfile}"
 }
 
@@ -86,16 +87,16 @@ kill_node() {
     signal=$2
     pidfile="${DIR}/pid.${n}"
 
-    if ! [ -e $pidfile ]; then
+    if ! [ -e "$pidfile" ]; then
         return
     fi
 
-    pid=$(cat ${pidfile})
+    pid=$(cat "${pidfile}")
 
-    kill -${signal} $pid
-    wait $pid || true
+    kill -"${signal}" "$pid"
+    wait "$pid" || true
 
-    rm ${pidfile}
+    rm "${pidfile}"
 }
 
 # Wait for the cluster to have 3 voters, 2 stand-bys and 1 spare
@@ -103,15 +104,15 @@ wait_stable() {
   i=0
   while true; do
     i=$(expr $i + 1)
-    voters=$(./dqlite -s $CLUSTER test .cluster | grep voter | wc -l)
-    standbys=$(./dqlite -s $CLUSTER test .cluster | grep stand-by | wc -l)
-    spares=$(./dqlite -s $CLUSTER test .cluster | grep spare | wc -l)
-    if [ $voters -eq 3 ] && [ $standbys -eq 3 ] &&  [ $spares -eq 1 ] ; then
+    voters=$(./dqlite -s "$CLUSTER" test .cluster | grep voter | wc -l)
+    standbys=$(./dqlite -s "$CLUSTER" test .cluster | grep stand-by | wc -l)
+    spares=$(./dqlite -s "$CLUSTER" test .cluster | grep spare | wc -l)
+    if [ "$voters" -eq 3 ] && [ "$standbys" -eq 3 ] &&  [ "$spares" -eq 1 ] ; then
         break
     fi
-    if [ $i -eq 40 ]; then
+    if [ "$i" -eq 40 ]; then
       echo "Error: node roles not yet stable after 10 seconds"
-      ./dqlite -s $CLUSTER test .cluster
+      ./dqlite -s "$CLUSTER" test .cluster
       exit 1
     fi
     sleep 0.25
@@ -125,13 +126,13 @@ wait_role() {
     i=0
     while true; do
         i=$(expr $i + 1)
-        current=$(./dqlite -s $CLUSTER test .cluster | grep "900${index}" | cut -f 3 -d "|")
+        current=$(./dqlite -s "$CLUSTER" test .cluster | grep "127.0.0.1:900${index}" | cut -f 3 -d "|")
         if [ "$current" = "$role" ]; then
             break
         fi
-        if [ $i -eq 40 ]; then
+        if [ "$i" -eq 40 ]; then
             echo "Error: node $index has role $current instead of $role"
-            ./dqlite -s $CLUSTER test .cluster
+            ./dqlite -s "$CLUSTER" test .cluster
             exit 1
         fi
         sleep 0.25
@@ -148,14 +149,14 @@ set_up() {
     echo "=> Set up test cluster"
     set_up_binary
     for i in $(seq $N); do
-        set_up_node $i
+        set_up_node "$i"
     done
 }
 
 tear_down_node() {
     n=$1
     echo "=> Tear down test node $n"
-    kill_node $n TERM
+    kill_node "$n" TERM
 }
 
 tear_down() {
@@ -165,10 +166,10 @@ tear_down() {
     echo "=> Tear down test cluster"
 
     for i in $(seq $N -1 1); do
-        tear_down_node $i
+        tear_down_node "$i"
     done
 
-    rm -rf $DIR
+    rm -rf "$DIR"
 
     exit $err
 }
@@ -196,7 +197,7 @@ for i in $(seq 10); do
     wait_stable
     echo "=> Restart node $index"
     start_node $index
-    sleep 0.5
+    sleep 2
 done
 
 # Kill one node at a time ungracefully, then check that the cluster is stable.
@@ -209,7 +210,7 @@ for i in $(seq 1); do
     wait_stable
     echo "=> Restart node $index"
     start_node $index
-    sleep 0.5
+    sleep 2
 done
 
 # Stop two nodes at a time gracefully, then check that the cluster is stable.
@@ -245,6 +246,3 @@ for i in $(seq 10); do
 done
 
 echo "=> Test successful"
-
-
-

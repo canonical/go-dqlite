@@ -774,7 +774,7 @@ func TestRolesAdjustment_ReplaceStandBy(t *testing.T) {
 	// A stand-by goes offline.
 	cleanups[4]()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
@@ -831,7 +831,7 @@ func TestRolesAdjustment_ReplaceStandByHonorFailureDomains(t *testing.T) {
 	// A stand-by from failure domain 1 goes offline.
 	cleanups[4]()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
