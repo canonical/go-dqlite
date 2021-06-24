@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/Rican7/retry v0.1.0
 	github.com/ghodss/yaml v1.0.0
+	github.com/google/renameio v1.0.1
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mattn/go-sqlite3 v1.14.7
 	github.com/peterh/liner v1.2.1
