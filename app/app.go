@@ -489,6 +489,11 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 				cli.Close()
 				continue
 			}
+			if len(servers) == 0 {
+				a.warn("server list empty")
+				cli.Close()
+				continue
+			}
 			a.store.Set(ctx, servers)
 
 			// If we are starting up, let's see if we should
