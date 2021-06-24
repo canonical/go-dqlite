@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/ghodss/yaml"
+	"github.com/google/renameio"
 )
 
 const (
@@ -40,7 +41,7 @@ func fileExists(dir, file string) (bool, error) {
 func fileWrite(dir, file string, data []byte) error {
 	path := filepath.Join(dir, file)
 
-	if err := ioutil.WriteFile(path, data, 0600); err != nil {
+	if err := renameio.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("write %s: %w", file, err)
 	}
 

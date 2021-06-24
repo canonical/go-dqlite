@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/ghodss/yaml"
+	"github.com/google/renameio"
 	"github.com/pkg/errors"
 
 	"github.com/canonical/go-dqlite/internal/protocol"
@@ -228,7 +229,7 @@ func (s *YamlNodeStore) Set(ctx context.Context, servers []NodeInfo) error {
 		return err
 	}
 
-	if err := ioutil.WriteFile(s.path, data, 0600); err != nil {
+	if err := renameio.WriteFile(s.path, data, 0600); err != nil {
 		return err
 	}
 
