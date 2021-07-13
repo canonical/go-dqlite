@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sort"
 	"time"
 
 	"github.com/Rican7/retry"
@@ -119,6 +120,11 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 	if err != nil {
 		return nil, errors.Wrap(err, "get servers")
 	}
+
+	// Sort servers by Role, from low to high.
+	sort.Slice(servers, func(i, j int) bool {
+		return servers[i].Role < servers[j].Role
+	})
 
 	// Make an attempt for each address until we find the leader.
 	for _, server := range servers {
