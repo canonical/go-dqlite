@@ -48,14 +48,17 @@ static int configConnectFunc(dqlite_node *t, uintptr_t handle) {
         return dqlite_node_set_connect_func(t, connectTrampoline, (void*)handle);
 }
 
-static dqlite_node_info *makeInfos(int n) {
-	return calloc(n, sizeof(dqlite_node_info));
+static dqlite_node_info_ext *makeInfos(int n) {
+	return calloc(n, sizeof(dqlite_node_info_ext));
 }
 
-static void setInfo(dqlite_node_info *infos, unsigned i, dqlite_node_id id, const char *address) {
-	dqlite_node_info *info = &infos[i];
+static void setInfo(dqlite_node_info_ext *infos, unsigned i, dqlite_node_id id,
+		    const char *address, int role) {
+	dqlite_node_info_ext *info = &infos[i];
+	info->size = sizeof(dqlite_node_info_ext);
 	info->id = id;
-	info->address = address;
+	info->address = (uint64_t)(uintptr_t)address;
+	info->dqlite_role = role;
 }
 
 static int sqlite3ConfigSingleThread()
@@ -206,7 +209,16 @@ func (s *Node) Close() {
 	C.dqlite_node_destroy(server)
 }
 
+// Remark that Recover doesn't take the node role into account
 func (s *Node) Recover(cluster []protocol.NodeInfo) error {
+	for i, _ := range cluster {
+		cluster[i].Role = protocol.Voter
+	}
+	return s.RecoverExt(cluster)
+}
+
+// RecoverExt has a similar purpose as `Recover` but takes the node role into account
+func (s *Node) RecoverExt(cluster []protocol.NodeInfo) error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s))
 	n := C.int(len(cluster))
 	infos := C.makeInfos(n)
@@ -214,10 +226,11 @@ func (s *Node) Recover(cluster []protocol.NodeInfo) error {
 	for i, info := range cluster {
 		cid := C.dqlite_node_id(info.ID)
 		caddress := C.CString(info.Address)
+		crole := C.int(info.Role)
 		defer C.free(unsafe.Pointer(caddress))
-		C.setInfo(infos, C.unsigned(i), cid, caddress)
+		C.setInfo(infos, C.unsigned(i), cid, caddress, crole)
 	}
-	if rc := C.dqlite_node_recover(server, infos, n); rc != 0 {
+	if rc := C.dqlite_node_recover_ext(server, infos, n); rc != 0 {
 		return fmt.Errorf("recover failed with error code %d", rc)
 	}
 	return nil
