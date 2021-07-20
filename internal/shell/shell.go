@@ -269,7 +269,7 @@ func (s *Shell) processSelect(ctx context.Context, line string) (string, error) 
 	}
 	n := len(columns)
 
-	result := ""
+	var sb strings.Builder
 	for rows.Next() {
 		row := make([]interface{}, n)
 		rowPointers := make([]interface{}, n)
@@ -282,17 +282,14 @@ func (s *Shell) processSelect(ctx context.Context, line string) (string, error) 
 		}
 
 		for i, column := range row {
-			s := fmt.Sprintf("%v", column)
 			if i == 0 {
-				result += s
+				fmt.Fprintf(&sb, "%v", column)
 			} else {
-				result += "|" + s
+				fmt.Fprintf(&sb, "|%v", column)
 			}
-
 		}
-		result += "\n"
+		sb.WriteByte('\n')
 	}
-	result = strings.TrimRight(result, "\n")
 
 	if err := rows.Err(); err != nil {
 		return "", fmt.Errorf("rows: %w", err)
@@ -302,7 +299,7 @@ func (s *Shell) processSelect(ctx context.Context, line string) (string, error) 
 		return "", fmt.Errorf("commit: %w", err)
 	}
 
-	return result, nil
+	return strings.TrimRight(sb.String(), "\n"), nil
 }
 
 func (s *Shell) processExec(ctx context.Context, line string) error {
