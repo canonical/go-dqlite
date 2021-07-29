@@ -98,13 +98,13 @@ automatically join it.
 Now we can start using the cluster. Let's insert a key pair:
 
 ```bash
-curl -X PUT -d my-key http://127.0.0.1:8001/my-value
+curl -X PUT -d my-value http://127.0.0.1:8001/my-key
 ```
 
 and then retrive it from the database:
 
 ```bash
-curl http://127.0.0.1:8001/my-value
+curl http://127.0.0.1:8001/my-key
 ```
 
 Currently the first node is the leader. If we stop it and then try to query the
@@ -112,7 +112,7 @@ key again curl will fail, but we can simply change the endpoint to another node
 and things will work since an automatic failover has taken place:
 
 ```bash
-kill -TERM %1; curl http://127.0.0.1:8002/my-value
+kill -TERM %1; curl http://127.0.0.1:8002/my-key
 ```
 
 Shell
