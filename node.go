@@ -171,6 +171,15 @@ func ReconfigureMembership(dir string, cluster []NodeInfo) error {
 	return server.Recover(cluster)
 }
 
+func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
+	server, err := bindings.NewNode(1, "1", dir)
+	if err != nil {
+		return err
+	}
+	defer server.Close()
+	return server.RecoverExt(cluster)
+}
+
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{

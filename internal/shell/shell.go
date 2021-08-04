@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
 )
@@ -80,6 +81,9 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	}
 	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".dump") {
 		return s.processDump(ctx, line)
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".reconfigure") {
+		return s.processReconfigure(ctx, line)
 	}
 	if strings.HasPrefix(strings.ToUpper(strings.TrimLeft(line, " ")), "SELECT") {
 		return s.processSelect(ctx, line)
@@ -224,6 +228,51 @@ func (s *Shell) processDump(ctx context.Context, line string) (string, error) {
 		if err != nil {
 			return "NOK", fmt.Errorf("WriteFile failed on path %s", path)
 		}
+	}
+
+	return "OK", nil
+}
+
+func (s *Shell) processReconfigure(ctx context.Context, line string) (string, error) {
+	parts := strings.Split(line, " ")
+	if len(parts) != 3 {
+		return "NOK", fmt.Errorf("bad command format, should be: .reconfigure <dir> <clusteryaml>\n" +
+			"Args:\n" +
+			"\tdir - Directory of node with up to date data\n" +
+			"\tclusteryaml - Path to a .yaml file containing the desired cluster configuration\n\n" +
+			"Help:\n" +
+			"\tUse this command when trying to preserve the data from your cluster while changing the\n" +
+			"\tconfiguration of the cluster because e.g. your cluster is broken due to unreachablee nodes.\n" +
+			"\t0. BACKUP ALL YOUR NODE DATA DIRECTORIES BEFORE PROCEEDING!\n" +
+			"\t1. Stop all dqlite nodes.\n" +
+			"\t2. Identify the dir of the node with the most up to date raft term and log, this will be the <dir> argument.\n" +
+			"\t3. Create a .yaml file with the same format as cluster.yaml (or use/adapt an existing cluster.yaml) with the\n " +
+			"\t   desired cluster configuration. This will be the <clusteryaml> argument.\n" +
+			"\t   Don't forget to make sure the ID's in the file line up with the ID's in the info.yaml files.\n" +
+			"\t4. Run the .reconfigure <dir> <clusteryaml> command, it should return \"OK\".\n" +
+			"\t5. Copy the snapshot-xxx-xxx-xxx, snapshot-xxx-xxx-xxx.meta, segment files (00000xxxxx-000000xxxxx), desired cluster.yaml\n" +
+			"\t   from <dir> over to the directories of the other nodes identified in <clusteryaml>, deleting any leftover snapshot-xxx-xxx-xxx, snapshot-xxx-xxx-xxx.meta,\n" +
+			"\t   segment (00000xxxxx-000000xxxxx) and metadata{1,2} files that it contains.\n" +
+			"\t   Make sure an info.yaml is also present that is in line with cluster.yaml.\n" +
+			"\t6. Start all the dqlite nodes.\n" +
+			"\t7. If, for some reason, this fails or gives undesired results, try again with data from another node (you should still have this from step 0).\n")
+	}
+	dir := parts[1]
+	clusteryamlpath := parts[2]
+
+	store, err := client.NewYamlNodeStore(clusteryamlpath)
+	if err != nil {
+		return "NOK", fmt.Errorf("Failed to create YamlNodeStore from file at %s :%v", clusteryamlpath, err)
+	}
+
+	servers, err := store.Get(ctx)
+	if err != nil {
+		return "NOK", fmt.Errorf("Failed to retrieve NodeInfo list :%v", err)
+	}
+
+	err = dqlite.ReconfigureMembershipExt(dir, servers)
+	if err != nil {
+		return "NOK", fmt.Errorf("Failed to reconfigure membership :%v.", err)
 	}
 
 	return "OK", nil
