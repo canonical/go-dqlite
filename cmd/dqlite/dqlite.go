@@ -40,6 +40,10 @@ func main() {
 					return fmt.Errorf("can't mix server store and explicit list")
 				}
 				path := first[len("file://"):]
+				if _, err := os.Stat(path); err != nil {
+					return fmt.Errorf("open servers store: %w", err)
+				}
+
 				store, err = client.DefaultNodeStore(path)
 				if err != nil {
 					return fmt.Errorf("open servers store: %w", err)
