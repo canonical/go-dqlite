@@ -52,3 +52,26 @@ jobs:
       uses: shogo82148/actions-goveralls@v1
       with:
         path-to-profile: overalls.coverprofile
+
+    - name: Benchmark
+      env:
+        CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
+        GO_DQLITE_MULTITHREAD: 1
+      run: |
+        go install -tags libsqlite3 github.com/canonical/go-dqlite/cmd/dqlite-benchmark
+        dqlite-benchmark --db 127.0.0.1:9001 --driver --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
+        masterpid=$!
+        dqlite-benchmark --db 127.0.0.1:9002 --join 127.0.0.1:9001 &
+        dqlite-benchmark --db 127.0.0.1:9003 --join 127.0.0.1:9001 &
+        wait $masterpid
+        echo "Write results:"
+        head -n 5 /tmp/dqlite-benchmark/127.0.0.1:9001/results/0-exec-*
+
+        echo ""
+        echo "Read results:"
+        head -n 5 /tmp/dqlite-benchmark/127.0.0.1:9001/results/0-query-*
+
+    - uses: actions/upload-artifact@v2
+      with:
+        name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}
+        path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
