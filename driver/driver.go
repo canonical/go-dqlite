@@ -46,6 +46,8 @@ type Error = protocol.Error
 // Error codes. Values here mostly overlap with native SQLite codes.
 const (
 	ErrBusy                = 5
+	ErrBusyRecovery        = 5 | (1 << 8)
+	ErrBusySnapshot        = 5 | (2 << 8)
 	errIoErr               = 10
 	errIoErrNotLeader      = errIoErr | 40<<8
 	errIoErrLeadershipLost = errIoErr | (41 << 8)
