@@ -119,7 +119,7 @@ func TestIntegration_QueryBindError(t *testing.T) {
 	defer cleanup()
 	defer db.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 9*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	_, err := db.QueryContext(ctx, "SELECT 1", 1)
