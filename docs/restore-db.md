@@ -61,9 +61,9 @@ cat <<EOF > "cluster.yaml"
   Role: 0
 EOF
 ```
-3. For every node, run `dqlite -s <ApiAddress> <DbName> ".reconfigure <NodeDirectory>
+3. For every node, run `dqlite -s <DbAddress> <DbName> ".reconfigure <NodeDirectory>
    <TargetClusterYamlPath>"`
-   The `ApiAddress`, `DbName` aren't really important, just use something
+   The `DbAddress`, `DbName` aren't really important, just use something
    syntactically correct, we are more interested in the side effects of this
    command on the `NodeDirectory`. The command should return `OK`.
 4. Look in the `NodeDirectory` of every node, there should be at least 1 new segment file
@@ -137,7 +137,6 @@ We will refer to this file by `TargetClusterYaml` and to its location by
 ## Terminology
 
 - ApiAddress: `host:port` where the `dqlite-demo` REST api is available.
-  contains metadata about the matching snapshot file.
 - DataDirectory: Base directory under which the NodeDirectories are saved.
 - data file: segment file, snapshot file or snapshot.meta file.
 - DbAddress: `host:port` used for database replication.
@@ -150,6 +149,7 @@ We will refer to this file by `TargetClusterYaml` and to its location by
 - snapshot file: file named like `snapshot-2818-57687002-3645852168`,
   meaning `snapshot-term-index-timestamp`.
 - snapshot.meta file: file named like `snapshot-2818-57687002-3645852168.meta`,
+  contains metadata about the matching snapshot file.
 - TargetClusterYaml: `cluster.yaml` file containing the desired cluster configuration.
 - TargetClusterYamlPath: location of `TargetClusterYaml`.
 
