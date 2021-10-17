@@ -468,3 +468,28 @@ func TestIntegration_ColumnTypeName(t *testing.T) {
 
 	assert.Equal(t, int64(1), n)
 }
+
+func TestIntegration_SqlNullTime(t *testing.T) {
+	db, _, cleanup := newDB(t, 1)
+	defer cleanup()
+
+	_, err := db.Exec("CREATE TABLE test (tm DATETIME)")
+	require.NoError(t, err)
+
+	// Insert sql.NullTime into DB
+	var t1 sql.NullTime
+	res, err := db.Exec("INSERT INTO test (tm) VALUES (?)", t1)
+	require.NoError(t, err)
+
+	n, err := res.RowsAffected()
+	require.NoError(t, err)
+	assert.EqualValues(t, n, 1)
+
+	// Retrieve inserted sql.NullTime from DB
+	row := db.QueryRow("SELECT tm FROM test LIMIT 1")
+	var t2 sql.NullTime
+	err = row.Scan(&t2)
+	require.NoError(t, err)
+
+	assert.Equal(t, t1, t2)
+}
