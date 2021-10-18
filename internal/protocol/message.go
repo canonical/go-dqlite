@@ -531,7 +531,7 @@ func (r *Rows) Next(dest []driver.Value) error {
 		case ISO8601:
 			value := r.message.getString()
 			if value == "" {
-				dest[i] = time.Time{}
+				dest[i] = nil
 				break
 			}
 			var t time.Time
