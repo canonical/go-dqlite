@@ -7,7 +7,6 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - bionic
           - focal
           - impish
     runs-on: ubuntu-20.04
