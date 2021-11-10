@@ -14,7 +14,9 @@ import (
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/semaphore"
 )
 
 // App is a high-level helper for initializing a typical dqlite-based Go
@@ -598,22 +600,46 @@ again:
 // RolesChanges object.
 func (a *App) makeRolesChanges(nodes []client.NodeInfo) RolesChanges {
 	state := map[client.NodeInfo]*client.NodeMetadata{}
-
 	for _, node := range nodes {
 		state[node] = nil
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-
-		cli, err := client.New(ctx, node.Address, a.clientOptions()...)
-		if err == nil {
-			metadata, err := cli.Describe(ctx)
-			if err == nil {
-				state[node] = metadata
-			}
-			cli.Close()
-		}
 	}
 
+	var (
+		mtx     sync.Mutex     // Protects state map
+		wg      sync.WaitGroup // Wait for all probes to finish
+		nProbes = runtime.NumCPU()
+		sem     = semaphore.NewWeighted(int64(nProbes)) // Limit number of parallel probes
+	)
+
+	for _, node := range nodes {
+		wg.Add(1)
+		// sem.Acquire will not block forever because the goroutines
+		// that release the semaphore will eventually timeout.
+		if err := sem.Acquire(context.Background(), 1); err != nil {
+			a.warn("Failed to acquire semaphore: %v", err)
+			wg.Done()
+			continue
+		}
+		go func(node protocol.NodeInfo) {
+			defer wg.Done()
+			defer sem.Release(1)
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+
+			cli, err := client.New(ctx, node.Address, a.clientOptions()...)
+			if err == nil {
+				metadata, err := cli.Describe(ctx)
+				if err == nil {
+					mtx.Lock()
+					state[node] = metadata
+					mtx.Unlock()
+				}
+				cli.Close()
+			}
+		}(node)
+	}
+
+	wg.Wait()
 	return RolesChanges{Config: a.roles, State: state}
 }
 
