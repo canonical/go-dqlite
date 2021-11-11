@@ -13,8 +13,8 @@ import (
 func TestMessage_StaticBytesAlignment(t *testing.T) {
 	message := Message{}
 	message.Init(4096)
-	pointer := uintptr(unsafe.Pointer(&message.body.Bytes))
-	assert.Equal(t, pointer%messageWordSize, uintptr(0))
+	pointer := uintptr(unsafe.Pointer(&message.body.Bytes[0]))
+	assert.Equal(t, uintptr(0), pointer%messageWordSize)
 }
 
 func TestMessage_putBlob(t *testing.T) {
