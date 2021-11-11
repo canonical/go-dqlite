@@ -537,7 +537,7 @@ func TestRolesAdjustment_ReplaceVoter(t *testing.T) {
 		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
 		options := []app.Option{
 			app.WithAddress(addr),
-			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithRolesAdjustmentFrequency(2 * time.Second),
 		}
 		if i > 0 {
 			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
@@ -558,7 +558,7 @@ func TestRolesAdjustment_ReplaceVoter(t *testing.T) {
 	// A voter goes offline.
 	cleanups[2]()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(8 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
@@ -585,7 +585,7 @@ func TestRolesAdjustment_ReplaceVoterHonorFailureDomain(t *testing.T) {
 		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
 		options := []app.Option{
 			app.WithAddress(addr),
-			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithRolesAdjustmentFrequency(4 * time.Second),
 			app.WithFailureDomain(uint64(i % 3)),
 		}
 		if i > 0 {
@@ -609,7 +609,7 @@ func TestRolesAdjustment_ReplaceVoterHonorFailureDomain(t *testing.T) {
 	// A voter in failure domain 2 goes offline.
 	cleanups[2]()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(12 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
@@ -638,7 +638,7 @@ func TestRolesAdjustment_ReplaceVoterHonorWeight(t *testing.T) {
 		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
 		options := []app.Option{
 			app.WithAddress(addr),
-			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithRolesAdjustmentFrequency(4 * time.Second),
 		}
 		if i > 0 {
 			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
@@ -676,7 +676,7 @@ func TestRolesAdjustment_ReplaceVoterHonorWeight(t *testing.T) {
 	require.NoError(t, cli.Weight(context.Background(), uint64(10)))
 	defer cli.Close()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(12 * time.Second)
 
 	cli, err = apps[0].Leader(context.Background())
 	require.NoError(t, err)
@@ -705,7 +705,7 @@ func TestRolesAdjustment_CantReplaceVoter(t *testing.T) {
 		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
 		options := []app.Option{
 			app.WithAddress(addr),
-			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithRolesAdjustmentFrequency(4 * time.Second),
 		}
 		if i > 0 {
 			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
@@ -726,7 +726,7 @@ func TestRolesAdjustment_CantReplaceVoter(t *testing.T) {
 	cleanups[3]()
 	cleanups[2]()
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(12 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
@@ -751,7 +751,7 @@ func TestRolesAdjustment_ReplaceStandBy(t *testing.T) {
 		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
 		options := []app.Option{
 			app.WithAddress(addr),
-			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithRolesAdjustmentFrequency(5 * time.Second),
 		}
 		if i > 0 {
 			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
@@ -775,7 +775,7 @@ func TestRolesAdjustment_ReplaceStandBy(t *testing.T) {
 	// A stand-by goes offline.
 	cleanups[4]()
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(15 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
@@ -805,7 +805,7 @@ func TestRolesAdjustment_ReplaceStandByHonorFailureDomains(t *testing.T) {
 		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
 		options := []app.Option{
 			app.WithAddress(addr),
-			app.WithRolesAdjustmentFrequency(500 * time.Millisecond),
+			app.WithRolesAdjustmentFrequency(5 * time.Second),
 			app.WithFailureDomain(uint64(i % 3)),
 		}
 		if i > 0 {
@@ -832,7 +832,7 @@ func TestRolesAdjustment_ReplaceStandByHonorFailureDomains(t *testing.T) {
 	// A stand-by from failure domain 1 goes offline.
 	cleanups[4]()
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(15 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
