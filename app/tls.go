@@ -92,6 +92,10 @@ func SimpleListenTLSConfig(cert tls.Certificate, pool *x509.CertPool) *tls.Confi
 //
 // The returned config can be used as "client" parameter for the WithTLS App
 // option, or as "config" parameter for the client.DialFuncWithTLS() helper.
+//
+// TLS connections using the same `Config` will share a ClientSessionCache.
+// You can override this behaviour by setting your own ClientSessionCache or
+// nil.
 func SimpleDialTLSConfig(cert tls.Certificate, pool *x509.CertPool) *tls.Config {
 	config := &tls.Config{
 		MinVersion:               tls.VersionTLS12,
@@ -99,6 +103,7 @@ func SimpleDialTLSConfig(cert tls.Certificate, pool *x509.CertPool) *tls.Config 
 		PreferServerCipherSuites: true,
 		RootCAs:                  pool,
 		Certificates:             []tls.Certificate{cert},
+		ClientSessionCache:       tls.NewLRUClientSessionCache(256),
 	}
 
 	x509cert, err := x509.ParseCertificate(cert.Certificate[0])
