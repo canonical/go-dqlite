@@ -61,8 +61,8 @@ Demo
 To see dqlite in action, either install the Debian package from the PPA:
 
 ```bash
-sudo add-apt-repository -y ppa:dqlite/stable
-sudo apt install dqlite libdqlite-dev
+sudo add-apt-repository -y ppa:dqlite/dev
+sudo apt install dqlite-tools libdqlite-dev
 ```
 
 or build the dqlite C library and its dependencies from source, as described
@@ -77,8 +77,8 @@ from the top-level directory of this repository.
 This builds a demo dqlite application, which exposes a simple key/value store
 over an HTTP API.
 
-Once the `dqlite-demo` binary is installed (normally under `~/go/bin`),
-start three nodes of the demo application:
+Once the `dqlite-demo` binary is installed (normally under `~/go/bin` or
+`/usr/bin/`), start three nodes of the demo application:
 
 ```bash
 dqlite-demo --api 127.0.0.1:8001 --db 127.0.0.1:9001 &
@@ -118,8 +118,8 @@ kill -TERM %1; curl http://127.0.0.1:8002/my-key
 Shell
 ------
 
-A basic SQLite-like dqlite shell can be built with:
-
+A basic SQLite-like dqlite shell is available in the `dqlite-tools` package or
+can be built with:
 ```
 go install -tags libsqlite3 ./cmd/dqlite
 ```
