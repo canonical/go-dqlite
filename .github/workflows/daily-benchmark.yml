@@ -17,7 +17,7 @@ jobs:
 
     - name: Setup dependencies
       run: |
-        sudo add-apt-repository ppa:dqlite/master -y
+        sudo add-apt-repository ppa:dqlite/dev -y
         sudo apt update
         sudo apt install -y libsqlite3-dev libuv1-dev liblz4-dev libraft-dev libdqlite-dev
 
