@@ -72,7 +72,9 @@ func New(dir string, options ...Option) (app *App, err error) {
 	}
 	if !infoFileExists {
 		if o.Address == "" {
-			o.Address = defaultAddress()
+			if o.Address, err = defaultAddress(); err != nil {
+				return nil, err
+			}
 		}
 		if len(o.Cluster) == 0 {
 			info.ID = dqlite.BootstrapID
