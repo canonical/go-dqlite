@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/canonical/go-dqlite/client"
@@ -181,10 +182,29 @@ func isLoopback(iface *net.Interface) bool {
 	return int(iface.Flags&net.FlagLoopback) > 0
 }
 
-func defaultAddress() string {
+// see https://stackoverflow.com/a/48519490/3613657
+// Valid IPv4 notations:
+//
+//    "192.168.0.1": basic
+//    "192.168.0.1:80": with port info
+//
+// Valid IPv6 notations:
+//
+//    "::FFFF:C0A8:1": basic
+//    "::FFFF:C0A8:0001": leading zeros
+//    "0000:0000:0000:0000:0000:FFFF:C0A8:1": double colon expanded
+//    "::FFFF:C0A8:1%1": with zone info
+//    "::FFFF:192.168.0.1": IPv4 literal
+//    "[::FFFF:C0A8:1]:80": with port info
+//    "[::FFFF:C0A8:1%1]:80": with zone and port info
+func isIpV4(ip string) bool {
+	return strings.Count(ip, ":") < 2
+}
+
+func defaultAddress() (addr string, err error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return ""
+		return "", err
 	}
 	for _, iface := range ifaces {
 		if isLoopback(&iface) {
@@ -201,9 +221,15 @@ func defaultAddress() string {
 		if !ok {
 			continue
 		}
-		return addr.IP.String() + ":9000"
+		ipStr := addr.IP.String()
+		if isIpV4(ipStr) {
+			return addr.IP.String() + ":9000", nil
+		} else {
+			return "[" + addr.IP.String() + "]" + ":9000", nil
+		}
 	}
-	return ""
+
+	return "", fmt.Errorf("No suitable net.Interface found: %v", err)
 }
 
 func defaultLogFunc(l client.LogLevel, format string, a ...interface{}) {

@@ -22,7 +22,7 @@ import (
 
 // Create a pristine bootstrap node with default value.
 func TestNew_PristineDefault(t *testing.T) {
-	_, cleanup := newApp(t)
+	_, cleanup := newApp(t, app.WithAddress("127.0.0.1:9000"))
 	defer cleanup()
 }
 
@@ -855,7 +855,7 @@ func TestRolesAdjustment_ReplaceStandByHonorFailureDomains(t *testing.T) {
 
 // Open a database on a fresh one-node cluster.
 func TestOpen(t *testing.T) {
-	app, cleanup := newApp(t)
+	app, cleanup := newApp(t, app.WithAddress("127.0.0.1:9000"))
 	defer cleanup()
 
 	db, err := app.Open(context.Background(), "test")
@@ -869,6 +869,7 @@ func TestOpen(t *testing.T) {
 // Test some setup options
 func TestOptions(t *testing.T) {
 	options := []app.Option{
+		app.WithAddress("127.0.0.1:9000"),
 		app.WithNetworkLatency(20 * time.Millisecond),
 		app.WithSnapshotParams(bindings.SnapshotParams{Threshold: 1024, Trailing: 1024}),
 	}
