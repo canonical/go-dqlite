@@ -547,7 +547,7 @@ func (r *Rows) Next(dest []driver.Value) error {
 			if err != nil {
 				return err
 			}
-			t = t.In(time.Local)
+
 			dest[i] = t
 		case Boolean:
 			dest[i] = r.message.getInt64() != 0
