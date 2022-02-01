@@ -3,10 +3,10 @@ package app
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 
 	"github.com/canonical/go-dqlite/client"
-	"github.com/pkg/errors"
 )
 
 // Like client.DialFuncWithTLS but also starts the proxy, since the raft
@@ -29,7 +29,7 @@ func makeNodeDialFunc(config *tls.Config) client.DialFunc {
 		}
 		goUnix, cUnix, err := socketpair()
 		if err != nil {
-			return nil, errors.Wrap(err, "create pair of Unix sockets")
+			return nil, fmt.Errorf("create pair of Unix sockets: %w", err)
 		}
 
 		go proxy(context.Background(), conn, goUnix, clonedConfig)
@@ -38,4 +38,24 @@ func makeNodeDialFunc(config *tls.Config) client.DialFunc {
 	}
 
 	return dial
+}
+
+// extDialFuncWithProxy executes given DialFunc and then copies the data back
+// and forth between the remote connection and a local unix socket.
+func extDialFuncWithProxy(dialFunc client.DialFunc) client.DialFunc {
+	return func(ctx context.Context, addr string) (net.Conn, error) {
+		goUnix, cUnix, err := socketpair()
+		if err != nil {
+			return nil, fmt.Errorf("create pair of Unix sockets: %w", err)
+		}
+
+		conn, err := dialFunc(ctx, addr)
+		if err != nil {
+			return nil, err
+		}
+
+		go proxy(context.Background(), conn, goUnix, nil)
+
+		return cUnix, nil
+	}
 }
