@@ -252,7 +252,7 @@ func (s *Shell) processReconfigure(ctx context.Context, line string) (string, er
 			"\t4. Run the .reconfigure <dir> <clusteryaml> command, it should return \"OK\".\n" +
 			"\t5. Copy the snapshot-xxx-xxx-xxx, snapshot-xxx-xxx-xxx.meta, segment files (00000xxxxx-000000xxxxx), desired cluster.yaml\n" +
 			"\t   from <dir> over to the directories of the other nodes identified in <clusteryaml>, deleting any leftover snapshot-xxx-xxx-xxx, snapshot-xxx-xxx-xxx.meta,\n" +
-			"\t   segment (00000xxxxx-000000xxxxx) and metadata{1,2} files that it contains.\n" +
+			"\t   segment (00000xxxxx-000000xxxxx, open-xxx) and metadata{1,2} files that it contains.\n" +
 			"\t   Make sure an info.yaml is also present that is in line with cluster.yaml.\n" +
 			"\t6. Start all the dqlite nodes.\n" +
 			"\t7. If, for some reason, this fails or gives undesired results, try again with data from another node (you should still have this from step 0).\n")
