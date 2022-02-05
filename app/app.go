@@ -32,6 +32,7 @@ type App struct {
 	nodeBindAddress string
 	listener        net.Listener
 	tls             *tlsSetup
+	dialFunc        client.DialFunc
 	store           client.NodeStore
 	driver          *driver.Driver
 	driverName      string
@@ -50,6 +51,17 @@ func New(dir string, options ...Option) (app *App, err error) {
 	o := defaultOptions()
 	for _, option := range options {
 		option(o)
+	}
+
+	var nodeBindAddress string
+	if o.Conn != nil {
+		listener, err := net.Listen("unix", "")
+		if err != nil {
+			return nil, fmt.Errorf("Failed to autobind unix socket: %w", err)
+		}
+
+		nodeBindAddress = listener.Addr().String()
+		listener.Close()
 	}
 
 	// List of cleanup functions to run in case of errors.
@@ -147,9 +159,10 @@ func New(dir string, options ...Option) (app *App, err error) {
 	}
 
 	// Start the local dqlite engine.
-	var nodeBindAddress string
 	var nodeDial client.DialFunc
-	if o.TLS != nil {
+	if o.Conn != nil {
+		nodeDial = extDialFuncWithProxy(o.Conn.dialFunc)
+	} else if o.TLS != nil {
 		nodeBindAddress = fmt.Sprintf("@dqlite-%d", info.ID)
 
 		// Within a snap we need to choose a different name for the abstract unix domain
@@ -185,6 +198,8 @@ func New(dir string, options ...Option) (app *App, err error) {
 	driverDial := client.DefaultDialFunc
 	if o.TLS != nil {
 		driverDial = client.DialFuncWithTLS(driverDial, o.TLS.Dial)
+	} else if o.Conn != nil {
+		driverDial = o.Conn.dialFunc
 	}
 
 	driver, err := driver.New(store, driver.WithDialFunc(driverDial), driver.WithLogFunc(o.Log))
@@ -217,6 +232,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		node:            node,
 		nodeBindAddress: nodeBindAddress,
 		store:           store,
+		dialFunc:        driverDial,
 		driver:          driver,
 		driverName:      driverName,
 		log:             o.Log,
@@ -244,6 +260,19 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 		cleanups = append(cleanups, func() { listener.Close(); <-proxyCh })
 
+	} else if o.Conn != nil {
+		go func() {
+			for {
+				remote := <-o.Conn.acceptCh
+				local, err := net.Dial("unix", nodeBindAddress)
+				if err != nil {
+					remote.Close()
+					panic(fmt.Errorf("Failed to connect to bind address %q: %w", nodeBindAddress, err))
+				}
+
+				go proxy(ctx, remote, local, nil)
+			}
+		}()
 	}
 
 	go app.run(ctx, o.RolesAdjustmentFrequency, joinFileExists)
@@ -647,11 +676,7 @@ func (a *App) makeRolesChanges(nodes []client.NodeInfo) RolesChanges {
 
 // Return the options to use for client.FindLeader() or client.New()
 func (a *App) clientOptions() []client.Option {
-	dial := client.DefaultDialFunc
-	if a.tls != nil {
-		dial = client.DialFuncWithTLS(dial, a.tls.Dial)
-	}
-	return []client.Option{client.WithDialFunc(dial), client.WithLogFunc(a.log)}
+	return []client.Option{client.WithDialFunc(a.dialFunc), client.WithLogFunc(a.log)}
 }
 
 func (a *App) debug(format string, args ...interface{}) {

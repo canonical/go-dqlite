@@ -7,8 +7,12 @@ import (
 	"io"
 	"net"
 	"os"
+	"reflect"
 	"syscall"
 	"time"
+	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 // Copies data between a remote TCP network connection (possibly with TLS) and
@@ -23,7 +27,10 @@ import (
 //
 // In case of errors, details are returned.
 func proxy(ctx context.Context, remote net.Conn, local net.Conn, config *tls.Config) error {
-	tcp := remote.(*net.TCPConn)
+	tcp, err := extractTCPConn(remote)
+	if err != nil {
+		return err
+	}
 
 	if err := setKeepalive(tcp); err != nil {
 		return err
@@ -91,13 +98,47 @@ func proxy(ctx context.Context, remote net.Conn, local net.Conn, config *tls.Con
 	return nil
 }
 
-// Set TCP keepalive with 30 seconds idle time, 3 seconds retry interval with
-// at most 3 retries.
+// extractTCPConn tries to extract the underlying net.TCPConn, potentially from a tls.Conn.
+func extractTCPConn(conn net.Conn) (*net.TCPConn, error) {
+	tcp, ok := conn.(*net.TCPConn)
+	if ok {
+		return tcp, nil
+	}
+
+	// Go doesn't currently expose the underlying TCP connection of a TLS connection, but we need it in order
+	// to set timeout properties on the connection. We use some reflect/unsafe magic to extract the private
+	// remote.conn field, which is indeed the underlying TCP connection.
+	tlsConn, ok := conn.(*tls.Conn)
+	if !ok {
+		return nil, fmt.Errorf("Connection is not a tls.Conn")
+	}
+
+	field := reflect.ValueOf(tlsConn).Elem().FieldByName("conn")
+	field = reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()
+	c := field.Interface()
+
+	tcpConn, ok := c.(*net.TCPConn)
+	if !ok {
+		return nil, fmt.Errorf("Connection is not a net.TCPConn")
+	}
+
+	return tcpConn, nil
+}
+
+// Set TCP_USER_TIMEOUT and TCP keepalive with 3 seconds idle time, 3 seconds
+// retry interval with at most 3 retries.
 //
 // See https://thenotexpert.com/golang-tcp-keepalive/.
 func setKeepalive(conn *net.TCPConn) error {
-	conn.SetKeepAlive(true)
-	conn.SetKeepAlivePeriod(time.Second * 30)
+	err := conn.SetKeepAlive(true)
+	if err != nil {
+		return err
+	}
+
+	err = conn.SetKeepAlivePeriod(time.Second * 3)
+	if err != nil {
+		return err
+	}
 
 	raw, err := conn.SyscallConn()
 	if err != nil {
@@ -114,6 +155,19 @@ func setKeepalive(conn *net.TCPConn) error {
 			}
 			// Wait time after an unsuccessful probe.
 			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, _TCP_KEEPINTVL, 3)
+			if err != nil {
+				return
+			}
+
+			// Set TCP_USER_TIMEOUT option to limit the maximum amount of time in ms that transmitted data may remain
+			// unacknowledged before TCP will forcefully close the corresponding connection and return ETIMEDOUT to the
+			// application. This combined with the TCP keepalive options on the socket will ensure that should the
+			// remote side of the connection disappear abruptly that dqlite will detect this and close the socket quickly.
+			// Decreasing the user timeouts allows applications to "fail fast" if so desired. Otherwise it may take
+			// up to 20 minutes with the current system defaults in a normal WAN environment if there are packets in
+			// the send queue that will prevent the keepalive timer from working as the retransmission timers kick in.
+			// See https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=dca43c75e7e545694a9dd6288553f55c53e2a3a3
+			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, unix.TCP_USER_TIMEOUT, int(30*time.Microsecond))
 			if err != nil {
 				return
 			}

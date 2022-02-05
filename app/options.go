@@ -45,6 +45,19 @@ func WithCluster(cluster []string) Option {
 	}
 }
 
+// WithExternalConn enables passing an external dial function that will be used
+// whenever dqlite needs to make an outside connection.
+//
+// Also takes a net.Conn channel that should be received when the external connection has been accepted.
+func WithExternalConn(dialFunc client.DialFunc, acceptCh chan net.Conn) Option {
+	return func(options *options) {
+		options.Conn = &connSetup{
+			dialFunc: dialFunc,
+			acceptCh: acceptCh,
+		}
+	}
+}
+
 // WithTLS enables TLS encryption of network traffic.
 //
 // The "listen" parameter must hold the TLS configuration to use when accepting
@@ -155,11 +168,17 @@ type tlsSetup struct {
 	Dial   *tls.Config
 }
 
+type connSetup struct {
+	dialFunc client.DialFunc
+	acceptCh chan net.Conn
+}
+
 type options struct {
 	Address                  string
 	Cluster                  []string
 	Log                      client.LogFunc
 	TLS                      *tlsSetup
+	Conn                     *connSetup
 	Voters                   int
 	StandBys                 int
 	RolesAdjustmentFrequency time.Duration

@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -8,6 +9,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -947,6 +951,87 @@ func newApp(t *testing.T, options ...app.Option) (*app.App, func()) {
 	return app, cleanup
 }
 
+// TestExternalConn creates a 3-member cluster using external http connections
+// and ensures the cluster is successfully created, and that the connection is
+// handled manually.
+func TestExternalConn(t *testing.T) {
+	externalAddr1 := "127.0.0.1:9191"
+	externalAddr2 := "127.0.0.1:9292"
+	externalAddr3 := "127.0.0.1:9393"
+	acceptCh1 := make(chan net.Conn)
+	acceptCh2 := make(chan net.Conn)
+	acceptCh3 := make(chan net.Conn)
+	hijackStatus := "200 Test Status"
+
+	dialFunc := func(ctx context.Context, addr string) (net.Conn, error) {
+		conn, err := net.Dial("tcp", addr)
+		require.NoError(t, err)
+
+		request := &http.Request{}
+		request.URL, err = url.Parse("http://" + addr)
+		require.NoError(t, err)
+
+		require.NoError(t, request.Write(conn))
+		resp, err := http.ReadResponse(bufio.NewReader(conn), request)
+		require.NoError(t, err)
+		require.Equal(t, hijackStatus, resp.Status)
+
+		return conn, nil
+	}
+
+	newHandler := func(acceptCh chan net.Conn) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			hijacker, ok := w.(http.Hijacker)
+			require.True(t, ok)
+
+			conn, _, err := hijacker.Hijack()
+			require.NoError(t, err)
+
+			data := []byte(fmt.Sprintf("HTTP/1.1 %s\r\n\r\n", hijackStatus))
+			n, err := conn.Write(data)
+			require.Equal(t, n, len(data))
+			require.NoError(t, err)
+
+			acceptCh <- conn
+		}
+	}
+
+	// Start up three listeners.
+	go http.ListenAndServe(externalAddr1, newHandler(acceptCh1))
+	go http.ListenAndServe(externalAddr2, newHandler(acceptCh2))
+	go http.ListenAndServe(externalAddr3, newHandler(acceptCh3))
+
+	app1, cleanup := newAppWithNoTLS(t, app.WithAddress(externalAddr1), app.WithExternalConn(dialFunc, acceptCh1))
+	defer cleanup()
+
+	app2, cleanup := newAppWithNoTLS(t, app.WithAddress(externalAddr2), app.WithExternalConn(dialFunc, acceptCh2), app.WithCluster([]string{externalAddr1}))
+	defer cleanup()
+
+	require.NoError(t, app2.Ready(context.Background()))
+
+	app3, cleanup := newAppWithNoTLS(t, app.WithAddress(externalAddr3), app.WithExternalConn(dialFunc, acceptCh3), app.WithCluster([]string{externalAddr1}))
+	defer cleanup()
+
+	require.NoError(t, app3.Ready(context.Background()))
+
+	// Get a client from the first node (likely the leader).
+	cli, err := app1.Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	// Ensure entries exist for each cluster member.
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, externalAddr1, cluster[0].Address)
+	assert.Equal(t, externalAddr2, cluster[1].Address)
+	assert.Equal(t, externalAddr3, cluster[2].Address)
+
+	// Every cluster member should be a voter.
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+}
+
 func newAppWithDir(t *testing.T, dir string, options ...app.Option) (*app.App, func()) {
 	t.Helper()
 
@@ -966,6 +1051,31 @@ func newAppWithDir(t *testing.T, dir string, options ...app.Option) (*app.App, f
 
 	cleanup := func() {
 		require.NoError(t, app.Close())
+	}
+
+	return app, cleanup
+}
+
+func newAppWithNoTLS(t *testing.T, options ...app.Option) (*app.App, func()) {
+	t.Helper()
+	dir, dirCleanup := newDir(t)
+
+	appIndex++
+
+	index := appIndex
+	log := func(l client.LogLevel, format string, a ...interface{}) {
+		format = fmt.Sprintf("%s - %d: %s: %s", time.Now().Format("15:04:01.000"), index, l.String(), format)
+		t.Logf(format, a...)
+	}
+
+	options = append(options, app.WithLogFunc(log))
+
+	app, err := app.New(dir, options...)
+	require.NoError(t, err)
+
+	cleanup := func() {
+		require.NoError(t, app.Close())
+		dirCleanup()
 	}
 
 	return app, cleanup
