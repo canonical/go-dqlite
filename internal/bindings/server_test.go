@@ -1,6 +1,7 @@
 package bindings_test
 
 import (
+	"context"
 	"encoding/binary"
 	"io/ioutil"
 	"net"
@@ -24,7 +25,7 @@ func TestNode_Start(t *testing.T) {
 	dir, cleanup := newDir(t)
 	defer cleanup()
 
-	server, err := bindings.NewNode(1, "1", dir)
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -48,7 +49,7 @@ func TestNode_Restart(t *testing.T) {
 	dir, cleanup := newDir(t)
 	defer cleanup()
 
-	server, err := bindings.NewNode(1, "1", dir)
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	require.NoError(t, err)
 
 	require.NoError(t, server.SetBindAddress("@abc"))
@@ -57,7 +58,7 @@ func TestNode_Restart(t *testing.T) {
 	require.NoError(t, server.Stop())
 	server.Close()
 
-	server, err = bindings.NewNode(1, "1", dir)
+	server, err = bindings.NewNode(context.Background(), 1, "1", dir)
 	require.NoError(t, err)
 
 	require.NoError(t, server.SetBindAddress("@abc"))
@@ -71,7 +72,7 @@ func TestNode_Start_Inet(t *testing.T) {
 	dir, cleanup := newDir(t)
 	defer cleanup()
 
-	server, err := bindings.NewNode(1, "1", dir)
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	require.NoError(t, err)
 	defer server.Close()
 
@@ -151,7 +152,7 @@ func newNode(t *testing.T) (*bindings.Node, func()) {
 
 	dir, dirCleanup := newDir(t)
 
-	server, err := bindings.NewNode(1, "1", dir)
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	require.NoError(t, err)
 
 	err = server.SetBindAddress("@test")

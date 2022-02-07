@@ -70,7 +70,7 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	server, err := bindings.NewNode(id, address, dir)
+	server, err := bindings.NewNode(ctx, id, address, dir)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -176,7 +176,7 @@ func GenerateID(address string) uint64 {
 // It forces appending a new configuration to the raft log stored in the given
 // directory, effectively replacing the current configuration.
 func ReconfigureMembership(dir string, cluster []NodeInfo) error {
-	server, err := bindings.NewNode(1, "1", dir)
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	if err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func ReconfigureMembership(dir string, cluster []NodeInfo) error {
 }
 
 func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
-	server, err := bindings.NewNode(1, "1", dir)
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	if err != nil {
 		return err
 	}

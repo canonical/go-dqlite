@@ -332,7 +332,7 @@ func newNode(t *testing.T, index int) (string, func()) {
 
 	address := fmt.Sprintf("@test-%d", index)
 
-	server, err := bindings.NewNode(id, address, dir)
+	server, err := bindings.NewNode(context.Background(), id, address, dir)
 	require.NoError(t, err)
 
 	err = server.SetBindAddress(address)
