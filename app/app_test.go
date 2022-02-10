@@ -961,7 +961,7 @@ func TestExternalConn(t *testing.T) {
 	acceptCh1 := make(chan net.Conn)
 	acceptCh2 := make(chan net.Conn)
 	acceptCh3 := make(chan net.Conn)
-	hijackStatus := "200 Test Status"
+	hijackStatus := "101 Switching Protocols"
 
 	dialFunc := func(ctx context.Context, addr string) (net.Conn, error) {
 		conn, err := net.Dial("tcp", addr)
@@ -985,11 +985,6 @@ func TestExternalConn(t *testing.T) {
 			require.True(t, ok)
 
 			conn, _, err := hijacker.Hijack()
-			require.NoError(t, err)
-
-			data := []byte(fmt.Sprintf("HTTP/1.1 %s\r\n\r\n", hijackStatus))
-			n, err := conn.Write(data)
-			require.Equal(t, n, len(data))
 			require.NoError(t, err)
 
 			acceptCh <- conn
