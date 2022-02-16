@@ -11,7 +11,7 @@ import (
 
 // Like client.DialFuncWithTLS but also starts the proxy, since the raft
 // connect function only supports Unix and TCP connections.
-func makeNodeDialFunc(config *tls.Config) client.DialFunc {
+func makeNodeDialFunc(appCtx context.Context, config *tls.Config) client.DialFunc {
 	dial := func(ctx context.Context, addr string) (net.Conn, error) {
 		clonedConfig := config.Clone()
 		if len(clonedConfig.ServerName) == 0 {
@@ -32,7 +32,7 @@ func makeNodeDialFunc(config *tls.Config) client.DialFunc {
 			return nil, fmt.Errorf("create pair of Unix sockets: %w", err)
 		}
 
-		go proxy(context.Background(), conn, goUnix, clonedConfig)
+		go proxy(appCtx, conn, goUnix, clonedConfig)
 
 		return cUnix, nil
 	}
@@ -42,7 +42,7 @@ func makeNodeDialFunc(config *tls.Config) client.DialFunc {
 
 // extDialFuncWithProxy executes given DialFunc and then copies the data back
 // and forth between the remote connection and a local unix socket.
-func extDialFuncWithProxy(dialFunc client.DialFunc) client.DialFunc {
+func extDialFuncWithProxy(appCtx context.Context, dialFunc client.DialFunc) client.DialFunc {
 	return func(ctx context.Context, addr string) (net.Conn, error) {
 		goUnix, cUnix, err := socketpair()
 		if err != nil {
@@ -54,7 +54,7 @@ func extDialFuncWithProxy(dialFunc client.DialFunc) client.DialFunc {
 			return nil, err
 		}
 
-		go proxy(context.Background(), conn, goUnix, nil)
+		go proxy(appCtx, conn, goUnix, nil)
 
 		return cUnix, nil
 	}

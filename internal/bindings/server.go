@@ -85,7 +85,11 @@ import (
 	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
-type Node C.dqlite_node
+type Node struct {
+	node   *C.dqlite_node
+	ctx    context.Context
+	cancel context.CancelFunc
+}
 
 type SnapshotParams struct {
 	Threshold uint64
@@ -113,7 +117,7 @@ func ConfigMultiThread() error {
 }
 
 // NewNode creates a new Node instance.
-func NewNode(id uint64, address string, dir string) (*Node, error) {
+func NewNode(ctx context.Context, id uint64, address string, dir string) (*Node, error) {
 	var server *C.dqlite_node
 	cid := C.dqlite_node_id(id)
 
@@ -128,15 +132,19 @@ func NewNode(id uint64, address string, dir string) (*Node, error) {
 		return nil, fmt.Errorf("%s", errmsg)
 	}
 
-	return (*Node)(unsafe.Pointer(server)), nil
+	node := &Node{node: (*C.dqlite_node)(unsafe.Pointer(server))}
+	node.ctx, node.cancel = context.WithCancel(ctx)
+
+	return node, nil
 }
 
 func (s *Node) SetDialFunc(dial protocol.DialFunc) error {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	connectLock.Lock()
 	defer connectLock.Unlock()
 	connectIndex++
 	connectRegistry[connectIndex] = dial
+	contextRegistry[connectIndex] = s.ctx
 	if rc := C.configConnectFunc(server, connectIndex); rc != 0 {
 		return fmt.Errorf("failed to set connect func")
 	}
@@ -144,7 +152,7 @@ func (s *Node) SetDialFunc(dial protocol.DialFunc) error {
 }
 
 func (s *Node) SetBindAddress(address string) error {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	caddress := C.CString(address)
 	defer C.free(unsafe.Pointer(caddress))
 	if rc := C.dqlite_node_set_bind_address(server, caddress); rc != 0 {
@@ -154,7 +162,7 @@ func (s *Node) SetBindAddress(address string) error {
 }
 
 func (s *Node) SetNetworkLatency(nanoseconds uint64) error {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	cnanoseconds := C.nanoseconds_t(nanoseconds)
 	if rc := C.dqlite_node_set_network_latency(server, cnanoseconds); rc != 0 {
 		return fmt.Errorf("failed to set network latency")
@@ -163,7 +171,7 @@ func (s *Node) SetNetworkLatency(nanoseconds uint64) error {
 }
 
 func (s *Node) SetSnapshotParams(params SnapshotParams) error {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	cthreshold := C.unsigned(params.Threshold)
 	ctrailing := C.unsigned(params.Trailing)
 	if rc := C.dqlite_node_set_snapshot_params(server, cthreshold, ctrailing); rc != 0 {
@@ -173,7 +181,7 @@ func (s *Node) SetSnapshotParams(params SnapshotParams) error {
 }
 
 func (s *Node) SetFailureDomain(code uint64) error {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	ccode := C.failure_domain_t(code)
 	if rc := C.dqlite_node_set_failure_domain(server, ccode); rc != 0 {
 		return fmt.Errorf("set failure domain: %d", rc)
@@ -182,12 +190,12 @@ func (s *Node) SetFailureDomain(code uint64) error {
 }
 
 func (s *Node) GetBindAddress() string {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	return C.GoString(C.dqlite_node_get_bind_address(server))
 }
 
 func (s *Node) Start() error {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	if rc := C.dqlite_node_start(server); rc != 0 {
 		errmsg := C.GoString(C.dqlite_node_errmsg(server))
 		return fmt.Errorf("%s", errmsg)
@@ -196,7 +204,7 @@ func (s *Node) Start() error {
 }
 
 func (s *Node) Stop() error {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	if rc := C.dqlite_node_stop(server); rc != 0 {
 		return fmt.Errorf("task stopped with error code %d", rc)
 	}
@@ -205,7 +213,8 @@ func (s *Node) Stop() error {
 
 // Close the server releasing all used resources.
 func (s *Node) Close() {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	defer s.cancel()
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	C.dqlite_node_destroy(server)
 }
 
@@ -219,7 +228,7 @@ func (s *Node) Recover(cluster []protocol.NodeInfo) error {
 
 // RecoverExt has a similar purpose as `Recover` but takes the node role into account
 func (s *Node) RecoverExt(cluster []protocol.NodeInfo) error {
-	server := (*C.dqlite_node)(unsafe.Pointer(s))
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	n := C.int(len(cluster))
 	infos := C.makeInfos(n)
 	defer C.free(unsafe.Pointer(infos))
@@ -275,11 +284,15 @@ type fileConn interface {
 func connectWithDial(handle C.uintptr_t, address *C.char, fd *C.int) C.int {
 	connectLock.Lock()
 	defer connectLock.Unlock()
+
 	dial := connectRegistry[handle]
+	ctx := contextRegistry[handle]
+
 	// TODO: make timeout customizable.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	conn, err := dial(ctx, C.GoString(address))
+
+	conn, err := dial(dialCtx, C.GoString(address))
 	if err != nil {
 		return C.RAFT_NOCONNECTION
 	}
@@ -292,6 +305,7 @@ func connectWithDial(handle C.uintptr_t, address *C.char, fd *C.int) C.int {
 }
 
 // Use handles to avoid passing Go pointers to C.
+var contextRegistry = make(map[C.uintptr_t]context.Context)
 var connectRegistry = make(map[C.uintptr_t]protocol.DialFunc)
 var connectIndex C.uintptr_t = 100
 var connectLock = sync.Mutex{}

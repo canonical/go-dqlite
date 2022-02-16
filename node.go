@@ -1,6 +1,7 @@
 package dqlite
 
 import (
+	"context"
 	"time"
 
 	"github.com/canonical/go-dqlite/client"
@@ -16,6 +17,7 @@ type Node struct {
 	id          uint64
 	address     string
 	bindAddress string
+	cancel      context.CancelFunc
 }
 
 // NodeInfo is a convenience alias for client.NodeInfo.
@@ -67,41 +69,51 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 		option(o)
 	}
 
-	server, err := bindings.NewNode(id, address, dir)
+	ctx, cancel := context.WithCancel(context.Background())
+	server, err := bindings.NewNode(ctx, id, address, dir)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
+
 	if o.DialFunc != nil {
 		if err := server.SetDialFunc(o.DialFunc); err != nil {
+			cancel()
 			return nil, err
 		}
 	}
 	if o.BindAddress != "" {
 		if err := server.SetBindAddress(o.BindAddress); err != nil {
+			cancel()
 			return nil, err
 		}
 	}
 	if o.NetworkLatency != 0 {
 		if err := server.SetNetworkLatency(o.NetworkLatency); err != nil {
+			cancel()
 			return nil, err
 		}
 	}
 	if o.FailureDomain != 0 {
 		if err := server.SetFailureDomain(o.FailureDomain); err != nil {
+			cancel()
 			return nil, err
 		}
 	}
 	if o.SnapshotParams.Threshold != 0 || o.SnapshotParams.Trailing != 0 {
 		if err := server.SetSnapshotParams(o.SnapshotParams); err != nil {
+			cancel()
 			return nil, err
 		}
 	}
+
 	s := &Node{
 		server:      server,
 		acceptCh:    make(chan error, 1),
 		id:          id,
 		address:     address,
 		bindAddress: o.BindAddress,
+		cancel:      cancel,
 	}
 
 	return s, nil
@@ -137,6 +149,7 @@ type options struct {
 
 // Close the server, releasing all resources it created.
 func (s *Node) Close() error {
+	s.cancel()
 	// Send a stop signal to the dqlite event loop.
 	if err := s.server.Stop(); err != nil {
 		return errors.Wrap(err, "server failed to stop")
@@ -163,7 +176,7 @@ func GenerateID(address string) uint64 {
 // It forces appending a new configuration to the raft log stored in the given
 // directory, effectively replacing the current configuration.
 func ReconfigureMembership(dir string, cluster []NodeInfo) error {
-	server, err := bindings.NewNode(1, "1", dir)
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	if err != nil {
 		return err
 	}
@@ -172,7 +185,7 @@ func ReconfigureMembership(dir string, cluster []NodeInfo) error {
 }
 
 func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
-	server, err := bindings.NewNode(1, "1", dir)
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	if err != nil {
 		return err
 	}

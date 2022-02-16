@@ -37,6 +37,7 @@ type App struct {
 	driver          *driver.Driver
 	driverName      string
 	log             client.LogFunc
+	ctx             context.Context
 	stop            context.CancelFunc // Signal App.run() to stop.
 	proxyCh         chan struct{}      // Waits for App.proxy() to return.
 	runCh           chan struct{}      // Waits for App.run() to return.
@@ -159,9 +160,10 @@ func New(dir string, options ...Option) (app *App, err error) {
 	}
 
 	// Start the local dqlite engine.
+	ctx, stop := context.WithCancel(context.Background())
 	var nodeDial client.DialFunc
 	if o.Conn != nil {
-		nodeDial = extDialFuncWithProxy(o.Conn.dialFunc)
+		nodeDial = extDialFuncWithProxy(ctx, o.Conn.dialFunc)
 	} else if o.TLS != nil {
 		nodeBindAddress = fmt.Sprintf("@dqlite-%d", info.ID)
 
@@ -173,7 +175,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 			nodeBindAddress = fmt.Sprintf("@snap.%s.dqlite-%d", snapInstanceName, info.ID)
 		}
 
-		nodeDial = makeNodeDialFunc(o.TLS.Dial)
+		nodeDial = makeNodeDialFunc(ctx, o.TLS.Dial)
 	} else {
 		nodeBindAddress = info.Address
 		nodeDial = client.DefaultDialFunc
@@ -187,9 +189,11 @@ func New(dir string, options ...Option) (app *App, err error) {
 		dqlite.WithSnapshotParams(o.SnapshotParams),
 	)
 	if err != nil {
+		stop()
 		return nil, fmt.Errorf("create node: %w", err)
 	}
 	if err := node.Start(); err != nil {
+		stop()
 		return nil, fmt.Errorf("start node: %w", err)
 	}
 	cleanups = append(cleanups, func() { node.Close() })
@@ -204,6 +208,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	driver, err := driver.New(store, driver.WithDialFunc(driverDial), driver.WithLogFunc(o.Log))
 	if err != nil {
+		stop()
 		return nil, fmt.Errorf("create driver: %w", err)
 	}
 	driverIndex++
@@ -211,14 +216,14 @@ func New(dir string, options ...Option) (app *App, err error) {
 	sql.Register(driverName, driver)
 
 	if o.Voters < 3 || o.Voters%2 == 0 {
+		stop()
 		return nil, fmt.Errorf("invalid voters %d: must be an odd number greater than 1", o.Voters)
 	}
 
 	if o.StandBys%2 == 0 {
+		stop()
 		return nil, fmt.Errorf("invalid stand-bys %d: must be an odd number", o.StandBys)
 	}
-
-	ctx, stop := context.WithCancel(context.Background())
 
 	if runtime.GOOS != "linux" && nodeBindAddress[0] == '@' {
 		// Do not use abstract socket on other platforms and left trim "@"
@@ -237,6 +242,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		driverName:      driverName,
 		log:             o.Log,
 		tls:             o.TLS,
+		ctx:             ctx,
 		stop:            stop,
 		runCh:           make(chan struct{}, 0),
 		readyCh:         make(chan struct{}, 0),
@@ -279,7 +285,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 					panic(fmt.Errorf("Failed to connect to bind address %q: %w", nodeBindAddress, err))
 				}
 
-				go proxy(ctx, remote, local, nil)
+				go proxy(app.ctx, remote, local, nil)
 			}
 		}()
 	}
@@ -460,7 +466,7 @@ func (a *App) Client(ctx context.Context) (*client.Client, error) {
 // Proxy incoming TLS connections.
 func (a *App) proxy() {
 	wg := sync.WaitGroup{}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(a.ctx)
 	for {
 		client, err := a.listener.Accept()
 		if err != nil {
