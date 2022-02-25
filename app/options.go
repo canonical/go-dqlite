@@ -74,6 +74,15 @@ func WithTLS(listen *tls.Config, dial *tls.Config) Option {
 	}
 }
 
+// WithUnixSocket allows setting a specific socket path for communication between go-dqlite and dqlite.
+//
+// The default is an empty string which means a random abstract unix socket.
+func WithUnixSocket(path string) Option {
+	return func(options *options) {
+		options.UnixSocket = path
+	}
+}
+
 // WithVoters sets the number of nodes in the cluster that should have the
 // Voter role.
 //
@@ -185,6 +194,7 @@ type options struct {
 	FailureDomain            uint64
 	NetworkLatency           time.Duration
 	SnapshotParams           bindings.SnapshotParams
+	UnixSocket               string
 }
 
 // Create a options object with sane defaults.
