@@ -56,7 +56,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	var nodeBindAddress string
 	if o.Conn != nil {
-		listener, err := net.Listen("unix", "")
+		listener, err := net.Listen("unix", o.UnixSocket)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to autobind unix socket: %w", err)
 		}
