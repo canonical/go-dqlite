@@ -23,6 +23,13 @@ type Node struct {
 // NodeInfo is a convenience alias for client.NodeInfo.
 type NodeInfo = client.NodeInfo
 
+// Expose bindings.SnapshotParams. Used for setting dqlite's snapshot parameters.
+// SnapshotParams.Threshold controls after how many raft log entries a snapshot is
+// taken. The higher this number, the lower the frequency of the snapshots.
+// SnapshotParams.Trailing controls how many raft log entries are retained after
+// taking a snapshot.
+type SnapshotParams = bindings.SnapshotParams
+
 // Option can be used to tweak node parameters.
 type Option func(*options)
 
@@ -55,7 +62,7 @@ func WithFailureDomain(code uint64) Option {
 }
 
 // WithSnapshotParams sets the snapshot parameters of the node.
-func WithSnapshotParams(params bindings.SnapshotParams) Option {
+func WithSnapshotParams(params SnapshotParams) Option {
 	return func(options *options) {
 		options.SnapshotParams = params
 	}
