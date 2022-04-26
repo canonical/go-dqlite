@@ -51,6 +51,7 @@ const (
 	errIoErr               = 10
 	errIoErrNotLeader      = errIoErr | 40<<8
 	errIoErrLeadershipLost = errIoErr | (41 << 8)
+	errNotFound            = 12
 
 	// Legacy error codes before version-3.32.1+replication4. Kept here
 	// for backward compatibility, but should eventually be dropped.
@@ -751,6 +752,9 @@ func driverError(log client.LogFunc, err error) error {
 			fallthrough
 		case errIoErrLeadershipLost:
 			log(client.LogDebug, "leadership lost (%d - %s)", err.Code, err.Description)
+			return driver.ErrBadConn
+		case errNotFound:
+			log(client.LogDebug, "not found - potentially after leadership loss (%d - %s)", err.Code, err.Description)
 			return driver.ErrBadConn
 		default:
 			// FIXME: the server side sometimes return SQLITE_OK
