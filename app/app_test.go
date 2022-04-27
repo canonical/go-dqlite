@@ -613,7 +613,7 @@ func TestRolesAdjustment_ReplaceVoterHonorFailureDomain(t *testing.T) {
 	// A voter in failure domain 2 goes offline.
 	cleanups[2]()
 
-	time.Sleep(12 * time.Second)
+	time.Sleep(18 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
@@ -680,7 +680,7 @@ func TestRolesAdjustment_ReplaceVoterHonorWeight(t *testing.T) {
 	require.NoError(t, cli.Weight(context.Background(), uint64(10)))
 	defer cli.Close()
 
-	time.Sleep(12 * time.Second)
+	time.Sleep(18 * time.Second)
 
 	cli, err = apps[0].Leader(context.Background())
 	require.NoError(t, err)
@@ -779,7 +779,7 @@ func TestRolesAdjustment_ReplaceStandBy(t *testing.T) {
 	// A stand-by goes offline.
 	cleanups[4]()
 
-	time.Sleep(15 * time.Second)
+	time.Sleep(20 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
@@ -836,7 +836,7 @@ func TestRolesAdjustment_ReplaceStandByHonorFailureDomains(t *testing.T) {
 	// A stand-by from failure domain 1 goes offline.
 	cleanups[4]()
 
-	time.Sleep(15 * time.Second)
+	time.Sleep(20 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())
 	require.NoError(t, err)
