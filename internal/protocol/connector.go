@@ -301,11 +301,12 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 // Return a retry strategy with exponential backoff, capped at the given amount
 // of time and possibly with a maximum number of retries.
 func makeRetryStrategies(factor, cap time.Duration, limit uint) []strategy.Strategy {
+	limit += 1 // Fix for change in behavior: https://github.com/Rican7/retry/pull/12
 	backoff := backoff.BinaryExponential(factor)
 
 	strategies := []strategy.Strategy{}
 
-	if limit > 0 {
+	if limit > 1 {
 		strategies = append(strategies, strategy.Limit(limit))
 	}
 
