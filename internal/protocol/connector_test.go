@@ -35,7 +35,7 @@ func TestConnector_Success(t *testing.T) {
 	assert.NoError(t, client.Close())
 
 	check([]string{
-		"DEBUG: attempt 0: server @test-0: connected",
+		"DEBUG: attempt 1: server @test-0: connected",
 	})
 }
 
@@ -53,9 +53,9 @@ func TestConnector_LimitRetries(t *testing.T) {
 	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
 
 	check([]string{
-		"WARN: attempt 0: server @test-123: dial: dial unix @test-123: connect: connection refused",
 		"WARN: attempt 1: server @test-123: dial: dial unix @test-123: connect: connection refused",
 		"WARN: attempt 2: server @test-123: dial: dial unix @test-123: connect: connection refused",
+		"WARN: attempt 3: server @test-123: dial: dial unix @test-123: connect: connection refused",
 	})
 }
 
@@ -73,8 +73,8 @@ func TestConnector_DialTimeout(t *testing.T) {
 	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
 
 	check([]string{
-		"WARN: attempt 0: server 8.8.8.8:9000: dial: dial tcp 8.8.8.8:9000: i/o timeout",
 		"WARN: attempt 1: server 8.8.8.8:9000: dial: dial tcp 8.8.8.8:9000: i/o timeout",
+		"WARN: attempt 2: server 8.8.8.8:9000: dial: dial tcp 8.8.8.8:9000: i/o timeout",
 	})
 }
 
@@ -107,7 +107,7 @@ func TestConnector_ContextCanceled(t *testing.T) {
 	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
 
 	check([]string{
-		"WARN: attempt 0: server 1.2.3.4:666: dial: dial tcp 1.2.3.4:666: i/o timeout",
+		"WARN: attempt 1: server 1.2.3.4:666: dial: dial tcp 1.2.3.4:666: i/o timeout",
 	})
 }
 
