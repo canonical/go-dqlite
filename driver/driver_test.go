@@ -20,6 +20,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 
 	dqlite "github.com/canonical/go-dqlite"
@@ -225,6 +226,38 @@ func TestStmt_Exec(t *testing.T) {
 	assert.NoError(t, conn.Close())
 }
 
+func TestStmt_ExecTooManyParams(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, stmt.Close())
+
+	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES " + strings.Repeat("(?), ", 255) + " (?)")
+	require.NoError(t, err)
+
+	values := make([]driver.Value, 256)
+	for i := range values {
+		values[i] = int64(1)
+	}
+	_, err = stmt.Exec(values)
+	require.Errorf(t, err, "too many parameters (256) max = 255")
+
+	require.NoError(t, stmt.Close())
+	assert.NoError(t, conn.Close())
+}
+
 func TestStmt_Query(t *testing.T) {
 	drv, cleanup := newDriver(t)
 	defer cleanup()
@@ -271,6 +304,38 @@ func TestStmt_Query(t *testing.T) {
 	assert.NoError(t, conn.Close())
 }
 
+func TestStmt_QueryTooManyParams(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+
+	require.NoError(t, stmt.Close())
+
+	stmt, err = conn.Prepare("SELECT n FROM test WHERE n IN (" + strings.Repeat("?, ", 255) + " ?)")
+	require.NoError(t, err)
+
+	values := make([]driver.Value, 256)
+	for i := range values {
+		values[i] = int64(1)
+	}
+	_, err = stmt.Query(values)
+	require.Errorf(t, err, "too many parameters (256) max = 255")
+
+	require.NoError(t, stmt.Close())
+	assert.NoError(t, conn.Close())
+}
+
 func TestConn_QueryParams(t *testing.T) {
 	drv, cleanup := newDriver(t)
 	defer cleanup()
@@ -314,6 +379,58 @@ INSERT INTO test (n,t) VALUES (3,'b');
 	assert.Equal(t, "a", values[1])
 
 	require.Equal(t, io.EOF, rows.Next(values))
+
+	assert.NoError(t, conn.Close())
+}
+
+func TestConn_QueryTooManyParams(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	execer := conn.(driver.Execer)
+
+	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	require.NoError(t, err)
+
+	values := make([]driver.Value, 256)
+	for i := range values {
+		values[i] = int64(1)
+	}
+	queryer := conn.(driver.Queryer)
+	_, err = queryer.Query("SELECT n FROM test WHERE n IN ("+strings.Repeat("?, ", 255)+" ?)", values)
+	require.Errorf(t, err, "too many parameters (256) max = 255")
+
+	assert.NoError(t, conn.Close())
+}
+
+func TestConn_ExecTooManyParams(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	execer := conn.(driver.Execer)
+
+	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	require.NoError(t, err)
+
+	values := make([]driver.Value, 256)
+	for i := range values {
+		values[i] = int64(1)
+	}
+
+	_, err = execer.Exec("INSERT INTO test(n) VALUES "+strings.Repeat("(?), ", 255)+" (?)", values)
+	require.Errorf(t, err, "too many parameters (256) max = 255")
 
 	assert.NoError(t, conn.Close())
 }
