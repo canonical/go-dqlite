@@ -159,7 +159,13 @@ func (m *Message) putFloat64(v float64) {
 
 // Encode the given driver values as binding parameters.
 func (m *Message) putNamedValues(values NamedValues) {
-	n := uint8(len(values)) // N of params
+	l := len(values)
+	if l > 255 {
+		// safeguard, should have been checked beforehand.
+		panic("too many parameters")
+	}
+
+	n := uint8(l) // N of params
 	if n == 0 {
 		return
 	}
