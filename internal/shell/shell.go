@@ -262,17 +262,17 @@ func (s *Shell) processReconfigure(ctx context.Context, line string) (string, er
 
 	store, err := client.NewYamlNodeStore(clusteryamlpath)
 	if err != nil {
-		return "NOK", fmt.Errorf("Failed to create YamlNodeStore from file at %s :%v", clusteryamlpath, err)
+		return "NOK", fmt.Errorf("failed to create YamlNodeStore from file at %s :%v", clusteryamlpath, err)
 	}
 
 	servers, err := store.Get(ctx)
 	if err != nil {
-		return "NOK", fmt.Errorf("Failed to retrieve NodeInfo list :%v", err)
+		return "NOK", fmt.Errorf("failed to retrieve NodeInfo list :%v", err)
 	}
 
 	err = dqlite.ReconfigureMembershipExt(dir, servers)
 	if err != nil {
-		return "NOK", fmt.Errorf("Failed to reconfigure membership :%v.", err)
+		return "NOK", fmt.Errorf("failed to reconfigure membership :%v", err)
 	}
 
 	return "OK", nil
