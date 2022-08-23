@@ -110,7 +110,7 @@ func extractTCPConn(conn net.Conn) (*net.TCPConn, error) {
 	// remote.conn field, which is indeed the underlying TCP connection.
 	tlsConn, ok := conn.(*tls.Conn)
 	if !ok {
-		return nil, fmt.Errorf("Connection is not a tls.Conn")
+		return nil, fmt.Errorf("connection is not a tls.Conn")
 	}
 
 	field := reflect.ValueOf(tlsConn).Elem().FieldByName("conn")
@@ -119,7 +119,7 @@ func extractTCPConn(conn net.Conn) (*net.TCPConn, error) {
 
 	tcpConn, ok := c.(*net.TCPConn)
 	if !ok {
-		return nil, fmt.Errorf("Connection is not a net.TCPConn")
+		return nil, fmt.Errorf("connection is not a net.TCPConn")
 	}
 
 	return tcpConn, nil

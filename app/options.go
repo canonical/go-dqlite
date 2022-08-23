@@ -258,7 +258,7 @@ func defaultAddress() (addr string, err error) {
 		}
 	}
 
-	return "", fmt.Errorf("No suitable net.Interface found: %v", err)
+	return "", fmt.Errorf("no suitable net.Interface found: %v", err)
 }
 
 func defaultLogFunc(l client.LogLevel, format string, a ...interface{}) {

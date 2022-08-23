@@ -58,7 +58,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 	if o.Conn != nil {
 		listener, err := net.Listen("unix", o.UnixSocket)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to autobind unix socket: %w", err)
+			return nil, fmt.Errorf("failed to autobind unix socket: %w", err)
 		}
 
 		nodeBindAddress = listener.Addr().String()
@@ -276,13 +276,13 @@ func New(dir string, options ...Option) (app *App, err error) {
 				n, err := remote.Write(data)
 				if err != nil || n != len(data) {
 					remote.Close()
-					panic(fmt.Errorf("Failed to write connection header: %w", err))
+					panic(fmt.Errorf("failed to write connection header: %w", err))
 				}
 
 				local, err := net.Dial("unix", nodeBindAddress)
 				if err != nil {
 					remote.Close()
-					panic(fmt.Errorf("Failed to connect to bind address %q: %w", nodeBindAddress, err))
+					panic(fmt.Errorf("failed to connect to bind address %q: %w", nodeBindAddress, err))
 				}
 
 				go proxy(app.ctx, remote, local, nil)
@@ -662,7 +662,7 @@ func (a *App) makeRolesChanges(nodes []client.NodeInfo) RolesChanges {
 		// sem.Acquire will not block forever because the goroutines
 		// that release the semaphore will eventually timeout.
 		if err := sem.Acquire(context.Background(), 1); err != nil {
-			a.warn("Failed to acquire semaphore: %v", err)
+			a.warn("failed to acquire semaphore: %v", err)
 			wg.Done()
 			continue
 		}

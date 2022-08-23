@@ -94,18 +94,18 @@ func (bm *Benchmark) reportFiles() map[string]string {
 func (bm *Benchmark) reportResults() error {
 	dir := path.Join(bm.dir, "results")
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("Failed to create %v: %v", dir, err)
+		return fmt.Errorf("failed to create %v: %v", dir, err)
 	}
 
 	reports := bm.reportFiles()
 	for filename, content := range reports {
 		f, err := os.Create(path.Join(dir, filename))
 		if err != nil {
-			return fmt.Errorf("Failed to create %v in %v: %v", filename, dir, err)
+			return fmt.Errorf("failed to create %v in %v: %v", filename, dir, err)
 		}
 		_, err = f.WriteString(content)
 		if err != nil {
-			return fmt.Errorf("Failed to write %v in %v: %v", filename, dir, err)
+			return fmt.Errorf("failed to write %v in %v: %v", filename, dir, err)
 		}
 		f.Sync()
 	}
@@ -164,11 +164,11 @@ func (bm *Benchmark) waitForCluster(ch <-chan os.Signal) error {
 	select {
 	case <-ctx.Done():
 		if !errors.Is(ctx.Err(), context.Canceled) {
-			return fmt.Errorf("Timed out waiting for cluster: %v", ctx.Err())
+			return fmt.Errorf("timed out waiting for cluster: %v", ctx.Err())
 		}
 		return nil
 	case <-ch:
-		return fmt.Errorf("Benchmark stopped. Signal received while waiting for cluster.")
+		return fmt.Errorf("benchmark stopped, signal received while waiting for cluster")
 	}
 
 }
