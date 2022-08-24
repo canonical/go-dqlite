@@ -21,7 +21,7 @@ type Node struct {
 }
 
 // NodeInfo is a convenience alias for client.NodeInfo.
-type NodeInfo = client.NodeInfo
+type NodeInfo client.NodeInfo
 
 // SnapshotParams exposes bindings.SnapshotParams. Used for setting dqlite's
 // snapshot parameters.
