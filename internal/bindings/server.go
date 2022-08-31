@@ -129,6 +129,7 @@ func NewNode(ctx context.Context, id uint64, address string, dir string) (*Node,
 
 	if rc := C.dqlite_node_create(cid, caddress, cdir, &server); rc != 0 {
 		errmsg := C.GoString(C.dqlite_node_errmsg(server))
+		C.dqlite_node_destroy(server)
 		return nil, fmt.Errorf("%s", errmsg)
 	}
 
