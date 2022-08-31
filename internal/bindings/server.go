@@ -85,12 +85,6 @@ import (
 	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
-const (
-	DQLITE_ERROR = 1
-	DQLITE_MISUSE = 2
-	DQLITE_NOMEM = 3
-)
-
 type Node struct {
 	node   *C.dqlite_node
 	ctx    context.Context
@@ -134,16 +128,9 @@ func NewNode(ctx context.Context, id uint64, address string, dir string) (*Node,
 	defer C.free(unsafe.Pointer(cdir))
 
 	if rc := C.dqlite_node_create(cid, caddress, cdir, &server); rc != 0 {
-		var errmsg string
-		switch rc {
-		case DQLITE_ERROR:
-			errmsg = "internal dqlite error"
-		case DQLITE_MISUSE:
-			errmsg = "misuse of dqlite API"
-		case DQLITE_NOMEM:
-			errmsg = "out of memory"
-		}
-		return nil, fmt.Errorf("failed to create node: %s", errmsg)
+		errmsg := C.GoString(C.dqlite_node_errmsg(server))
+		C.dqlite_node_destroy(server)
+		return nil, fmt.Errorf("%s", errmsg)
 	}
 
 	node := &Node{node: (*C.dqlite_node)(unsafe.Pointer(server))}
