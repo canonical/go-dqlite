@@ -367,6 +367,7 @@ func (a *App) Handover(ctx context.Context) error {
 				return fmt.Errorf("find new leader: %w", err)
 			}
 			defer cli.Close()
+			break
 		}
 	}
 
