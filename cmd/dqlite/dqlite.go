@@ -116,8 +116,11 @@ func main() {
 				result, err := sh.Process(context.Background(), input)
 				if err != nil {
 					fmt.Println("Error: ", err)
-				} else if result != "" {
-					fmt.Println(result)
+				} else {
+					line.AppendHistory(input)
+					if result != "" {
+						fmt.Println(result)
+					}
 				}
 			}
 
