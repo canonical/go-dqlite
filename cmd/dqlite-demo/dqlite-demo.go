@@ -74,7 +74,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 				case "PUT":
 					result = "done"
 					value, _ := ioutil.ReadAll(r.Body)
-					if _, err := db.Exec(update, key, value); err != nil {
+					if _, err := db.Exec(update, key, string(value[:])); err != nil {
 						result = fmt.Sprintf("Error: %s", err.Error())
 					}
 				default:

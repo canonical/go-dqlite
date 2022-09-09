@@ -101,7 +101,7 @@ Now we can start using the cluster. Let's insert a key pair:
 curl -X PUT -d my-value http://127.0.0.1:8001/my-key
 ```
 
-and then retrive it from the database:
+and then retrieve it from the database:
 
 ```bash
 curl http://127.0.0.1:8001/my-key
@@ -123,12 +123,18 @@ can be built with:
 ```
 go install -tags libsqlite3 ./cmd/dqlite
 ```
-
-You can test it with the `dqlite-demo` with:
-
 ```
-dqlite -s 127.0.0.1:9001
+Usage:
+  dqlite -s <servers> <database> [command] [flags]
 ```
 
-It supports normal SQL queries plus the special `.cluster` and `.leader`
+Example usage in the case of the `dqlite-demo` example listed above:
+```
+dqlite -s 127.0.0.1:9001 demo
+
+dqlite> SELECT * FROM model;
+my-key|my-value
+```
+
+The shell supports normal SQL queries plus the special `.cluster` and `.leader`
 commands to inspect the cluster members and the current leader.
