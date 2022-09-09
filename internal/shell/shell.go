@@ -308,13 +308,21 @@ func (s *Shell) processSelect(ctx context.Context, line string) (string, error) 
 
 	rows, err := tx.Query(line)
 	if err != nil {
-		return "", fmt.Errorf("query: %w", err)
+		err = fmt.Errorf("query: %w", err)
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return "", fmt.Errorf("unable to rollback: %v", err)
+		}
+		return "", err
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
-		return "", fmt.Errorf("columns: %w", err)
+		err = fmt.Errorf("columns: %w", err)
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return "", fmt.Errorf("unable to rollback: %v", err)
+		}
+		return "", err
 	}
 	n := len(columns)
 
@@ -327,7 +335,11 @@ func (s *Shell) processSelect(ctx context.Context, line string) (string, error) 
 		}
 
 		if err := rows.Scan(rowPointers...); err != nil {
-			return "", fmt.Errorf("scan: %w", err)
+			err = fmt.Errorf("scan: %w", err)
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return "", fmt.Errorf("unable to rollback: %v", err)
+			}
+			return "", err
 		}
 
 		for i, column := range row {
@@ -341,7 +353,11 @@ func (s *Shell) processSelect(ctx context.Context, line string) (string, error) 
 	}
 
 	if err := rows.Err(); err != nil {
-		return "", fmt.Errorf("rows: %w", err)
+		err = fmt.Errorf("rows: %w", err)
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return "", fmt.Errorf("unable to rollback: %v", err)
+		}
+		return "", err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -358,11 +374,15 @@ func (s *Shell) processExec(ctx context.Context, line string) error {
 	}
 
 	if _, err := tx.Exec(line); err != nil {
+		err = fmt.Errorf("exec: %w", err)
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return fmt.Errorf("unable to rollback: %v", err)
+		}
 		return err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return err
+		return fmt.Errorf("commit: %w", err)
 	}
 
 	return nil
