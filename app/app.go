@@ -220,11 +220,6 @@ func New(dir string, options ...Option) (app *App, err error) {
 		return nil, fmt.Errorf("invalid voters %d: must be an odd number greater than 1", o.Voters)
 	}
 
-	if o.StandBys%2 == 0 {
-		stop()
-		return nil, fmt.Errorf("invalid stand-bys %d: must be an odd number", o.StandBys)
-	}
-
 	if runtime.GOOS != "linux" && nodeBindAddress[0] == '@' {
 		// Do not use abstract socket on other platforms and left trim "@"
 		nodeBindAddress = nodeBindAddress[1:]
