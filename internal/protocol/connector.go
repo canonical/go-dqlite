@@ -12,7 +12,7 @@ import (
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
-	"github.com/canonical/go-dqlite/internal/logging"
+	"github.com/canonical/go-dqlite/logging"
 	"github.com/pkg/errors"
 )
 
@@ -220,7 +220,6 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 // - Target not leader and no leader known:  -> nil, "", nil
 // - Target not leader and leader known:     -> nil, leader, nil
 // - Target is the leader:                   -> server, "", nil
-//
 func (c *Connector) connectAttemptOne(ctx context.Context, address string, version uint64) (*Protocol, string, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, c.config.DialTimeout)
 	defer cancel()
