@@ -135,7 +135,7 @@ func main() {
 	flags.StringVarP(&db, "db", "d", "", "Address used for internal database replication.")
 	join = flags.StringSliceP("join", "j", nil, "Database addresses of existing nodes.")
 	cluster = flags.StringSliceP("cluster", "c", nil, "Database addresses of all nodes taking part in the benchmark.\n"+
-		"The `driver` will wait for all nodes to be online before running the benchmark.")
+		"The driver will wait for all nodes to be online before running the benchmark.")
 	flags.IntVar(&clusterTimeout, "cluster-timeout", defaultClusterTimeout, "How long the benchmark should wait in seconds for the whole cluster to be online.")
 	flags.StringVarP(&dir, "dir", "D", defaultDir, "Data directory.")
 	flags.StringVarP(&workload, "workload", "w", defaultWorkload, "The workload to run: \"kvwrite\" or \"kvreadwrite\".")
