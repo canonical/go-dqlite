@@ -170,6 +170,17 @@ func WithSnapshotParams(params dqlite.SnapshotParams) Option {
 	}
 }
 
+// WithDiskMode enables or disables disk-mode.
+// WARNING: This is experimental API, use with caution
+// and prepare for data loss.
+// UNSTABLE: Behavior can change in future.
+// NOT RECOMMENDED for production use-cases, use at own risk.
+func WithDiskMode(disk bool) Option {
+	return func(options *options) {
+		options.DiskMode = disk
+	}
+}
+
 type tlsSetup struct {
 	Listen *tls.Config
 	Dial   *tls.Config
@@ -193,6 +204,7 @@ type options struct {
 	NetworkLatency           time.Duration
 	UnixSocket               string
 	SnapshotParams           dqlite.SnapshotParams
+	DiskMode                 bool
 }
 
 // Create a options object with sane defaults.
@@ -202,6 +214,7 @@ func defaultOptions() *options {
 		Voters:                   3,
 		StandBys:                 3,
 		RolesAdjustmentFrequency: 30 * time.Second,
+		DiskMode:                 false, // Be explicit about not enabling disk-mode by default.
 	}
 }
 
