@@ -5,6 +5,12 @@ on:
 
 jobs:
   benchmark:
+    strategy:
+      fail-fast: false
+      matrix:
+        disk:
+          - 1
+          - 0
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout code
@@ -28,7 +34,8 @@ jobs:
       run: |
         go get -t -tags libsqlite3 ./...
         go install -tags libsqlite3 github.com/canonical/go-dqlite/cmd/dqlite-benchmark
-        dqlite-benchmark --db 127.0.0.1:9001 --duration 3600 --driver --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
+        diskmode=$(if [ ${{ matrix.disk }} -eq 1 ]; then echo -n "--disk"; fi)
+        dqlite-benchmark --db 127.0.0.1:9001 --duration 3600 --driver $diskmode --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
         masterpid=$!
         dqlite-benchmark --db 127.0.0.1:9002 --join 127.0.0.1:9001 &
         dqlite-benchmark --db 127.0.0.1:9003 --join 127.0.0.1:9001 &
