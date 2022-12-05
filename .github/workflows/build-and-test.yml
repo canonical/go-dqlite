@@ -22,10 +22,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Install Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
         go-version: ${{ matrix.go }}
 
@@ -75,7 +75,7 @@ jobs:
         echo "Read results:"
         head -n 5 /tmp/dqlite-benchmark/127.0.0.1:9001/results/0-query-*
 
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}
         path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
