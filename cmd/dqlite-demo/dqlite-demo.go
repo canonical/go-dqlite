@@ -25,7 +25,6 @@ func main() {
 	var join *[]string
 	var dir string
 	var verbose bool
-	var diskMode bool
 
 	cmd := &cobra.Command{
 		Use:   "dqlite-demo",
@@ -44,7 +43,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 				}
 				log.Printf(fmt.Sprintf("%s: %s: %s\n", api, l.String(), format), a...)
 			}
-			app, err := app.New(dir, app.WithAddress(db), app.WithCluster(*join), app.WithLogFunc(logFunc), app.WithDiskMode(diskMode))
+			app, err := app.New(dir, app.WithAddress(db), app.WithCluster(*join), app.WithLogFunc(logFunc))
 			if err != nil {
 				return err
 			}
@@ -116,7 +115,6 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 	join = flags.StringSliceP("join", "j", nil, "database addresses of existing nodes")
 	flags.StringVarP(&dir, "dir", "D", "/tmp/dqlite-demo", "data directory")
 	flags.BoolVarP(&verbose, "verbose", "v", false, "verbose logging")
-	flags.BoolVar(&diskMode, "disk", defaultDiskMode, "Warning: Unstable, Experimental. Set this flag to enable dqlite's disk-mode.")
 
 	cmd.MarkFlagRequired("api")
 	cmd.MarkFlagRequired("db")
@@ -127,8 +125,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 }
 
 const (
-	schema          = "CREATE TABLE IF NOT EXISTS model (key TEXT, value TEXT, UNIQUE(key))"
-	query           = "SELECT value FROM model WHERE key = ?"
-	update          = "INSERT OR REPLACE INTO model(key, value) VALUES(?, ?)"
-	defaultDiskMode = false
+	schema = "CREATE TABLE IF NOT EXISTS model (key TEXT, value TEXT, UNIQUE(key))"
+	query  = "SELECT value FROM model WHERE key = ?"
+	update = "INSERT OR REPLACE INTO model(key, value) VALUES(?, ?)"
 )
