@@ -69,6 +69,17 @@ func WithSnapshotParams(params SnapshotParams) Option {
 	}
 }
 
+// WithDiskMode enables dqlite disk-mode on the node.
+// WARNING: This is experimental API, use with caution
+// and prepare for data loss.
+// UNSTABLE: Behavior can change in future.
+// NOT RECOMMENDED for production use-cases, use at own risk.
+func WithDiskMode(disk bool) Option {
+	return func(options *options) {
+		options.DiskMode = disk
+	}
+}
+
 // New creates a new Node instance.
 func New(id uint64, address string, dir string, options ...Option) (*Node, error) {
 	o := defaultOptions()
@@ -114,6 +125,12 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 			return nil, err
 		}
 	}
+	if o.DiskMode {
+		if err := server.EnableDiskMode(); err != nil {
+			cancel()
+			return nil, err
+		}
+	}
 
 	s := &Node{
 		server:      server,
@@ -153,6 +170,7 @@ type options struct {
 	NetworkLatency uint64
 	FailureDomain  uint64
 	SnapshotParams bindings.SnapshotParams
+	DiskMode       bool
 }
 
 // Close the server, releasing all resources it created.
@@ -213,5 +231,6 @@ func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
 func defaultOptions() *options {
 	return &options{
 		DialFunc: client.DefaultDialFunc,
+		DiskMode: false, // Be explicit about not enabling disk-mode by default.
 	}
 }

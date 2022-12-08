@@ -870,6 +870,19 @@ func TestOpen(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// Open a database with disk-mode on a fresh one-node cluster.
+func TestOpenDisk(t *testing.T) {
+	app, cleanup := newApp(t, app.WithAddress("127.0.0.1:9000"), app.WithDiskMode(true))
+	defer cleanup()
+
+	db, err := app.Open(context.Background(), "test")
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.ExecContext(context.Background(), "CREATE TABLE foo(n INT)")
+	assert.NoError(t, err)
+}
+
 // Test some setup options
 func TestOptions(t *testing.T) {
 	options := []app.Option{

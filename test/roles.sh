@@ -4,13 +4,14 @@
 
 GO=${GO:-go}
 VERBOSE=${VERBOSE:-0}
-
 DIR=$(mktemp -d)
 BINARY=$DIR/main
 CLUSTER=127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003,127.0.0.1:9004,127.0.0.1:9005,127.0.0.1:9006
 N=7
+DISK=${DISK:-0}
 
 $GO build -tags libsqlite3 ./cmd/dqlite/
+
 
 set_up_binary() {
     cat > "$DIR"/main.go <<EOF
@@ -56,6 +57,7 @@ func main() {
          app.WithCluster(join),
          app.WithLogFunc(logFunc),
          app.WithRolesAdjustmentFrequency(3 * time.Second),
+         app.WithDiskMode($DISK != 0),
      )
      if err != nil {
          panic(err)

@@ -16,13 +16,16 @@ jobs:
         os:
           - ubuntu-18.04
           - ubuntu-20.04
+        disk:
+          - 1
+          - 0
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Install Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
         go-version: ${{ matrix.go }}
 
@@ -44,9 +47,9 @@ jobs:
         deadcode
         export GO_DQLITE_MULTITHREAD=1
         overalls -project ${{ github.workspace }} -covermode=count -- -tags libsqlite3 -timeout 240s
-        VERBOSE=1 ./test/dqlite-demo.sh
-        VERBOSE=1 ./test/roles.sh
-        VERBOSE=1 ./test/recover.sh
+        VERBOSE=1 DISK=${{ matrix.disk }} ./test/dqlite-demo.sh
+        VERBOSE=1 DISK=${{ matrix.disk }} ./test/roles.sh
+        VERBOSE=1 DISK=${{ matrix.disk }} ./test/recover.sh
 
     - name: Coverage
       uses: shogo82148/actions-goveralls@v1
@@ -59,10 +62,11 @@ jobs:
         GO_DQLITE_MULTITHREAD: 1
       run: |
         go install -tags libsqlite3 github.com/canonical/go-dqlite/cmd/dqlite-benchmark
-        dqlite-benchmark --db 127.0.0.1:9001 --driver --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
+        diskmode=$(if [ ${{ matrix.disk }} -eq 1 ]; then echo -n "--disk"; fi)
+        dqlite-benchmark --db 127.0.0.1:9001 --driver $diskmode --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
         masterpid=$!
-        dqlite-benchmark --db 127.0.0.1:9002 --join 127.0.0.1:9001 &
-        dqlite-benchmark --db 127.0.0.1:9003 --join 127.0.0.1:9001 &
+        dqlite-benchmark --db 127.0.0.1:9002 $diskmode --join 127.0.0.1:9001 &
+        dqlite-benchmark --db 127.0.0.1:9003 $diskmode --join 127.0.0.1:9001 &
         wait $masterpid
         echo "Write results:"
         head -n 5 /tmp/dqlite-benchmark/127.0.0.1:9001/results/0-exec-*
@@ -71,7 +75,7 @@ jobs:
         echo "Read results:"
         head -n 5 /tmp/dqlite-benchmark/127.0.0.1:9001/results/0-query-*
 
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}
         path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
