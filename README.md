@@ -53,7 +53,7 @@ go test -tags libsqlite3
 Documentation
 -------------
 
-The documentation for this package can be found on [Godoc](http://godoc.org/github.com/canonical/go-dqlite).
+The documentation for this package can be found on [pkg.go.dev](https://pkg.go.dev/github.com/canonical/go-dqlite).
 
 Demo
 ----
