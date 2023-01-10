@@ -8,8 +8,8 @@ jobs:
       matrix:
         target:
           - focal
-          - impish
           - jammy
+          - kinetic
     runs-on: ubuntu-20.04
     steps:
     - name: Clone the repositories
