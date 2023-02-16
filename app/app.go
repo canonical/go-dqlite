@@ -187,6 +187,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		dqlite.WithFailureDomain(o.FailureDomain),
 		dqlite.WithNetworkLatency(o.NetworkLatency),
 		dqlite.WithSnapshotParams(o.SnapshotParams),
+		dqlite.WithBlockSize(o.BlockSize),
 		dqlite.WithDiskMode(o.DiskMode),
 	)
 	if err != nil {
