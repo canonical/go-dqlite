@@ -889,10 +889,22 @@ func TestOptions(t *testing.T) {
 		app.WithAddress("127.0.0.1:9000"),
 		app.WithNetworkLatency(20 * time.Millisecond),
 		app.WithSnapshotParams(dqlite.SnapshotParams{Threshold: 1024, Trailing: 1024}),
+		app.WithBlockSize(64 * 1024),
 	}
 	app, cleanup := newApp(t, options...)
 	defer cleanup()
 	require.NotNil(t, app)
+}
+
+// Test failing setup option
+func TestOptions(t *testing.T) {
+	options := []app.Option{
+		app.WithNetworkLatency(20 * time.Millisecond),
+		app.WithBlockSize(512 * 1024), // This will cause an error
+	}
+	app, cleanup := newApp(t, options...)
+	defer cleanup()
+	require.Nil(t, app)
 }
 
 // Test client connections dropping uncleanly.

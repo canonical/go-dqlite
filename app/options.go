@@ -170,6 +170,13 @@ func WithSnapshotParams(params dqlite.SnapshotParams) Option {
 	}
 }
 
+// WithBlockSize sets the raft block size.
+func WithBlockSize(size uint) Option {
+	return func(options *options) {
+		options.BlockSize = size
+	}
+}
+
 // WithDiskMode enables or disables disk-mode.
 // WARNING: This is experimental API, use with caution
 // and prepare for data loss.
@@ -205,6 +212,7 @@ type options struct {
 	UnixSocket               string
 	SnapshotParams           dqlite.SnapshotParams
 	DiskMode                 bool
+	BlockSize                uint
 }
 
 // Create a options object with sane defaults.
