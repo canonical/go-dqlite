@@ -25,6 +25,7 @@ const (
 	defaultKvValueSize    = 1024
 	defaultWorkers        = 1
 	defaultWorkload       = "kvwrite"
+	defaultBlockSize      = 4096
 	docString             = "For benchmarking dqlite.\n\n" +
 		"Run a 1 node benchmark:\n" +
 		"dqlite-benchmark -d 127.0.0.1:9001 --driver --cluster 127.0.0.1:9001\n\n" +
@@ -65,6 +66,7 @@ func main() {
 	var workers int
 	var workload string
 	var diskMode bool
+	var blockSize uint
 
 	cmd := &cobra.Command{
 		Use:   "dqlite-benchmark",
@@ -76,7 +78,11 @@ func main() {
 				return errors.Wrapf(err, "can't create %s", dir)
 			}
 
-			app, err := app.New(dir, app.WithDiskMode(diskMode), app.WithAddress(db), app.WithCluster(*join))
+			app, err := app.New(dir,
+				app.WithDiskMode(diskMode),
+				app.WithAddress(db),
+				app.WithCluster(*join),
+				app.WithBlockSize(blockSize))
 			if err != nil {
 				return err
 			}
@@ -147,6 +153,7 @@ func main() {
 	flags.IntVar(&kvKeySize, "key-size", defaultKvKeySize, "Size of the KV keys in bytes.")
 	flags.IntVar(&kvValueSize, "value-size", defaultKvValueSize, "Size of the KV values in bytes.")
 	flags.BoolVar(&diskMode, "disk", defaultDiskMode, "Warning: Unstable, Experimental. Set this flag to enable dqlite's disk-mode.")
+	flags.UintVar(&blockSize, "block-size", defaultBlockSize, "Size of the raft block size, its minimal unit of disk IO.")
 
 	cmd.MarkFlagRequired("db")
 	if err := cmd.Execute(); err != nil {
