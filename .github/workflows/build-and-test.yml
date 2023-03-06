@@ -48,7 +48,7 @@ jobs:
         go vet -tags libsqlite3 ./...
         golint
         export GO_DQLITE_MULTITHREAD=1
-        overalls -project ${{ github.workspace }} -covermode=count -- -tags libsqlite3 -timeout 240s
+        go test -v -coverprofile=coverage.out ./...
         VERBOSE=1 DISK=${{ matrix.disk }} ./test/dqlite-demo.sh
         VERBOSE=1 DISK=${{ matrix.disk }} ./test/roles.sh
         VERBOSE=1 DISK=${{ matrix.disk }} ./test/recover.sh
@@ -56,7 +56,7 @@ jobs:
     - name: Coverage
       uses: shogo82148/actions-goveralls@v1
       with:
-        path-to-profile: overalls.coverprofile
+        path-to-profile: coverage.out
 
     - name: Benchmark
       env:
