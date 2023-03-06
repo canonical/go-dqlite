@@ -13,9 +13,12 @@ jobs:
           - 1.14.x
           - 1.15.x
           - 1.16.x
+          - 1.17.x
+          - 1.18.x
+          - 1.19.x
         os:
-          - ubuntu-18.04
           - ubuntu-20.04
+          - ubuntu-22.04
         disk:
           - 1
           - 0
@@ -41,6 +44,7 @@ jobs:
       env:
         CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
       run: |
+        go version
         go get -t -tags libsqlite3 ./...
         go vet -tags libsqlite3 ./...
         golint
