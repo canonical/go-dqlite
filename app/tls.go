@@ -4,8 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-
-	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
 // SimpleTLSConfig returns a pair of TLS configuration objects with sane
@@ -60,17 +58,15 @@ func SimpleTLSConfig(cert tls.Certificate, pool *x509.CertPool) (*tls.Config, *t
 //
 // The returned config can be used as "listen" parameter for the WithTLS
 // option.
+//
+// A user can modify the returned config to suit their specifig needs.
 func SimpleListenTLSConfig(cert tls.Certificate, pool *x509.CertPool) *tls.Config {
-	// See https://github.com/denji/golang-tls
 	config := &tls.Config{
-		MinVersion:               tls.VersionTLS12,
-		CipherSuites:             protocol.TLSCipherSuites,
-		PreferServerCipherSuites: true,
-		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
-		Certificates:             []tls.Certificate{cert},
-		RootCAs:                  pool,
-		ClientCAs:                pool,
-		ClientAuth:               tls.RequireAndVerifyClientCert,
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      pool,
+		ClientCAs:    pool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
 	}
 	config.BuildNameToCertificate()
 
@@ -96,14 +92,14 @@ func SimpleListenTLSConfig(cert tls.Certificate, pool *x509.CertPool) *tls.Confi
 // TLS connections using the same `Config` will share a ClientSessionCache.
 // You can override this behaviour by setting your own ClientSessionCache or
 // nil.
+//
+// A user can modify the returned config to suit their specifig needs.
 func SimpleDialTLSConfig(cert tls.Certificate, pool *x509.CertPool) *tls.Config {
 	config := &tls.Config{
-		MinVersion:               tls.VersionTLS12,
-		CipherSuites:             protocol.TLSCipherSuites,
-		PreferServerCipherSuites: true,
-		RootCAs:                  pool,
-		Certificates:             []tls.Certificate{cert},
-		ClientSessionCache:       tls.NewLRUClientSessionCache(256),
+		MinVersion:         tls.VersionTLS12,
+		RootCAs:            pool,
+		Certificates:       []tls.Certificate{cert},
+		ClientSessionCache: tls.NewLRUClientSessionCache(256),
 	}
 
 	x509cert, err := x509.ParseCertificate(cert.Certificate[0])
