@@ -111,7 +111,7 @@ func TestIntegration_ExecBindError(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = db.ExecContext(ctx, "INSERT INTO test(n) VALUES(1)", 1)
-	assert.EqualError(t, err, "column index out of range")
+	assert.EqualError(t, err, "bind parameters")
 }
 
 func TestIntegration_QueryBindError(t *testing.T) {
@@ -123,7 +123,7 @@ func TestIntegration_QueryBindError(t *testing.T) {
 	defer cancel()
 
 	_, err := db.QueryContext(ctx, "SELECT 1", 1)
-	assert.EqualError(t, err, "column index out of range")
+	assert.EqualError(t, err, "bind parameters")
 }
 
 func TestIntegration_ConfigMultiThread(t *testing.T) {
