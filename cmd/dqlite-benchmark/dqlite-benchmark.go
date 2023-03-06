@@ -44,7 +44,7 @@ const (
 )
 
 func signalChannel() chan os.Signal {
-	ch := make(chan os.Signal)
+	ch := make(chan os.Signal, 32)
 	signal.Notify(ch, unix.SIGPWR)
 	signal.Notify(ch, unix.SIGINT)
 	signal.Notify(ch, unix.SIGQUIT)
