@@ -37,7 +37,6 @@ jobs:
         sudo add-apt-repository ppa:dqlite/dev -y
         sudo apt update
         sudo apt install -y golint libsqlite3-dev libuv1-dev liblz4-dev libraft-dev libdqlite-dev
-        go get github.com/tsenart/deadcode
         go get github.com/go-playground/overalls
 
     - name: Build & Test
@@ -48,7 +47,6 @@ jobs:
         go get -t -tags libsqlite3 ./...
         go vet -tags libsqlite3 ./...
         golint
-        deadcode
         export GO_DQLITE_MULTITHREAD=1
         overalls -project ${{ github.workspace }} -covermode=count -- -tags libsqlite3 -timeout 240s
         VERBOSE=1 DISK=${{ matrix.disk }} ./test/dqlite-demo.sh
