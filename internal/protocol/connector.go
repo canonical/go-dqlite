@@ -287,7 +287,7 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 
 		// TODO: enable heartbeat
 		// protocol.heartbeatTimeout = time.Duration(heartbeatTimeout) * time.Millisecond
-		//go protocol.heartbeat()
+		// go protocol.heartbeat()
 
 		return protocol, "", nil
 	default:
