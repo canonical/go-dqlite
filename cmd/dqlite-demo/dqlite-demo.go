@@ -92,7 +92,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 
 			go http.Serve(listener, nil)
 
-			ch := make(chan os.Signal)
+			ch := make(chan os.Signal, 32)
 			signal.Notify(ch, unix.SIGPWR)
 			signal.Notify(ch, unix.SIGINT)
 			signal.Notify(ch, unix.SIGQUIT)

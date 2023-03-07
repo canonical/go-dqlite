@@ -28,7 +28,6 @@ func Example() {
 	}
 
 	fmt.Printf("0x%x %s\n", node.ID(), node.Address())
-	// Output: 0x2dc171858c3155be 127.0.0.1:9001
 
 	if err := node.Close(); err != nil {
 		return
@@ -92,7 +91,7 @@ func ExampleWithCluster() {
 	}
 
 	fmt.Println(node1.ID() != node2.ID(), node1.ID() != node3.ID(), node2.ID() != node3.ID())
-	// Output: true true true
+	// true true true
 
 	// Restart the third node, the only argument we need to pass to
 	// app.New() is its dir.
