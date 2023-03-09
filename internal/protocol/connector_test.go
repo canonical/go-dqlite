@@ -123,20 +123,20 @@ func TestConnector_AttemptTimeout(t *testing.T) {
 		RetryLimit:     1,
 	}
 	connector := protocol.NewConnector(0, store, config, logging.Test(t))
-
-	conns := []net.Conn{}
+	var conn net.Conn
 	go func() {
-		conn, err := listener.Accept()
+		conn, err = listener.Accept()
 		require.NoError(t, err)
-		conns = append(conns, conn)
+		require.NotNil(t, conn)
+	}()
+	defer func() {
+		if conn != nil {
+			_ = conn.Close()
+		}
 	}()
 
 	_, err = connector.Connect(context.Background())
 	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
-
-	for _, conn := range conns {
-		conn.Close()
-	}
 }
 
 // If an election is in progress, the connector will retry until a leader gets

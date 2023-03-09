@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/canonical/go-dqlite"
@@ -18,6 +19,10 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 )
+
+// used to create a unique driver name, MUST be modified atomically
+// https://pkg.go.dev/sync/atomic#AddInt64
+var driverIndex int64
 
 // App is a high-level helper for initializing a typical dqlite-based Go
 // application.
@@ -212,8 +217,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		stop()
 		return nil, fmt.Errorf("create driver: %w", err)
 	}
-	driverIndex++
-	driverName := fmt.Sprintf("dqlite-%d", driverIndex)
+	driverName := fmt.Sprintf("dqlite-%d", atomic.AddInt64(&driverIndex, 1))
 	sql.Register(driverName, driver)
 
 	if o.Voters < 3 || o.Voters%2 == 0 {
@@ -706,5 +710,3 @@ func (a *App) warn(format string, args ...interface{}) {
 func (a *App) error(format string, args ...interface{}) {
 	a.log(client.LogError, format, args...)
 }
-
-var driverIndex = 0

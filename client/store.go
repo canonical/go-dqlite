@@ -215,8 +215,9 @@ func NewYamlNodeStore(path string) (*YamlNodeStore, error) {
 func (s *YamlNodeStore) Get(ctx context.Context) ([]NodeInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	return s.servers, nil
+	ret := make([]NodeInfo, len(s.servers))
+	copy(ret, s.servers)
+	return ret, nil
 }
 
 // Set the servers addresses.

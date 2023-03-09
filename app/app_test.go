@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1038,6 +1039,27 @@ func TestExternalConn(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[0].Role)
 	assert.Equal(t, client.Voter, cluster[1].Role)
 	assert.Equal(t, client.Voter, cluster[2].Role)
+}
+
+func TestParallelNewApp(t *testing.T) {
+	t.Parallel()
+	for i := 0; i < 100; i++ {
+		i := i
+		t.Run(fmt.Sprintf("run-%d", i), func(tt *testing.T) {
+			tt.Parallel()
+			// TODO: switch this to tt.TempDir when we switch to
+			tmpDir := filepath.Join(os.TempDir(), strings.ReplaceAll(tt.Name(), "/", "-"))
+			require.NoError(tt, os.MkdirAll(tmpDir, 0700))
+			dqApp, err := app.New(tmpDir,
+				app.WithAddress(fmt.Sprintf("127.0.0.1:%d", 10200+i)),
+			)
+			require.NoError(tt, err)
+			defer func() {
+				_ = os.RemoveAll(tmpDir)
+				_ = dqApp.Close()
+			}()
+		})
+	}
 }
 
 func newAppWithDir(t *testing.T, dir string, options ...app.Option) (*app.App, func()) {

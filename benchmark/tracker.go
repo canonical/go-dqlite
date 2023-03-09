@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,6 +33,7 @@ func (m measurementErr) String() string {
 }
 
 type tracker struct {
+	lock         sync.RWMutex
 	measurements map[work][]measurement
 	errors       map[work][]measurementErr
 }
@@ -71,6 +73,8 @@ func (r report) String() string {
 }
 
 func (t *tracker) measure(start time.Time, work work, err *error) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	duration := time.Since(start)
 	if *err == nil {
 		m := measurement{start, duration}
@@ -82,6 +86,8 @@ func (t *tracker) measure(start time.Time, work work, err *error) {
 }
 
 func (t *tracker) report() map[work]report {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
 	reports := make(map[work]report)
 	for w := range t.measurements {
 		report := report{
@@ -116,6 +122,7 @@ func (t *tracker) report() map[work]report {
 
 func newTracker() *tracker {
 	return &tracker{
+		lock:         sync.RWMutex{},
 		measurements: make(map[work][]measurement),
 		errors:       make(map[work][]measurementErr),
 	}
