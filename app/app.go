@@ -304,6 +304,8 @@ func (a *App) Handover(ctx context.Context) error {
 	// Set a hard limit of one minute, in case the user-provided context
 	// has no expiration. That avoids the call to stop responding forever
 	// in case a majority of the cluster is down and no leader is available.
+	// Watch out when removing or editing this context, the for loop at the
+	// end of this function will possibly run "forever" without it.
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
@@ -373,8 +375,22 @@ func (a *App) Handover(ctx context.Context) error {
 
 	// Demote ourselves if we have promoted someone else.
 	if role != -1 {
-		if err := cli.Assign(ctx, a.ID(), client.Spare); err != nil {
-			return fmt.Errorf("demote ourselves: %w", err)
+		// Try a while before failing. The new leader has to possibly commit an entry
+		// from its new term in order to commit the last configuration change, wait a bit
+		// for that to happen and don't fail immediately
+		for {
+			err = cli.Assign(ctx, a.ID(), client.Spare)
+			if err == nil {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("demote ourselves context done: %w", err)
+			default:
+				// Wait a bit before trying again
+				time.Sleep(time.Second)
+				continue
+			}
 		}
 	}
 
