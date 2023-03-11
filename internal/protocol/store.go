@@ -24,9 +24,9 @@ func (r NodeRole) String() string {
 
 // NodeInfo holds information about a single server.
 type NodeInfo struct {
-	ID      uint64
-	Address string
-	Role    NodeRole
+	ID      uint64   `yaml:"ID"`
+	Address string   `yaml:"Address"`
+	Role    NodeRole `yaml:"Role"`
 }
 
 // NodeStore is used by a dqlite client to get an initial list of candidate
