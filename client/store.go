@@ -9,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ghodss/yaml"
 	"github.com/google/renameio"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
 
 	"github.com/canonical/go-dqlite/internal/protocol"
 	_ "github.com/mattn/go-sqlite3" // Go SQLite bindings
