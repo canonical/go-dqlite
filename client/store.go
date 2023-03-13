@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/renameio"
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 
 	"github.com/canonical/go-dqlite/internal/protocol"
 	_ "github.com/mattn/go-sqlite3" // Go SQLite bindings
