@@ -351,11 +351,18 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 
 	protocol.EncodePrepare(&c.request, uint64(c.id), query)
 
-	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
+	var start time.Time
+	if c.tracing != client.LogNone {
+		start = time.Now()
+	}
+	err := c.protocol.Call(ctx, &c.request, &c.response);
+	if c.tracing != client.LogNone {
+		c.log(c.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), query)
+	}
+	if err != nil {
 		return nil, driverError(c.log, err)
 	}
 
-	var err error
 	stmt.db, stmt.id, stmt.params, err = protocol.DecodeStmt(&c.response)
 	if err != nil {
 		return nil, driverError(c.log, err)
@@ -381,17 +388,22 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 
 	protocol.EncodeExecSQL(&c.request, uint64(c.id), query, args)
 
-	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
-		return nil, driverError(c.log, err)
+	var start time.Time
+	if c.tracing != client.LogNone {
+		start = time.Now()
 	}
-
-	result, err := protocol.DecodeResult(&c.response)
+	err := c.protocol.Call(ctx, &c.request, &c.response);
+	if c.tracing != client.LogNone {
+		c.log(c.tracing, "%.3fs request exec: %q", time.Since(start).Seconds(), query)
+	}
 	if err != nil {
 		return nil, driverError(c.log, err)
 	}
 
-	if c.tracing != client.LogNone {
-		c.log(c.tracing, "exec: %s", query)
+	var result protocol.Result
+	result, err = protocol.DecodeResult(&c.response)
+	if err != nil {
+		return nil, driverError(c.log, err)
 	}
 
 	return &Result{result: result}, nil
@@ -410,17 +422,22 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 
 	protocol.EncodeQuerySQL(&c.request, uint64(c.id), query, args)
 
-	if err := c.protocol.Call(ctx, &c.request, &c.response); err != nil {
-		return nil, driverError(c.log, err)
+	var start time.Time
+	if c.tracing != client.LogNone {
+		start = time.Now()
 	}
-
-	rows, err := protocol.DecodeRows(&c.response)
+	err := c.protocol.Call(ctx, &c.request, &c.response);
+	if c.tracing != client.LogNone {
+		c.log(c.tracing, "%.3fs request query: %q", time.Since(start).Seconds(), query)
+	}
 	if err != nil {
 		return nil, driverError(c.log, err)
 	}
 
-	if c.tracing != client.LogNone {
-		c.log(c.tracing, "query: %s", query)
+	var rows protocol.Rows
+	rows, err = protocol.DecodeRows(&c.response)
+	if err != nil {
+		return nil, driverError(c.log, err)
 	}
 
 	return &Rows{
@@ -563,17 +580,22 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 
 	protocol.EncodeExec(s.request, s.db, s.id, args)
 
-	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
-		return nil, driverError(s.log, err)
+	var start time.Time
+	if s.tracing != client.LogNone {
+		start = time.Now()
 	}
-
-	result, err := protocol.DecodeResult(s.response)
+	err := s.protocol.Call(ctx, s.request, s.response);
+	if s.tracing != client.LogNone {
+		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
+	}
 	if err != nil {
 		return nil, driverError(s.log, err)
 	}
 
-	if s.tracing != client.LogNone {
-		s.log(s.tracing, "exec prepared: %s", s.sql)
+	var result protocol.Result
+	result, err = protocol.DecodeResult(s.response)
+	if err != nil {
+		return nil, driverError(s.log, err)
 	}
 
 	return &Result{result: result}, nil
@@ -595,17 +617,22 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 
 	protocol.EncodeQuery(s.request, s.db, s.id, args)
 
-	if err := s.protocol.Call(ctx, s.request, s.response); err != nil {
-		return nil, driverError(s.log, err)
+	var start time.Time
+	if s.tracing != client.LogNone {
+		start = time.Now()
 	}
-
-	rows, err := protocol.DecodeRows(s.response)
+	err := s.protocol.Call(ctx, s.request, s.response);
+	if s.tracing != client.LogNone {
+		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
+	}
 	if err != nil {
 		return nil, driverError(s.log, err)
 	}
 
-	if s.tracing != client.LogNone {
-		s.log(s.tracing, "query prepared: %s", s.sql)
+	var rows protocol.Rows
+	rows, err = protocol.DecodeRows(s.response)
+	if err != nil {
+		return nil, driverError(s.log, err)
 	}
 
 	return &Rows{ctx: ctx, request: s.request, response: s.response, protocol: s.protocol, rows: rows}, nil
