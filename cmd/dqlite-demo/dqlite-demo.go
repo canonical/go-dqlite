@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -26,6 +28,8 @@ func main() {
 	var dir string
 	var verbose bool
 	var diskMode bool
+	var crt string
+	var key string
 
 	cmd := &cobra.Command{
 		Use:   "dqlite-demo",
@@ -44,7 +48,31 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 				}
 				log.Printf(fmt.Sprintf("%s: %s: %s\n", api, l.String(), format), a...)
 			}
-			app, err := app.New(dir, app.WithAddress(db), app.WithCluster(*join), app.WithLogFunc(logFunc), app.WithDiskMode(diskMode))
+
+			options := []app.Option{app.WithAddress(db), app.WithCluster(*join), app.WithLogFunc(logFunc),
+				app.WithDiskMode(diskMode)}
+
+			// Set TLS options
+			if (crt != "" && key == "") || (key != "" && crt == "") {
+				return fmt.Errorf("both TLS certificate and key must be given")
+			}
+			if crt != "" {
+				cert, err := tls.LoadX509KeyPair(crt, key)
+				if err != nil {
+					return err
+				}
+				data, err := ioutil.ReadFile(crt)
+				if err != nil {
+					return err
+				}
+				pool := x509.NewCertPool()
+				if !pool.AppendCertsFromPEM(data) {
+					return fmt.Errorf("bad certificate")
+				}
+				options = append(options, app.WithTLS(app.SimpleTLSConfig(cert, pool)))
+			}
+
+			app, err := app.New(dir, options...)
 			if err != nil {
 				return err
 			}
@@ -117,6 +145,8 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 	flags.StringVarP(&dir, "dir", "D", "/tmp/dqlite-demo", "data directory")
 	flags.BoolVarP(&verbose, "verbose", "v", false, "verbose logging")
 	flags.BoolVar(&diskMode, "disk", defaultDiskMode, "Warning: Unstable, Experimental. Set this flag to enable dqlite's disk-mode.")
+	flags.StringVarP(&crt, "cert", "c", "", "public TLS cert")
+	flags.StringVarP(&key, "key", "k", "", "private TLS key")
 
 	cmd.MarkFlagRequired("api")
 	cmd.MarkFlagRequired("db")
