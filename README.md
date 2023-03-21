@@ -41,14 +41,20 @@ Build
 
 In order to use the go-dqlite package in your application, you'll need to have
 the [dqlite](https://github.com/canonical/dqlite) C library installed on your
-system, along with its dependencies. You then need to pass the ```-tags```
-argument to the Go tools when building or testing your packages, for example:
+system, along with its dependencies. You'll also need to put ``CGO_LDFLAGS_ALLOW="-Wl,-z,now"``
+in the environment of any Go build commands (see [here](https://github.com/golang/go/wiki/InvalidFlag)
+for the explanation).
 
-```bash
-export CGO_LDFLAGS_ALLOW="-Wl,-z,now"
-go build -tags libsqlite3
-go test -tags libsqlite3
-```
+By default, go-dqlite's `client` module supports storing a cache of the
+cluster's state in a SQLite database, locally on each cluster member. (This is
+not to be confused with any SQLite databases that are managed by dqlite.) In
+order to do this, it imports https://github.com/mattn/go-sqlite3, and so you
+can use the `libsqlite3` build tag to control whether go-sqlite3 links to a
+system libsqlite3 or builds its own. You can also disable support for SQLite
+node stores entirely with the `nosqlite3` build tag (unique to go-dqlite). If
+you pass this tag, your application will not link *directly* to libsqlite3 (but
+it will still link it *indirectly* via libdqlite, unless you've dropped the
+sqlite3.c amalgamation into the dqlite build).
 
 Documentation
 -------------
