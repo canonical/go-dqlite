@@ -128,14 +128,6 @@ func TestIntegration_QueryBindError(t *testing.T) {
 	assert.EqualError(t, err, "bind parameters")
 }
 
-func TestIntegration_ConfigMultiThread(t *testing.T) {
-	_, _, cleanup := newDB(t, 1)
-	defer cleanup()
-
-	err := dqlite.ConfigMultiThread()
-	assert.EqualError(t, err, "SQLite is already initialized")
-}
-
 func TestIntegration_LargeQuery(t *testing.T) {
 	db, _, cleanup := newDB(t, 3)
 	defer cleanup()
@@ -299,10 +291,9 @@ func TestIntegration_LeadershipTransfer_Tx(t *testing.T) {
 
 func TestOptions(t *testing.T) {
 	// make sure applying all options doesn't break anything
-	store, err := client.DefaultNodeStore(":memory:")
-	require.NoError(t, err)
+	store := client.NewInmemNodeStore()
 	log := logging.Test(t)
-	_, err = driver.New(
+	_, err := driver.New(
 		store,
 		driver.WithLogFunc(log),
 		driver.WithContext(context.Background()),
@@ -329,8 +320,7 @@ func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 func newDBWithInfos(t *testing.T, infos []client.NodeInfo) (*sql.DB, []*nodeHelper, func()) {
 	helpers, helpersCleanup := newNodeHelpers(t, infos)
 
-	store, err := client.DefaultNodeStore(":memory:")
-	require.NoError(t, err)
+	store := client.NewInmemNodeStore()
 
 	require.NoError(t, store.Set(context.Background(), infos))
 

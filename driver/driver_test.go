@@ -586,9 +586,7 @@ func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 func newStore(t *testing.T, address string) client.NodeStore {
 	t.Helper()
 
-	store, err := client.DefaultNodeStore(":memory:")
-	require.NoError(t, err)
-
+	store := client.NewInmemNodeStore()
 	server := client.NodeInfo{Address: address}
 	require.NoError(t, store.Set(context.Background(), []client.NodeInfo{server}))
 

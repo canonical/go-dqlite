@@ -1,10 +1,15 @@
+// +build !nosqlite3
+
 package client_test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
+	dqlite "github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/go-dqlite/driver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,4 +57,25 @@ func TestDefaultNodeStore(t *testing.T) {
 		{ID: uint64(1), Address: "1.2.3.4:666"},
 		{ID: uint64(1), Address: "9.9.9.9:666"}},
 		servers)
+}
+
+func TestConfigMultiThread(t *testing.T) {
+	cleanup := dummyDBSetup(t)
+	defer cleanup()
+
+	err := dqlite.ConfigMultiThread()
+	assert.EqualError(t, err, "SQLite is already initialized")
+}
+
+func dummyDBSetup(t *testing.T) func() {
+	store := client.NewInmemNodeStore()
+	driver, err := driver.New(store)
+	require.NoError(t, err)
+	sql.Register("dummy", driver)
+	db, err := sql.Open("dummy", "test.db")
+	require.NoError(t, err)
+	cleanup := func() {
+		require.NoError(t, db.Close())
+	}
+	return cleanup
 }

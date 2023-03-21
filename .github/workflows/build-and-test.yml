@@ -50,6 +50,7 @@ jobs:
         golint
         export GO_DQLITE_MULTITHREAD=1
         go test -v -race -coverprofile=coverage.out ./...
+        go test -v -tags nosqlite3 ./...
         VERBOSE=1 DISK=${{ matrix.disk }} ./test/dqlite-demo.sh
         VERBOSE=1 DISK=${{ matrix.disk }} ./test/roles.sh
         VERBOSE=1 DISK=${{ matrix.disk }} ./test/recover.sh
