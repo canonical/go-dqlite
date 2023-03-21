@@ -12,10 +12,12 @@ import (
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
 	"github.com/canonical/go-dqlite/logging"
-	"github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// https://sqlite.org/rescode.html#constraint_unique
+const SQLITE_CONSTRAINT_UNIQUE = 2067
 
 func TestIntegration_DatabaseSQL(t *testing.T) {
 	db, _, cleanup := newDB(t, 3)
@@ -92,7 +94,7 @@ func TestIntegration_ConstraintError(t *testing.T) {
 
 	_, err = db.Exec("INSERT INTO test (n) VALUES (1)")
 	if err, ok := err.(driver.Error); ok {
-		assert.Equal(t, int(sqlite3.ErrConstraintUnique), err.Code)
+		assert.Equal(t, SQLITE_CONSTRAINT_UNIQUE, err.Code)
 		assert.Equal(t, "UNIQUE constraint failed: test.n", err.Message)
 	} else {
 		t.Fatalf("expected diver error, got %+v", err)
