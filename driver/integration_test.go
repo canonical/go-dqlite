@@ -12,10 +12,12 @@ import (
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
 	"github.com/canonical/go-dqlite/logging"
-	"github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// https://sqlite.org/rescode.html#constraint_unique
+const SQLITE_CONSTRAINT_UNIQUE = 2067
 
 func TestIntegration_DatabaseSQL(t *testing.T) {
 	db, _, cleanup := newDB(t, 3)
@@ -92,7 +94,7 @@ func TestIntegration_ConstraintError(t *testing.T) {
 
 	_, err = db.Exec("INSERT INTO test (n) VALUES (1)")
 	if err, ok := err.(driver.Error); ok {
-		assert.Equal(t, int(sqlite3.ErrConstraintUnique), err.Code)
+		assert.Equal(t, SQLITE_CONSTRAINT_UNIQUE, err.Code)
 		assert.Equal(t, "UNIQUE constraint failed: test.n", err.Message)
 	} else {
 		t.Fatalf("expected diver error, got %+v", err)
@@ -124,14 +126,6 @@ func TestIntegration_QueryBindError(t *testing.T) {
 
 	_, err := db.QueryContext(ctx, "SELECT 1", 1)
 	assert.EqualError(t, err, "bind parameters")
-}
-
-func TestIntegration_ConfigMultiThread(t *testing.T) {
-	_, _, cleanup := newDB(t, 1)
-	defer cleanup()
-
-	err := dqlite.ConfigMultiThread()
-	assert.EqualError(t, err, "SQLite is already initialized")
 }
 
 func TestIntegration_LargeQuery(t *testing.T) {
@@ -297,10 +291,9 @@ func TestIntegration_LeadershipTransfer_Tx(t *testing.T) {
 
 func TestOptions(t *testing.T) {
 	// make sure applying all options doesn't break anything
-	store, err := client.DefaultNodeStore(":memory:")
-	require.NoError(t, err)
+	store := client.NewInmemNodeStore()
 	log := logging.Test(t)
-	_, err = driver.New(
+	_, err := driver.New(
 		store,
 		driver.WithLogFunc(log),
 		driver.WithContext(context.Background()),
@@ -327,8 +320,7 @@ func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
 func newDBWithInfos(t *testing.T, infos []client.NodeInfo) (*sql.DB, []*nodeHelper, func()) {
 	helpers, helpersCleanup := newNodeHelpers(t, infos)
 
-	store, err := client.DefaultNodeStore(":memory:")
-	require.NoError(t, err)
+	store := client.NewInmemNodeStore()
 
 	require.NoError(t, store.Set(context.Background(), infos))
 

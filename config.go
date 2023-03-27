@@ -1,3 +1,5 @@
+// +build !nosqlite3
+
 package dqlite
 
 import (

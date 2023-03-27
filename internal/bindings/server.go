@@ -10,7 +10,6 @@ package bindings
 
 #include <dqlite.h>
 #include <raft.h>
-#include <sqlite3.h>
 
 #define EMIT_BUF_LEN 1024
 
@@ -61,16 +60,6 @@ static void setInfo(dqlite_node_info_ext *infos, unsigned i, dqlite_node_id id,
 	info->dqlite_role = role;
 }
 
-static int sqlite3ConfigSingleThread()
-{
-	return sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
-}
-
-static int sqlite3ConfigMultiThread()
-{
-	return sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
-}
-
 */
 import "C"
 import (
@@ -100,20 +89,6 @@ type SnapshotParams struct {
 func init() {
 	// FIXME: ignore SIGPIPE, see https://github.com/joyent/libuv/issues/1254
 	C.signal(C.SIGPIPE, C.SIG_IGN)
-}
-
-func ConfigSingleThread() error {
-	if rc := C.sqlite3ConfigSingleThread(); rc != 0 {
-		return protocol.Error{Message: C.GoString(C.sqlite3_errstr(rc)), Code: int(rc)}
-	}
-	return nil
-}
-
-func ConfigMultiThread() error {
-	if rc := C.sqlite3ConfigMultiThread(); rc != 0 {
-		return protocol.Error{Message: C.GoString(C.sqlite3_errstr(rc)), Code: int(rc)}
-	}
-	return nil
 }
 
 // NewNode creates a new Node instance.
