@@ -96,10 +96,9 @@ func SimpleListenTLSConfig(cert tls.Certificate, pool *x509.CertPool) *tls.Confi
 // A user can modify the returned config to suit their specifig needs.
 func SimpleDialTLSConfig(cert tls.Certificate, pool *x509.CertPool) *tls.Config {
 	config := &tls.Config{
-		MinVersion:         tls.VersionTLS12,
-		RootCAs:            pool,
-		Certificates:       []tls.Certificate{cert},
-		ClientSessionCache: tls.NewLRUClientSessionCache(256),
+		MinVersion:   tls.VersionTLS12,
+		RootCAs:      pool,
+		Certificates: []tls.Certificate{cert},
 	}
 
 	x509cert, err := x509.ParseCertificate(cert.Certificate[0])
