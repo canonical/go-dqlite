@@ -69,6 +69,8 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 		return s.processCluster(ctx, line)
 	case ".leader":
 		return s.processLeader(ctx, line)
+	case ".help":
+		return s.processHelp(), nil
 	}
 	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".remove") {
 		return s.processRemove(ctx, line)
@@ -90,6 +92,21 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	} else {
 		return "", s.processExec(ctx, line)
 	}
+}
+
+func (s *Shell) processHelp() string {
+	return `
+Dqlite shell is a simple interactive prompt for inspecting a dqlite database.
+Enter a SQL statement to execute it, or one of the following built-in commands:
+
+  .cluster                          Show the cluster membership
+  .leader                           Show the current leader
+  .remove <address>                 Remove a node from the cluster
+  .describe <address>               Show the details of a node
+  .weight <address> <weight>        Set the weight of a node
+  .dump <address> [<database>]      Dump the database
+  .reconfigure <dir> <clusteryaml>  Reconfigure the cluster
+`[1:]
 }
 
 func (s *Shell) processCluster(ctx context.Context, line string) (string, error) {
