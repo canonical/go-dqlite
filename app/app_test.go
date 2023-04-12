@@ -890,6 +890,7 @@ func TestOptions(t *testing.T) {
 		app.WithAddress("127.0.0.1:9000"),
 		app.WithNetworkLatency(20 * time.Millisecond),
 		app.WithSnapshotParams(dqlite.SnapshotParams{Threshold: 1024, Trailing: 1024}),
+		app.WithTracing(client.LogDebug),
 	}
 	app, cleanup := newApp(t, options...)
 	defer cleanup()

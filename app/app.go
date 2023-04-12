@@ -212,7 +212,12 @@ func New(dir string, options ...Option) (app *App, err error) {
 		driverDial = o.Conn.dialFunc
 	}
 
-	driver, err := driver.New(store, driver.WithDialFunc(driverDial), driver.WithLogFunc(o.Log))
+	driver, err := driver.New(
+		store,
+		driver.WithDialFunc(driverDial),
+		driver.WithLogFunc(o.Log),
+		driver.WithTracing(o.Tracing),
+	)
 	if err != nil {
 		stop()
 		return nil, fmt.Errorf("create driver: %w", err)
