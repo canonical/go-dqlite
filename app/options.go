@@ -146,6 +146,14 @@ func WithLogFunc(log client.LogFunc) Option {
 	}
 }
 
+// WithTracing will emit a log message at the given level every time a
+// statement gets executed.
+func WithTracing(level client.LogLevel) Option {
+	return func(options *options) {
+		options.Tracing = level
+	}
+}
+
 // WithFailureDomain sets the node's failure domain.
 //
 // Failure domains are taken into account when deciding which nodes to promote
@@ -195,6 +203,7 @@ type options struct {
 	Address                  string
 	Cluster                  []string
 	Log                      client.LogFunc
+	Tracing                  client.LogLevel
 	TLS                      *tlsSetup
 	Conn                     *connSetup
 	Voters                   int
@@ -211,6 +220,7 @@ type options struct {
 func defaultOptions() *options {
 	return &options{
 		Log:                      defaultLogFunc,
+		Tracing:                  client.LogNone,
 		Voters:                   3,
 		StandBys:                 3,
 		RolesAdjustmentFrequency: 30 * time.Second,
