@@ -39,6 +39,12 @@ if [ "$entity" = "--request" ]; then
 		exit
 	fi
 
+	cmd_only=$(echo "$cmd" | cut -f 1 -d :)
+	if [ "$cmd_only" != "$cmd" ]; then
+		schema=$(echo "$cmd" | cut -f 2 -d :)
+		cmd="$cmd_only"
+		schema_distinguisher="V$schema"
+	fi
 
 	args=""
 
@@ -56,8 +62,8 @@ if [ "$entity" = "--request" ]; then
 
 	cat >> request.go <<EOF
 
-// Encode${cmd} encodes a $cmd request.
-func Encode${cmd}(request *Message${args}) {
+// Encode${cmd}${schema_distinguisher} encodes a $cmd request.
+func Encode${cmd}${schema_distinguisher}(request *Message${args}) {
 	request.reset()
 EOF
 
@@ -77,7 +83,7 @@ EOF
 
 	cat >> request.go <<EOF
 
-	request.putHeader(Request${cmd})
+	request.putHeader(Request${cmd}, ${schema})
 }
 EOF
 

@@ -174,12 +174,47 @@ func TestMessage_putNamedValues(t *testing.T) {
 	assert.Equal(t, bytes[7], byte(ISO8601))
 }
 
+func TestMessage_putNamedValues32(t *testing.T) {
+	message := Message{}
+	message.Init(256)
+
+	timestamp, err := time.ParseInLocation("2006-01-02", "2018-08-01", time.UTC)
+	require.NoError(t, err)
+
+	values := NamedValues{
+		{Ordinal: 1, Value: int64(123)},
+		{Ordinal: 2, Value: float64(3.1415)},
+		{Ordinal: 3, Value: true},
+		{Ordinal: 4, Value: []byte{1, 2, 3, 4, 5, 6}},
+		{Ordinal: 5, Value: "hello"},
+		{Ordinal: 6, Value: nil},
+		{Ordinal: 7, Value: timestamp},
+	}
+
+	message.putNamedValues32(values)
+
+	bytes, offset := message.Body()
+
+	assert.Equal(t, 104, offset)
+	assert.Equal(t, bytes[0], byte(7))
+	assert.Equal(t, bytes[1], byte(0))
+	assert.Equal(t, bytes[2], byte(0))
+	assert.Equal(t, bytes[3], byte(0))
+	assert.Equal(t, bytes[4], byte(Integer))
+	assert.Equal(t, bytes[5], byte(Float))
+	assert.Equal(t, bytes[6], byte(Boolean))
+	assert.Equal(t, bytes[7], byte(Blob))
+	assert.Equal(t, bytes[8], byte(Text))
+	assert.Equal(t, bytes[9], byte(Null))
+	assert.Equal(t, bytes[10], byte(ISO8601))
+}
+
 func TestMessage_putHeader(t *testing.T) {
 	message := Message{}
 	message.Init(64)
 
 	message.putString("hello")
-	message.putHeader(RequestExec)
+	message.putHeader(RequestExec, 1)
 }
 
 func BenchmarkMessage_putString(b *testing.B) {
@@ -223,7 +258,7 @@ func TestMessage_getString(t *testing.T) {
 			message.Init(16)
 
 			message.putString(c.String)
-			message.putHeader(0)
+			message.putHeader(0, 0)
 
 			message.Rewind()
 
@@ -253,7 +288,7 @@ func TestMessage_getBlob(t *testing.T) {
 			message.Init(64)
 
 			message.putBlob(c.Blob)
-			message.putHeader(0)
+			message.putHeader(0, 0)
 
 			message.Rewind()
 
@@ -277,7 +312,7 @@ func TestMessage_getString_Overflow_WordBoundary(t *testing.T) {
 		'i', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
 		0, 0, 0, 0, 0, 0, 0,
 	})
-	message.putHeader(0)
+	message.putHeader(0, 0)
 
 	message.Rewind()
 	message.getUint64()

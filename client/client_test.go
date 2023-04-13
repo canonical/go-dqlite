@@ -60,7 +60,7 @@ func TestClient_Dump(t *testing.T) {
 	db, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
 
-	protocol.EncodeExecSQL(&request, uint64(db), "CREATE TABLE foo (n INT)", nil)
+	protocol.EncodeExecSQLV0(&request, uint64(db), "CREATE TABLE foo (n INT)", nil)
 
 	err = p.Call(ctx, &request, &response)
 	require.NoError(t, err)
