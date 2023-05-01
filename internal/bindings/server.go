@@ -7,9 +7,11 @@ package bindings
 #include <assert.h>
 #include <stdint.h>
 #include <signal.h>
+#include <stdbool.h>
 
 #include <dqlite.h>
-#include <raft.h>
+
+#define RAFT_NOCONNECTION 16
 
 #define EMIT_BUF_LEN 1024
 
