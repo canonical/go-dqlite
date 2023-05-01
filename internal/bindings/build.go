@@ -1,7 +1,7 @@
 package bindings
 
 /*
-#cgo linux LDFLAGS: -ldqlite -Wl,-z,now
+#cgo linux LDFLAGS: -ldqlite
 */
 import "C"
 
