@@ -380,7 +380,7 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 
 // ExecContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	if len(args) > math.MaxUint32 {
+	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
 	} else if len(args) > math.MaxUint8 {
 		protocol.EncodeExecSQLV1(&c.request, uint64(c.id), query, args)
@@ -416,7 +416,7 @@ func (c *Conn) Query(query string, args []driver.Value) (driver.Rows, error) {
 
 // QueryContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	if len(args) > math.MaxUint32 {
+	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
 	} else if len(args) > math.MaxUint8 {
 		protocol.EncodeQuerySQLV1(&c.request, uint64(c.id), query, args)
@@ -576,7 +576,7 @@ func (s *Stmt) NumInput() int {
 //
 // ExecContext must honor the context timeout and return when it is canceled.
 func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
-	if len(args) > math.MaxUint32 {
+	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
 	} else if len(args) > math.MaxUint8 {
 		protocol.EncodeExecV1(s.request, s.db, s.id, args)
@@ -615,7 +615,7 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 //
 // QueryContext must honor the context timeout and return when it is canceled.
 func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	if len(args) > math.MaxUint32 {
+	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
 	} else if len(args) > math.MaxUint8 {
 		protocol.EncodeQueryV1(s.request, s.db, s.id, args)
