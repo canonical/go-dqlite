@@ -240,7 +240,7 @@ func (m *Message) putNamedValues32(values NamedValues) {
 	l := len(values)
 	if l == 0 {
 		return
-	} else if l > math.MaxUint32 {
+	} else if int64(l) > math.MaxUint32 {
 		// safeguard, should have been checked beforehand.
 		panic("too many parameters")
 	}
