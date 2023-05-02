@@ -51,7 +51,7 @@ CREATE TABLE bar (n INT);
 CREATE TABLE egg (n INT);
 CREATE TABLE baz (n INT);
 `
-	protocol.EncodeExecSQL(&request, uint64(id), sql, nil)
+	protocol.EncodeExecSQLV0(&request, uint64(id), sql, nil)
 
 	makeCall(t, p, &request, &response)
 }

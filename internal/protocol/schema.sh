@@ -1,7 +1,7 @@
 #!/bin/bash
 
 request_init() {
-    cat > request.go <<EOF
+	cat > request.go <<EOF
 package protocol
 
 // DO NOT EDIT
@@ -12,7 +12,7 @@ EOF
 }
 
 response_init() {
-    cat > response.go <<EOF
+	cat > response.go <<EOF
 package protocol
 
 // DO NOT EDIT
@@ -30,76 +30,86 @@ shift
 cmd=$1
 shift
 
+schema="0"
+schema_distinguisher=""
+
 if [ "$entity" = "--request" ]; then
-    if [ "$cmd" = "init" ]; then
-	request_init
-	exit
-    fi
-
-    args=""
-
-    for i in "${@}"
-    do
-	name=$(echo "$i" | cut -f 1 -d :)
-	type=$(echo "$i" | cut -f 2 -d :)
-
-	if [ "$name" = "unused" ]; then
-	    continue
+	if [ "$cmd" = "init" ]; then
+		request_init
+		exit
 	fi
 
-	args=$(echo "${args}, ${name} ${type}")
-    done
+	cmd_only=$(echo "$cmd" | cut -f 1 -d :)
+	if [ "$cmd_only" != "$cmd" ]; then
+		schema=$(echo "$cmd" | cut -f 2 -d :)
+		cmd="$cmd_only"
+		schema_distinguisher="V$schema"
+	fi
 
-    cat >> request.go <<EOF
+	args=""
 
-// Encode${cmd} encodes a $cmd request.
-func Encode${cmd}(request *Message${args}) {
+	for i in "${@}"
+	do
+		name=$(echo "$i" | cut -f 1 -d :)
+		type=$(echo "$i" | cut -f 2 -d :)
+
+		if [ "$name" = "unused" ]; then
+			continue
+		fi
+
+		args=$(echo "${args}, ${name} ${type}")
+	done
+
+	cat >> request.go <<EOF
+
+// Encode${cmd}${schema_distinguisher} encodes a $cmd request.
+func Encode${cmd}${schema_distinguisher}(request *Message${args}) {
 	request.reset()
 EOF
 
-    for i in "${@}"
-    do
-	name=$(echo "$i" | cut -f 1 -d :)
-	type=$(echo "$i" | cut -f 2 -d :)
+	for i in "${@}"
+	do
+		name=$(echo "$i" | cut -f 1 -d :)
+		type=$(echo "$i" | cut -f 2 -d :)
 
-	if [ "$name" = "unused" ]; then
-	    name=$(echo "0")
-	fi
+		if [ "$name" = "unused" ]; then
+			name=$(echo "0")
+		fi
 
-	cat >> request.go <<EOF
+		cat >> request.go <<EOF
 	request.put${type^}(${name})
 EOF
-    done
+	done
 
-    cat >> request.go <<EOF
+	cat >> request.go <<EOF
 
-	request.putHeader(Request${cmd})
+	request.putHeader(Request${cmd}, ${schema})
 }
 EOF
 
 fi
 
 if [ "$entity" = "--response" ]; then
-    if [ "$cmd" = "init" ]; then
-	response_init
-	exit
-    fi
-
-    returns=""
-
-    for i in "${@}"
-    do
-	name=$(echo "$i" | cut -f 1 -d :)
-	type=$(echo "$i" | cut -f 2 -d :)
-
-	if [ "$name" = "unused" ]; then
-	    continue
+	if [ "$cmd" = "init" ]; then
+		response_init
+		exit
 	fi
 
-	returns=$(echo "${returns}${name} ${type}, ")
-    done
+	returns=""
 
-    cat >> response.go <<EOF
+	for i in "${@}"
+	do
+		name=$(echo "$i" | cut -f 1 -d :)
+		type=$(echo "$i" | cut -f 2 -d :)
+
+		if [ "$name" = "unused" ]; then
+			continue
+		fi
+
+		returns=$(echo "${returns}${name} ${type}, ")
+	done
+
+	cat >> response.go <<EOF
 
 // Decode${cmd} decodes a $cmd response.
 func Decode${cmd}(response *Message) (${returns}err error) {
@@ -109,34 +119,34 @@ func Decode${cmd}(response *Message) (${returns}err error) {
 		e := ErrRequest{}
 		e.Code = response.getUint64()
 		e.Description = response.getString()
-                err = e
-                return
+		err = e
+		return
 	}
 
 	if mtype != Response${cmd} {
 		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(Response${cmd}), mtype)
-                return
+		return
 	}
 
 EOF
 
-    for i in "${@}"
-    do
-	name=$(echo "$i" | cut -f 1 -d :)
-	type=$(echo "$i" | cut -f 2 -d :)
+	for i in "${@}"
+	do
+		name=$(echo "$i" | cut -f 1 -d :)
+		type=$(echo "$i" | cut -f 2 -d :)
 
-	assign=$(echo "${name} = ")
+		assign=$(echo "${name} = ")
 
-	if [ "$name" = "unused" ]; then
-	    assign=$(echo "")
-	fi
+		if [ "$name" = "unused" ]; then
+			assign=$(echo "")
+		fi
 
-	cat >> response.go <<EOF
+		cat >> response.go <<EOF
 	${assign}response.get${type^}()
 EOF
-    done
+	done
 
-    cat >> response.go <<EOF
+	cat >> response.go <<EOF
 
 	return
 }

@@ -15,6 +15,8 @@ import (
 // schema.sh to generate encoding logic for statement parameters.
 type NamedValues = []driver.NamedValue
 
+type NamedValues32 = []driver.NamedValue
+
 // Nodes is a type alias of a slice of NodeInfo. It's used by schema.sh to
 // generate decoding logic for the heartbeat response.
 type Nodes []NodeInfo
@@ -23,7 +25,7 @@ type Nodes []NodeInfo
 type Message struct {
 	words  uint32
 	mtype  uint8
-	flags  uint8
+	schema uint8
 	extra  uint16
 	header []byte // Statically allocated header buffer
 	body   buffer // Message body data.
@@ -45,7 +47,7 @@ func (m *Message) Init(initialBufferSize int) {
 func (m *Message) reset() {
 	m.words = 0
 	m.mtype = 0
-	m.flags = 0
+	m.schema = 0
 	m.extra = 0
 	for i := 0; i < messageHeaderSize; i++ {
 		m.header[i] = 0
@@ -157,21 +159,7 @@ func (m *Message) putFloat64(v float64) {
 	binary.LittleEndian.PutUint64(b.Bytes[b.Offset:], math.Float64bits(v))
 }
 
-// Encode the given driver values as binding parameters.
-func (m *Message) putNamedValues(values NamedValues) {
-	l := len(values)
-	if l > 255 {
-		// safeguard, should have been checked beforehand.
-		panic("too many parameters")
-	}
-
-	n := uint8(l) // N of params
-	if n == 0 {
-		return
-	}
-
-	m.putUint8(n)
-
+func (m *Message) putNamedValuesInner(values NamedValues) {
 	for i := range values {
 		if values[i].Ordinal != i+1 {
 			panic("unexpected ordinal")
@@ -229,12 +217,42 @@ func (m *Message) putNamedValues(values NamedValues) {
 			panic("unsupported value type")
 		}
 	}
+}
 
+// Encode the given driver values as binding parameters.
+func (m *Message) putNamedValues(values NamedValues) {
+	l := len(values)
+	if l == 0 {
+		return
+	} else if l > math.MaxUint8 {
+		// safeguard, should have been checked beforehand.
+		panic("too many parameters")
+	}
+	n := uint8(l)
+
+	m.putUint8(n)
+	m.putNamedValuesInner(values)
+}
+
+// Encode the given driver values as binding parameters, with a 32-bit
+// parameter count (new format).
+func (m *Message) putNamedValues32(values NamedValues) {
+	l := len(values)
+	if l == 0 {
+		return
+	} else if l > math.MaxUint32 {
+		// safeguard, should have been checked beforehand.
+		panic("too many parameters")
+	}
+	n := uint32(l)
+
+	m.putUint32(n)
+	m.putNamedValuesInner(values)
 }
 
 // Finalize the message by setting the message type and the number
 // of words in the body (calculated from the body size).
-func (m *Message) putHeader(mtype uint8) {
+func (m *Message) putHeader(mtype, schema uint8) {
 	if m.body.Offset <= 0 {
 		panic("static offset is not positive")
 	}
@@ -244,7 +262,7 @@ func (m *Message) putHeader(mtype uint8) {
 	}
 
 	m.mtype = mtype
-	m.flags = 0
+	m.schema = schema
 	m.extra = 0
 
 	m.words = uint32(m.body.Offset) / messageWordSize
@@ -259,7 +277,7 @@ func (m *Message) finalize() {
 
 	binary.LittleEndian.PutUint32(m.header[0:], m.words)
 	m.header[4] = m.mtype
-	m.header[5] = m.flags
+	m.header[5] = m.schema
 	binary.LittleEndian.PutUint16(m.header[6:], m.extra)
 }
 
@@ -274,9 +292,9 @@ func (m *Message) bufferForPut(size int) *buffer {
 	return &m.body
 }
 
-// Return the message type and its flags.
+// Return the message type and its schema version.
 func (m *Message) getHeader() (uint8, uint8) {
-	return m.mtype, m.flags
+	return m.mtype, m.schema
 }
 
 // Read a string from the message body.

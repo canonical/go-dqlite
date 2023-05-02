@@ -19,6 +19,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"reflect"
 	"syscall"
@@ -59,9 +60,6 @@ const (
 	errIoErrNotLeaderLegacy      = errIoErr | 32<<8
 	errIoErrLeadershipLostLegacy = errIoErr | (33 << 8)
 )
-
-// Max amount of parameters in a Tuple.
-const MaxTupleParams = 255
 
 // Option can be used to tweak driver parameters.
 type Option func(*options)
@@ -382,11 +380,13 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 
 // ExecContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	if len(args) > MaxTupleParams {
-		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d) max = %d", len(args), MaxTupleParams))
+	if len(args) > math.MaxUint32 {
+		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
+	} else if len(args) > math.MaxUint8 {
+		protocol.EncodeExecSQLV1(&c.request, uint64(c.id), query, args)
+	} else {
+		protocol.EncodeExecSQLV0(&c.request, uint64(c.id), query, args)
 	}
-
-	protocol.EncodeExecSQL(&c.request, uint64(c.id), query, args)
 
 	var start time.Time
 	if c.tracing != client.LogNone {
@@ -416,11 +416,13 @@ func (c *Conn) Query(query string, args []driver.Value) (driver.Rows, error) {
 
 // QueryContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	if len(args) > MaxTupleParams {
-		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d) max = %d", len(args), MaxTupleParams))
+	if len(args) > math.MaxUint32 {
+		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
+	} else if len(args) > math.MaxUint8 {
+		protocol.EncodeQuerySQLV1(&c.request, uint64(c.id), query, args)
+	} else {
+		protocol.EncodeQuerySQLV0(&c.request, uint64(c.id), query, args)
 	}
-
-	protocol.EncodeQuerySQL(&c.request, uint64(c.id), query, args)
 
 	var start time.Time
 	if c.tracing != client.LogNone {
@@ -574,11 +576,13 @@ func (s *Stmt) NumInput() int {
 //
 // ExecContext must honor the context timeout and return when it is canceled.
 func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
-	if len(args) > MaxTupleParams {
-		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d) max = %d", len(args), MaxTupleParams))
+	if len(args) > math.MaxUint32 {
+		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
+	} else if len(args) > math.MaxUint8 {
+		protocol.EncodeExecV1(s.request, s.db, s.id, args)
+	} else {
+		protocol.EncodeExecV0(s.request, s.db, s.id, args)
 	}
-
-	protocol.EncodeExec(s.request, s.db, s.id, args)
 
 	var start time.Time
 	if s.tracing != client.LogNone {
@@ -611,11 +615,13 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 //
 // QueryContext must honor the context timeout and return when it is canceled.
 func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	if len(args) > MaxTupleParams {
-		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d) max = %d", len(args), MaxTupleParams))
+	if len(args) > math.MaxUint32 {
+		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
+	} else if len(args) > math.MaxUint8 {
+		protocol.EncodeQueryV1(s.request, s.db, s.id, args)
+	} else {
+		protocol.EncodeQueryV0(s.request, s.db, s.id, args)
 	}
-
-	protocol.EncodeQuery(s.request, s.db, s.id, args)
 
 	var start time.Time
 	if s.tracing != client.LogNone {

@@ -180,7 +180,7 @@ func (p *Protocol) recvHeader(res *Message) error {
 
 	res.words = binary.LittleEndian.Uint32(res.header[0:])
 	res.mtype = res.header[4]
-	res.flags = res.header[5]
+	res.schema = res.header[5]
 	res.extra = binary.LittleEndian.Uint16(res.header[6:])
 
 	return nil
