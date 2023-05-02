@@ -41,9 +41,7 @@ Build
 
 In order to use the go-dqlite package in your application, you'll need to have
 the [dqlite](https://github.com/canonical/dqlite) C library installed on your
-system, along with its dependencies. You'll also need to put ``CGO_LDFLAGS_ALLOW="-Wl,-z,now"``
-in the environment of any Go build commands (see [here](https://github.com/golang/go/wiki/InvalidFlag)
-for the explanation).
+system, along with its dependencies.
 
 By default, go-dqlite's `client` module supports storing a cache of the
 cluster's state in a SQLite database, locally on each cluster member. (This is
