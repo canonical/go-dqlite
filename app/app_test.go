@@ -1056,8 +1056,8 @@ func TestParallelNewApp(t *testing.T) {
 			)
 			require.NoError(tt, err)
 			defer func() {
-				_ = os.RemoveAll(tmpDir)
 				_ = dqApp.Close()
+				_ = os.RemoveAll(tmpDir)
 			}()
 		})
 	}
