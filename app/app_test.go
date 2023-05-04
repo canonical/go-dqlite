@@ -1042,6 +1042,63 @@ func TestExternalConnWithTCP(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[2].Role)
 }
 
+
+// TestExternalPipe creates a 3-member cluster using net.Pipe
+// and ensures the cluster is successfully created, and that the connection is
+// handled manually.
+func TestExternalConnWithPipe(t *testing.T) {
+	externalAddr1 := "first"
+	externalAddr2 := "second"
+	externalAddr3 := "third"
+	acceptCh1 := make(chan net.Conn)
+	acceptCh2 := make(chan net.Conn)
+	acceptCh3 := make(chan net.Conn)
+
+	dialChannels := map[string]chan net.Conn{
+		externalAddr1: acceptCh1,
+		externalAddr2: acceptCh2,
+		externalAddr3: acceptCh3,
+	}
+
+	dialFunc := func(_ context.Context, addr string) (net.Conn, error) {
+		client, server := net.Pipe()
+		
+		dialChannels[addr] <- server
+
+		return client, nil
+	}
+
+	app1, cleanup := newAppWithNoTLS(t, app.WithAddress(externalAddr1), app.WithExternalConn(dialFunc, acceptCh1))
+	defer cleanup()
+
+	app2, cleanup := newAppWithNoTLS(t, app.WithAddress(externalAddr2), app.WithExternalConn(dialFunc, acceptCh2), app.WithCluster([]string{externalAddr1}))
+	defer cleanup()
+
+	require.NoError(t, app2.Ready(context.Background()))
+
+	app3, cleanup := newAppWithNoTLS(t, app.WithAddress(externalAddr3), app.WithExternalConn(dialFunc, acceptCh3), app.WithCluster([]string{externalAddr1}))
+	defer cleanup()
+
+	require.NoError(t, app3.Ready(context.Background()))
+
+	// Get a client from the first node (likely the leader).
+	cli, err := app1.Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	// Ensure entries exist for each cluster member.
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, externalAddr1, cluster[0].Address)
+	assert.Equal(t, externalAddr2, cluster[1].Address)
+	assert.Equal(t, externalAddr3, cluster[2].Address)
+
+	// Every cluster member should be a voter.
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Voter, cluster[2].Role)
+}
+
 func TestParallelNewApp(t *testing.T) {
 	t.Parallel()
 	for i := 0; i < 100; i++ {
