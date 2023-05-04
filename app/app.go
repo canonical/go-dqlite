@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"net"
@@ -275,6 +276,20 @@ func New(dir string, options ...Option) (app *App, err error) {
 		go func() {
 			for {
 				remote := <-o.Conn.acceptCh
+
+				// keep forward compatible
+				_, isTcp := remote.(*net.TCPConn)
+				_, isTLS := remote.(*tls.Conn)
+
+				if isTcp || isTLS {
+					// Write the status line and upgrade header by hand since w.WriteHeader() would fail after Hijack().
+					data := []byte("HTTP/1.1 101 Switching Protocols\r\nUpgrade: dqlite\r\n\r\n")
+					n, err := remote.Write(data)
+					if err != nil || n != len(data) {
+						remote.Close()
+						panic(fmt.Errorf("failed to write connection header: %w", err))
+					}
+				}
 
 				local, err := net.Dial("unix", nodeBindAddress)
 				if err != nil {
