@@ -27,13 +27,11 @@ import (
 //
 // In case of errors, details are returned.
 func proxy(ctx context.Context, remote net.Conn, local net.Conn, config *tls.Config) error {
-	tcp, err := extractTCPConn(remote)
-	if err != nil {
-		return err
-	}
-
-	if err := setKeepalive(tcp); err != nil {
-		return err
+	tcp, err := tryExtractTCPConn(remote)
+	if err == nil {
+		if err := setKeepalive(tcp); err != nil {
+			return err
+		}
 	}
 
 	if config != nil {
@@ -82,7 +80,11 @@ func proxy(ctx context.Context, remote net.Conn, local net.Conn, config *tls.Con
 		if err != nil {
 			errs[0] = fmt.Errorf("local -> remote: %v", err)
 		}
-		tcp.CloseRead()
+
+		if tcp != nil {
+			tcp.CloseRead()
+		}
+
 		if err := <-remoteToLocal; err != nil {
 			errs[1] = fmt.Errorf("remote -> local: %v", err)
 		}
@@ -98,8 +100,8 @@ func proxy(ctx context.Context, remote net.Conn, local net.Conn, config *tls.Con
 	return nil
 }
 
-// extractTCPConn tries to extract the underlying net.TCPConn, potentially from a tls.Conn.
-func extractTCPConn(conn net.Conn) (*net.TCPConn, error) {
+// tryExtractTCPConn tries to extract the underlying net.TCPConn, potentially from a tls.Conn.
+func tryExtractTCPConn(conn net.Conn) (*net.TCPConn, error) {
 	tcp, ok := conn.(*net.TCPConn)
 	if ok {
 		return tcp, nil
