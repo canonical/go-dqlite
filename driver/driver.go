@@ -787,6 +787,12 @@ type unwrappable interface {
 	Unwrap() error
 }
 
+// TODO driver.ErrBadConn should not be returned when there's a possibility that
+// the query has been executed. In our case there is a window in protocol.Call
+// between `send` and `recv` where the send has succeeded but the recv has
+// failed. In those cases we call driverError on the result of protocol.Call,
+// possibly returning ErrBadCon.
+// https://cs.opensource.google/go/go/+/refs/tags/go1.20.4:src/database/sql/driver/driver.go;drc=a32a592c8c14927c20ac42808e1fb2e55b2e9470;l=162
 func driverError(log client.LogFunc, err error) error {
 	switch err := errors.Cause(err).(type) {
 	case syscall.Errno:
@@ -836,6 +842,10 @@ func driverError(log client.LogFunc, err error) error {
 			log(client.LogDebug, "network connection lost: %v", err)
 			return driver.ErrBadConn
 		}
+	}
+	if errors.Is(err, io.EOF) {
+		log(client.LogDebug, "EOF detected: %v", err)
+		return driver.ErrBadConn
 	}
 	return err
 }
