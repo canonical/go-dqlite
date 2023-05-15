@@ -353,7 +353,7 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 	if c.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response);
+	err := c.protocol.Call(ctx, &c.request, &c.response)
 	if c.tracing != client.LogNone {
 		c.log(c.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), query)
 	}
@@ -392,7 +392,7 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 	if c.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response);
+	err := c.protocol.Call(ctx, &c.request, &c.response)
 	if c.tracing != client.LogNone {
 		c.log(c.tracing, "%.3fs request exec: %q", time.Since(start).Seconds(), query)
 	}
@@ -428,7 +428,7 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 	if c.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response);
+	err := c.protocol.Call(ctx, &c.request, &c.response)
 	if c.tracing != client.LogNone {
 		c.log(c.tracing, "%.3fs request query: %q", time.Since(start).Seconds(), query)
 	}
@@ -588,7 +588,7 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 	if s.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := s.protocol.Call(ctx, s.request, s.response);
+	err := s.protocol.Call(ctx, s.request, s.response)
 	if s.tracing != client.LogNone {
 		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
 	}
@@ -627,7 +627,7 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 	if s.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := s.protocol.Call(ctx, s.request, s.response);
+	err := s.protocol.Call(ctx, s.request, s.response)
 	if s.tracing != client.LogNone {
 		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
 	}
