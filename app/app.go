@@ -218,6 +218,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		driver.WithDialFunc(driverDial),
 		driver.WithLogFunc(o.Log),
 		driver.WithTracing(o.Tracing),
+		driver.WithTxMode(o.TxMode),
 	)
 	if err != nil {
 		stop()

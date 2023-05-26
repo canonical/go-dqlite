@@ -40,6 +40,7 @@ type Driver struct {
 	contextTimeout    time.Duration    // Default client context timeout.
 	clientConfig      protocol.Config  // Configuration for dqlite client instances
 	tracing           client.LogLevel  // Whether to trace statements
+	txMode            client.TxMode    // Transaction mode to use
 }
 
 // Error is returned in case of database errors.
@@ -176,6 +177,14 @@ func WithTracing(level client.LogLevel) Option {
 	}
 }
 
+// WithTracing will emit a log message at the given level every time a
+// statement gets executed.
+func WithTxMode(level client.TxMode) Option {
+	return func(options *options) {
+		options.TxMode = level
+	}
+}
+
 // NewDriver creates a new dqlite driver, which also implements the
 // driver.Driver interface.
 func New(store client.NodeStore, options ...Option) (*Driver, error) {
@@ -199,6 +208,7 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 			BackoffCap:     o.ConnectionBackoffCap,
 			RetryLimit:     o.RetryLimit,
 		},
+		txMode: o.TxMode,
 	}
 
 	return driver, nil
@@ -216,6 +226,7 @@ type options struct {
 	RetryLimit              uint
 	Context                 context.Context
 	Tracing                 client.LogLevel
+	TxMode                  client.TxMode
 }
 
 // Create a options object with sane defaults.
@@ -224,6 +235,7 @@ func defaultOptions() *options {
 		Log:     client.DefaultLogFunc,
 		Dial:    client.DefaultDialFunc,
 		Tracing: client.LogNone,
+		TxMode:  client.TxModeBegin,
 	}
 }
 
@@ -253,6 +265,7 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 		log:            c.driver.log,
 		contextTimeout: c.driver.contextTimeout,
 		tracing:        c.driver.tracing,
+		txMode:         c.driver.txMode,
 	}
 
 	var err error
@@ -333,6 +346,7 @@ type Conn struct {
 	id             uint32 // Database ID.
 	contextTimeout time.Duration
 	tracing        client.LogLevel
+	txMode         client.TxMode
 }
 
 // PrepareContext returns a prepared statement, bound to this connection.
@@ -353,7 +367,7 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 	if c.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response);
+	err := c.protocol.Call(ctx, &c.request, &c.response)
 	if c.tracing != client.LogNone {
 		c.log(c.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), query)
 	}
@@ -392,7 +406,7 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 	if c.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response);
+	err := c.protocol.Call(ctx, &c.request, &c.response)
 	if c.tracing != client.LogNone {
 		c.log(c.tracing, "%.3fs request exec: %q", time.Since(start).Seconds(), query)
 	}
@@ -428,7 +442,7 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 	if c.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response);
+	err := c.protocol.Call(ctx, &c.request, &c.response)
 	if c.tracing != client.LogNone {
 		c.log(c.tracing, "%.3fs request query: %q", time.Since(start).Seconds(), query)
 	}
@@ -480,7 +494,7 @@ func (c *Conn) Close() error {
 // true to either set the read-only transaction property if supported or return
 // an error if it is not supported.
 func (c *Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
-	if _, err := c.ExecContext(ctx, "BEGIN", nil); err != nil {
+	if _, err := c.ExecContext(ctx, txMode(c.txMode), nil); err != nil {
 		return nil, err
 	}
 
@@ -490,6 +504,19 @@ func (c *Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, e
 	}
 
 	return tx, nil
+}
+
+func txMode(mode client.TxMode) string {
+	if mode == client.TxModeBeginConcurrent {
+		return "BEGIN CONCURRENT"
+	}
+	// TODO (stickupkid): Support the following:
+	// - BEGIN DEFERRED
+	// - BEGIN IMMEDIATE
+	// - BEGIN EXCLUSIVE
+	//
+	// https://www.sqlite.org/lang_transaction.html
+	return "BEGIN"
 }
 
 // Begin starts and returns a new transaction.
@@ -588,7 +615,7 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 	if s.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := s.protocol.Call(ctx, s.request, s.response);
+	err := s.protocol.Call(ctx, s.request, s.response)
 	if s.tracing != client.LogNone {
 		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
 	}
@@ -627,7 +654,7 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 	if s.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := s.protocol.Call(ctx, s.request, s.response);
+	err := s.protocol.Call(ctx, s.request, s.response)
 	if s.tracing != client.LogNone {
 		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
 	}
