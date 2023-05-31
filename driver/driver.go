@@ -353,7 +353,7 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 	if c.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response);
+	err := c.protocol.Call(ctx, &c.request, &c.response)
 	if c.tracing != client.LogNone {
 		c.log(c.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), query)
 	}
@@ -392,7 +392,7 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 	if c.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response);
+	err := c.protocol.Call(ctx, &c.request, &c.response)
 	if c.tracing != client.LogNone {
 		c.log(c.tracing, "%.3fs request exec: %q", time.Since(start).Seconds(), query)
 	}
@@ -428,7 +428,7 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 	if c.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response);
+	err := c.protocol.Call(ctx, &c.request, &c.response)
 	if c.tracing != client.LogNone {
 		c.log(c.tracing, "%.3fs request query: %q", time.Since(start).Seconds(), query)
 	}
@@ -588,7 +588,7 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 	if s.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := s.protocol.Call(ctx, s.request, s.response);
+	err := s.protocol.Call(ctx, s.request, s.response)
 	if s.tracing != client.LogNone {
 		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
 	}
@@ -627,7 +627,7 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 	if s.tracing != client.LogNone {
 		start = time.Now()
 	}
-	err := s.protocol.Call(ctx, s.request, s.response);
+	err := s.protocol.Call(ctx, s.request, s.response)
 	if s.tracing != client.LogNone {
 		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
 	}
@@ -787,6 +787,12 @@ type unwrappable interface {
 	Unwrap() error
 }
 
+// TODO driver.ErrBadConn should not be returned when there's a possibility that
+// the query has been executed. In our case there is a window in protocol.Call
+// between `send` and `recv` where the send has succeeded but the recv has
+// failed. In those cases we call driverError on the result of protocol.Call,
+// possibly returning ErrBadCon.
+// https://cs.opensource.google/go/go/+/refs/tags/go1.20.4:src/database/sql/driver/driver.go;drc=a32a592c8c14927c20ac42808e1fb2e55b2e9470;l=162
 func driverError(log client.LogFunc, err error) error {
 	switch err := errors.Cause(err).(type) {
 	case syscall.Errno:
@@ -836,6 +842,10 @@ func driverError(log client.LogFunc, err error) error {
 			log(client.LogDebug, "network connection lost: %v", err)
 			return driver.ErrBadConn
 		}
+	}
+	if errors.Is(err, io.EOF) {
+		log(client.LogDebug, "EOF detected: %v", err)
+		return driver.ErrBadConn
 	}
 	return err
 }
