@@ -333,6 +333,7 @@ type Conn struct {
 	id             uint32 // Database ID.
 	contextTimeout time.Duration
 	tracing        client.LogLevel
+	lastResult     *Result
 }
 
 // PrepareContext returns a prepared statement, bound to this connection.
@@ -405,6 +406,8 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 	if err != nil {
 		return nil, driverError(c.log, err)
 	}
+
+	c.lastResult = &Result{result: result}
 
 	return &Result{result: result}, nil
 }
@@ -517,8 +520,16 @@ type Tx struct {
 func (tx *Tx) Commit() error {
 	ctx := context.Background()
 
+	oldRes := tx.conn.lastResult
+
 	if _, err := tx.conn.ExecContext(ctx, "COMMIT", nil); err != nil {
 		return driverError(tx.log, err)
+	}
+
+	newRes := tx.conn.lastResult
+
+	if newRes.result != oldRes.result {
+		tx.log(client.LogError, "for jepsen: unexpected driver result for COMMIT")
 	}
 
 	return nil

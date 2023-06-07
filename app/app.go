@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -55,6 +56,8 @@ type App struct {
 
 // New creates a new application node.
 func New(dir string, options ...Option) (app *App, err error) {
+	log.Println("RUNNING WITH investigate-nrows");
+
 	o := defaultOptions()
 	for _, option := range options {
 		option(o)
