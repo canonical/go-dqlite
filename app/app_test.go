@@ -1205,3 +1205,79 @@ func newDir(t *testing.T) (string, func()) {
 
 	return dir, cleanup
 }
+
+func Test_TxRowsAffected(t *testing.T) {
+	app, cleanup := newAppWithNoTLS(t, app.WithAddress("127.0.0.1:9001"))
+	defer cleanup()
+
+	err := app.Ready(context.Background())
+	require.NoError(t, err)
+
+	db, err := app.Open(context.Background(), "test")
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.ExecContext(context.Background(), `
+CREATE TABLE test (
+	id            TEXT PRIMARY KEY,
+	value         INT
+);`);
+	require.NoError(t, err);
+
+	// Insert watermark
+	err = tx(context.Background(), db, func(ctx context.Context, tx *sql.Tx) error {
+		query := `
+INSERT INTO test
+	(id, value)
+VALUES
+	('id0', -1);
+	`
+		result, err := tx.ExecContext(ctx, query)
+		if err != nil {
+			return err
+		}
+		_, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Update watermark
+	err = tx(context.Background(), db, func(ctx context.Context, tx *sql.Tx) error {
+		query := `
+UPDATE test
+SET
+	value = 1
+WHERE id = 'id0';
+	`
+		result, err := tx.ExecContext(ctx, query)
+		if err != nil {
+			return err
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if affected != 1 {
+			return fmt.Errorf("expected 1 row affected, got %d", affected)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func tx(ctx context.Context, db *sql.DB, fn func(context.Context, *sql.Tx) error) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	if err := fn(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
