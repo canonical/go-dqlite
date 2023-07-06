@@ -2,10 +2,12 @@
 #
 # Test the dqlite cluster recovery.
 
+ASAN=${ASAN:-}
+
 BASEDIR=$(dirname "$0")
 . "$BASEDIR"/dqlite-demo-util.sh
 
-$GO build -tags libsqlite3 ./cmd/dqlite/
+$GO build -tags libsqlite3 $ASAN ./cmd/dqlite/
 
 trap tear_down EXIT
 trap sig_handler HUP INT TERM

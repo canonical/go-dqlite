@@ -3,6 +3,7 @@
 # Test dynamic roles management.
 
 GO=${GO:-go}
+ASAN=${ASAN:-}
 VERBOSE=${VERBOSE:-0}
 DIR=$(mktemp -d)
 BINARY=$DIR/main
@@ -10,7 +11,7 @@ CLUSTER=127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003,127.0.0.1:9004,127.0.0.1:90
 N=7
 DISK=${DISK:-0}
 
-$GO build -tags libsqlite3 ./cmd/dqlite/
+$GO build -tags libsqlite3 $ASAN ./cmd/dqlite/
 
 
 set_up_binary() {
