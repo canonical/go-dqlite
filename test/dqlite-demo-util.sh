@@ -1,10 +1,11 @@
 # dqlite-demo test utilities
 
 GO=${GO:-go}
+ASAN=${ASAN:-}
 VERBOSE=${VERBOSE:-0}
 DISK=${DISK:-0}
 
-$GO build -tags libsqlite3 ./cmd/dqlite-demo/
+$GO build -tags libsqlite3 $ASAN ./cmd/dqlite-demo/
 
 DIR=$(mktemp -d)
 
