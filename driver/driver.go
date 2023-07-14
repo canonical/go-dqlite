@@ -45,20 +45,125 @@ type Driver struct {
 // Error is returned in case of database errors.
 type Error = protocol.Error
 
-// Error codes. Values here mostly overlap with native SQLite codes.
+// SQLite result codes.
 const (
-	ErrBusy                = 5
-	ErrBusyRecovery        = 5 | (1 << 8)
-	ErrBusySnapshot        = 5 | (2 << 8)
-	errIoErr               = 10
-	errIoErrNotLeader      = errIoErr | 40<<8
-	errIoErrLeadershipLost = errIoErr | (41 << 8)
-	errNotFound            = 12
+	// Primary result codes.
+	ErrError      =  1
+	ErrInternal   =  2
+	ErrPerm       =  3
+	ErrAbort      =  4
+	ErrBusy       =  5
+	ErrLocked     =  6
+	ErrNomem      =  7
+	ErrReadonly   =  8
+	ErrInterrupt  =  9
+	ErrIoErr      = 10
+	ErrCorrupt    = 11
+	ErrNotFound   = 12
+	ErrFull       = 13
+	ErrCantOpen   = 14
+	ErrProtocol   = 15
+	ErrEmpty      = 16
+	ErrSchema     = 17
+	ErrToobig     = 18
+	ErrConstraint = 19
+	ErrMismatch   = 20
+	ErrMisuse     = 21
+	ErrNoLFS      = 22
+	ErrAuth       = 23
+	ErrFormat     = 24
+	ErrRange      = 25
+	ErrNotADB     = 26
+	ErrNotice     = 27
+	ErrWarning    = 28
+	ErrRow        = 100
+	ErrDone       = 101
+
+	// Extended result codes.
+	ErrErrorMissingCollSeq    = (ErrError | (1<<8))
+	ErrErrorRetry             = (ErrError | (2<<8))
+	ErrErrorSnapshot          = (ErrError | (3<<8))
+	ErrIoErrRead              = (ErrIoErr | (1<<8))
+	ErrIoErrShortRead         = (ErrIoErr | (2<<8))
+	ErrIoErrWrite             = (ErrIoErr | (3<<8))
+	ErrIoErrFsync             = (ErrIoErr | (4<<8))
+	ErrIoErrDirFsync          = (ErrIoErr | (5<<8))
+	ErrIoErrTruncate          = (ErrIoErr | (6<<8))
+	ErrIoErrFstat             = (ErrIoErr | (7<<8))
+	ErrIoErrUnlock            = (ErrIoErr | (8<<8))
+	ErrIoErrRDlock            = (ErrIoErr | (9<<8))
+	ErrIoErrDelete            = (ErrIoErr | (10<<8))
+	ErrIoErrBlocked           = (ErrIoErr | (11<<8))
+	ErrIoErrNoMem             = (ErrIoErr | (12<<8))
+	ErrIoErrAccess            = (ErrIoErr | (13<<8))
+	ErrIoErrCheckReservedLock = (ErrIoErr | (14<<8))
+	ErrIoErrLock              = (ErrIoErr | (15<<8))
+	ErrIoErrClose             = (ErrIoErr | (16<<8))
+	ErrIoErrDirClose          = (ErrIoErr | (17<<8))
+	ErrIoErrSHMOpen           = (ErrIoErr | (18<<8))
+	ErrIoErrSHMSize           = (ErrIoErr | (19<<8))
+	ErrIoErrSHMLock           = (ErrIoErr | (20<<8))
+	ErrIoErrSHMMap            = (ErrIoErr | (21<<8))
+	ErrIoErrSeek              = (ErrIoErr | (22<<8))
+	ErrIoErrDeleteNoent       = (ErrIoErr | (23<<8))
+	ErrIoErrMmap              = (ErrIoErr | (24<<8))
+	ErrIoErrGetTempPath       = (ErrIoErr | (25<<8))
+	ErrIoErrConvPath          = (ErrIoErr | (26<<8))
+	ErrIoErrVNode             = (ErrIoErr | (27<<8))
+	ErrIoErrAuth              = (ErrIoErr | (28<<8))
+	ErrIoErrBeginAtomic       = (ErrIoErr | (29<<8))
+	ErrIoErrCommitAtomic      = (ErrIoErr | (30<<8))
+	ErrIoErrRollbackAtomic    = (ErrIoErr | (31<<8))
+	ErrIoErrData              = (ErrIoErr | (32<<8))
+	ErrIoErrCorruptFS         = (ErrIoErr | (33<<8))
+	ErrLockedSharedCache      = (ErrLocked |  (1<<8))
+	ErrLockedVTab             = (ErrLocked |  (2<<8))
+	ErrBusyRecovery           = (ErrBusy   |  (1<<8))
+	ErrBusySnapshot           = (ErrBusy   |  (2<<8))
+	ErrBusyTimeout            = (ErrBusy   |  (3<<8))
+	ErrCantOpenNoTempDir      = (ErrCantOpen | (1<<8))
+	ErrCantOpenIsDir          = (ErrCantOpen | (2<<8))
+	ErrCantOpenFullPath       = (ErrCantOpen | (3<<8))
+	ErrCantOpenConvPath       = (ErrCantOpen | (4<<8))
+	ErrCantOpenSymlink        = (ErrCantOpen | (6<<8))
+	ErrCorruptVTab            = (ErrCorrupt | (1<<8))
+	ErrCorruptSequence        = (ErrCorrupt | (2<<8))
+	ErrCorruptIndex           = (ErrCorrupt | (3<<8))
+	ErrReadonlyRecovery       = (ErrReadonly | (1<<8))
+	ErrReadonlyCantLock       = (ErrReadonly | (2<<8))
+	ErrReadonlyRollback       = (ErrReadonly | (3<<8))
+	ErrReadonlyDbMoved        = (ErrReadonly | (4<<8))
+	ErrReadonlyCantInit       = (ErrReadonly | (5<<8))
+	ErrReadonlyDirectory      = (ErrReadonly | (6<<8))
+	ErrAbortRollback          = (ErrAbort | (2<<8))
+	ErrConstraintCheck        = (ErrConstraint | (1<<8))
+	ErrConstraintCommitHook   = (ErrConstraint | (2<<8))
+	ErrConstraintForeignKey   = (ErrConstraint | (3<<8))
+	ErrConstraintFunction     = (ErrConstraint | (4<<8))
+	ErrConstraintNotNull      = (ErrConstraint | (5<<8))
+	ErrConstraintPrimaryKey   = (ErrConstraint | (6<<8))
+	ErrConstraintTrigger      = (ErrConstraint | (7<<8))
+	ErrConstraintUnique       = (ErrConstraint | (8<<8))
+	ErrConstraintVTab         = (ErrConstraint | (9<<8))
+	ErrConstraintRowID        = (ErrConstraint |(10<<8))
+	ErrConstraintPinned       = (ErrConstraint |(11<<8))
+	ErrConstraintDatatype     = (ErrConstraint |(12<<8))
+	ErrNoticeRecoverWAL       = (ErrNotice | (1<<8))
+	ErrNoticeRecoverRollback  = (ErrNotice | (2<<8))
+	ErrNoticeRBU              = (ErrNotice | (3<<8))
+	ErrWarningAutoindex       = (ErrWarning | (1<<8))
+	ErrAuthUser               = (ErrAuth | (1<<8))
+)
+
+// dqlite-specific error codes, compatible with the SQLite set.
+const (
+	errIoErrNotLeader      = ErrIoErr | 40<<8
+	errIoErrLeadershipLost = ErrIoErr | (41 << 8)
 
 	// Legacy error codes before version-3.32.1+replication4. Kept here
 	// for backward compatibility, but should eventually be dropped.
-	errIoErrNotLeaderLegacy      = errIoErr | 32<<8
-	errIoErrLeadershipLostLegacy = errIoErr | (33 << 8)
+	errIoErrNotLeaderLegacy      = ErrIoErr | 32<<8
+	errIoErrLeadershipLostLegacy = ErrIoErr | (33 << 8)
 )
 
 // Option can be used to tweak driver parameters.
@@ -812,7 +917,7 @@ func driverError(log client.LogFunc, err error) error {
 		case errIoErrLeadershipLost:
 			log(client.LogDebug, "leadership lost (%d - %s)", err.Code, err.Description)
 			return driver.ErrBadConn
-		case errNotFound:
+		case ErrNotFound:
 			log(client.LogDebug, "not found - potentially after leadership loss (%d - %s)", err.Code, err.Description)
 			return driver.ErrBadConn
 		default:
