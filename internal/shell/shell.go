@@ -87,11 +87,7 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".reconfigure") {
 		return s.processReconfigure(ctx, line)
 	}
-	if strings.HasPrefix(strings.ToUpper(strings.TrimLeft(line, " ")), "SELECT") {
-		return s.processSelect(ctx, line)
-	} else {
-		return "", s.processExec(ctx, line)
-	}
+	return s.processQuery(ctx, line)
 }
 
 func (s *Shell) processHelp() string {
@@ -317,7 +313,7 @@ func (s *Shell) processWeight(ctx context.Context, line string) (string, error) 
 	return "", nil
 }
 
-func (s *Shell) processSelect(ctx context.Context, line string) (string, error) {
+func (s *Shell) processQuery(ctx context.Context, line string) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("begin transaction: %w", err)

@@ -478,6 +478,12 @@ func (r *Rows) columnTypes(save bool) ([]uint8, error) {
 		r.types = make([]uint8, len(r.Columns))
 	}
 
+	// If there are zero columns, no rows can be encoded or decoded,
+	// so we signal EOF immediately.
+	if len(r.types) == 0 {
+		return r.types, io.EOF
+	}
+
 	// Each column needs a 4 byte slot to store the column type. The row
 	// header must be padded to reach word boundary.
 	headerBits := len(r.types) * 4
