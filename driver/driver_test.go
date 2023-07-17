@@ -567,6 +567,22 @@ func Test_ColumnTypesEnd(t *testing.T) {
 	assert.NoError(t, conn.Close())
 }
 
+func Test_ZeroColumns(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+	queryer := conn.(driver.Queryer)
+
+	rows, err := queryer.Query("CREATE TABLE foo (bar INTEGER)", []driver.Value{})
+	require.NoError(t, err)
+	values := []driver.Value{}
+	require.Equal(t, io.EOF, rows.Next(values))
+
+	require.NoError(t, conn.Close())
+}
+
 func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 	t.Helper()
 
