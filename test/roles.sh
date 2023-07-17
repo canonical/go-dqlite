@@ -74,7 +74,7 @@ func main() {
      app.Close()
 }
 EOF
-    $GO build -o "$BINARY" -tags libsqlite3 "$DIR"/main.go
+    $GO build -o "$BINARY" -tags libsqlite3 $ASAN "$DIR"/main.go
 }
 
 start_node() {
