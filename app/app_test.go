@@ -858,6 +858,48 @@ func TestRolesAdjustment_ReplaceStandByHonorFailureDomains(t *testing.T) {
 	assert.Equal(t, client.Spare, cluster[8].Role)
 }
 
+// In a cluster of three voters, one node goes offline and is demoted to spare.
+func TestRolesAdjustment_OneOfThreeOffline(t *testing.T) {
+	apps := make([]*app.App, 3)
+	cleanups := make([]func(), 3)
+
+	for i := 0; i < 3; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithRolesAdjustmentFrequency(5 * time.Second),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		app, cleanup := newApp(t, options...)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+		cleanups[i] = cleanup
+	}
+
+	defer cleanups[0]()
+	defer cleanups[1]()
+
+	cleanups[2]()
+
+	time.Sleep(20 * time.Second)
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, client.Voter, cluster[0].Role)
+	assert.Equal(t, client.Voter, cluster[1].Role)
+	assert.Equal(t, client.Spare, cluster[2].Role)
+}
+
 // Open a database on a fresh one-node cluster.
 func TestOpen(t *testing.T) {
 	app, cleanup := newApp(t, app.WithAddress("127.0.0.1:9000"))
