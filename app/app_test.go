@@ -742,8 +742,8 @@ func TestRolesAdjustment_CantReplaceVoter(t *testing.T) {
 
 	assert.Equal(t, client.Voter, cluster[0].Role)
 	assert.Equal(t, client.Voter, cluster[1].Role)
-	assert.Equal(t, client.Voter, cluster[2].Role)
-	assert.Equal(t, client.StandBy, cluster[3].Role)
+	assert.Equal(t, client.Spare, cluster[2].Role)
+	assert.Equal(t, client.Spare, cluster[3].Role)
 }
 
 // If a stand-by goes offline, another node takes its place.
