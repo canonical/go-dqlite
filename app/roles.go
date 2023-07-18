@@ -159,14 +159,12 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 		candidates := c.list(client.StandBy, true)
 		candidates = append(candidates, c.list(client.Spare, true)...)
 
-		if len(candidates) == 0 {
-			return -1, nil
+		if len(candidates) != 0 {
+			domains := c.failureDomains(onlineVoters)
+			c.sortCandidates(candidates, domains)
+
+			return client.Voter, candidates
 		}
-
-		domains := c.failureDomains(onlineVoters)
-		c.sortCandidates(candidates, domains)
-
-		return client.Voter, candidates
 	}
 
 	// If we have more online voters than desired, let's demote one of
@@ -194,14 +192,12 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 	if n := len(onlineStandbys); n < c.Config.StandBys {
 		candidates := c.list(client.Spare, true)
 
-		if len(candidates) == 0 {
-			return -1, nil
+		if len(candidates) != 0 {
+			domains := c.failureDomains(onlineStandbys)
+			c.sortCandidates(candidates, domains)
+
+			return client.StandBy, candidates
 		}
-
-		domains := c.failureDomains(onlineStandbys)
-		c.sortCandidates(candidates, domains)
-
-		return client.StandBy, candidates
 	}
 
 	// If we have more online stand-bys than desired, let's demote one of
