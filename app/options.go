@@ -189,6 +189,20 @@ func WithDiskMode(disk bool) Option {
 	}
 }
 
+// WithAutoRecovery enables or disables auto-recovery of persisted data
+// at startup for this node.
+//
+// When auto-recovery is enabled, raft snapshots and segment files may be
+// deleted at startup if they are determined to be corrupt. This helps
+// the startup process to succeed in more cases, but can lead to data loss.
+//
+// Auto-recovery is enabled by default.
+func WithAutoRecovery(recovery bool) Option {
+	return func(options *options) {
+		options.AutoRecovery = recovery
+	}
+}
+
 type tlsSetup struct {
 	Listen *tls.Config
 	Dial   *tls.Config
@@ -214,6 +228,7 @@ type options struct {
 	UnixSocket               string
 	SnapshotParams           dqlite.SnapshotParams
 	DiskMode                 bool
+	AutoRecovery             bool
 }
 
 // Create a options object with sane defaults.
@@ -225,6 +240,7 @@ func defaultOptions() *options {
 		StandBys:                 3,
 		RolesAdjustmentFrequency: 30 * time.Second,
 		DiskMode:                 false, // Be explicit about not enabling disk-mode by default.
+		AutoRecovery:             true,
 	}
 }
 

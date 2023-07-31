@@ -194,6 +194,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		dqlite.WithNetworkLatency(o.NetworkLatency),
 		dqlite.WithSnapshotParams(o.SnapshotParams),
 		dqlite.WithDiskMode(o.DiskMode),
+		dqlite.WithAutoRecovery(o.AutoRecovery),
 	)
 	if err != nil {
 		stop()

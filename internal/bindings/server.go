@@ -183,6 +183,14 @@ func (s *Node) EnableDiskMode() error {
 	return nil
 }
 
+func (s *Node) SetAutoRecovery(on bool) error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
+	if rc := C.dqlite_node_set_auto_recovery(server, C.bool(on)); rc != 0 {
+		return fmt.Errorf("failed to set auto-recovery behavior")
+	}
+	return nil
+}
+
 func (s *Node) GetBindAddress() string {
 	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	return C.GoString(C.dqlite_node_get_bind_address(server))
