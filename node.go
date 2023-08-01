@@ -80,6 +80,20 @@ func WithDiskMode(disk bool) Option {
 	}
 }
 
+// WithAutoRecovery enables or disables auto-recovery of persisted data
+// at startup for this node.
+//
+// When auto-recovery is enabled, raft snapshots and segment files may be
+// deleted at startup if they are determined to be corrupt. This helps
+// the startup process to succeed in more cases, but can lead to data loss.
+//
+// Auto-recovery is enabled by default.
+func WithAutoRecovery(recovery bool) Option {
+	return func(options *options) {
+		options.AutoRecovery = recovery
+	}
+}
+
 // New creates a new Node instance.
 func New(id uint64, address string, dir string, options ...Option) (*Node, error) {
 	o := defaultOptions()
@@ -131,6 +145,10 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 			return nil, err
 		}
 	}
+	if err := server.SetAutoRecovery(o.AutoRecovery); err != nil {
+		cancel()
+		return nil, err
+	}
 
 	s := &Node{
 		server:      server,
@@ -171,6 +189,7 @@ type options struct {
 	FailureDomain  uint64
 	SnapshotParams bindings.SnapshotParams
 	DiskMode       bool
+	AutoRecovery   bool
 }
 
 // Close the server, releasing all resources it created.
@@ -232,5 +251,6 @@ func defaultOptions() *options {
 	return &options{
 		DialFunc: client.DefaultDialFunc,
 		DiskMode: false, // Be explicit about not enabling disk-mode by default.
+		AutoRecovery: true,
 	}
 }
