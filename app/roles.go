@@ -185,7 +185,6 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 
 		domains := c.failureDomains(onlineVoters)
 		c.sortCandidates(candidates, domains)
-
 		return client.Voter, candidates
 	}
 
@@ -201,6 +200,7 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 			nodes = append(nodes, node)
 		}
 
+		c.sortVoterCandidatesToDemote(nodes)
 		return client.Spare, nodes
 	}
 
@@ -340,6 +340,41 @@ func (c *RolesChanges) sortCandidates(candidates []client.NodeInfo, domains map[
 		}
 
 		return metadata1.Weight < metadata2.Weight
+	}
+
+	sort.Slice(candidates, less)
+}
+
+// Sort the given candidates according demotion priority.
+// We prefer to select a candidate from a domain with multiple candidates.
+// We prefer to select the candidate with highest weight.
+func (c *RolesChanges) sortVoterCandidatesToDemote(candidates []client.NodeInfo) {
+	less := func(i, j int) bool {
+		metadata1 := c.metadata(candidates[i])
+		domain1 := map[uint64]bool{
+			metadata1.FailureDomain: true,
+		}
+		sameDomainAs1 := len(c.list(client.Voter, true, domain1))
+
+		metadata2 := c.metadata(candidates[j])
+		domain2 := map[uint64]bool{
+			metadata2.FailureDomain: true,
+		}
+		sameDomainAs2 := len(c.list(client.Voter, true, domain2))
+
+		// If i has more voters on the same domain and j does not,
+		// then i takes precedence.
+		if sameDomainAs1 > 1 && sameDomainAs2 <= 1 {
+			return true
+		}
+
+		// If j has more voters on the same domain and i does not,
+		// then j takes precedence.
+		if sameDomainAs2 > 1 && sameDomainAs1 <= 1 {
+			return false
+		}
+
+		return metadata1.Weight > metadata2.Weight
 	}
 
 	sort.Slice(candidates, less)
