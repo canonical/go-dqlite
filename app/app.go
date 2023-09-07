@@ -365,7 +365,7 @@ func (a *App) Handover(ctx context.Context) error {
 			return fmt.Errorf("cluster servers: %w", err)
 		}
 		changes := a.makeRolesChanges(nodes)
-		voters := changes.list(client.Voter, true)
+		voters := changes.list(client.Voter, true, nil)
 
 		for i, voter := range voters {
 			if voter.Address == a.address {

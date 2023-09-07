@@ -56,8 +56,8 @@ func (c *RolesChanges) Assume(id uint64) client.NodeRole {
 		return -1
 	}
 
-	onlineVoters := c.list(client.Voter, true)
-	onlineStandbys := c.list(client.StandBy, true)
+	onlineVoters := c.list(client.Voter, true, nil)
+	onlineStandbys := c.list(client.StandBy, true, nil)
 
 	// If we have already the desired number of online voters and
 	// stand-bys, there's nothing to do.
@@ -94,7 +94,7 @@ func (c *RolesChanges) Handover(id uint64) (client.NodeRole, []client.NodeInfo) 
 
 	// Make a list of all online nodes with the same role and get their
 	// failure domains.
-	peers := c.list(node.Role, true)
+	peers := c.list(node.Role, true, nil)
 	for i := range peers {
 		if peers[i].ID == node.ID {
 			peers = append(peers[:i], peers[i+1:]...)
@@ -104,12 +104,12 @@ func (c *RolesChanges) Handover(id uint64) (client.NodeRole, []client.NodeInfo) 
 	domains := c.failureDomains(peers)
 
 	// Online spare nodes are always candidates.
-	candidates := c.list(client.Spare, true)
+	candidates := c.list(client.Spare, true, nil)
 
 	// Stand-by nodes are candidates if we need to transfer voting
 	// rights, and they are preferred over spares.
 	if node.Role == client.Voter {
-		candidates = append(c.list(client.StandBy, true), candidates...)
+		candidates = append(c.list(client.StandBy, true, nil), candidates...)
 	}
 
 	if len(candidates) == 0 {
@@ -142,10 +142,28 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 		return -1, nil
 	}
 
-	onlineVoters := c.list(client.Voter, true)
-	onlineStandbys := c.list(client.StandBy, true)
-	offlineVoters := c.list(client.Voter, false)
-	offlineStandbys := c.list(client.StandBy, false)
+	onlineVoters := c.list(client.Voter, true, nil)
+	onlineStandbys := c.list(client.StandBy, true, nil)
+	offlineVoters := c.list(client.Voter, false, nil)
+	offlineStandbys := c.list(client.StandBy, false, nil)
+
+	domainsWithVoters := c.failureDomains(onlineVoters)
+	allDomains := c.allFailureDomains()
+
+	// If we do not have voters on all failure domains and we have a domain with more than one voters
+	// we may need to send voters to domains without voters.
+	if len(domainsWithVoters) < len(allDomains) && len(domainsWithVoters) < len(onlineVoters) {
+		// Find the domains we need to populate with voters
+		domainsWithoutVoters := c.domainsSubtract(allDomains, domainsWithVoters)
+		// Find nodes in the domains we need to populate
+		candidates := c.list(client.StandBy, true, domainsWithoutVoters)
+		candidates = append(candidates, c.list(client.Spare, true, domainsWithoutVoters)...)
+
+		if len(candidates) > 0 {
+			c.sortCandidates(candidates, domainsWithoutVoters)
+			return client.Voter, candidates
+		}
+	}
 
 	// If we have exactly the desired number of voters and stand-bys, and they are all
 	// online, we're good.
@@ -156,8 +174,8 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 	// If we have less online voters than desired, let's try to promote
 	// some other node.
 	if n := len(onlineVoters); n < c.Config.Voters {
-		candidates := c.list(client.StandBy, true)
-		candidates = append(candidates, c.list(client.Spare, true)...)
+		candidates := c.list(client.StandBy, true, nil)
+		candidates = append(candidates, c.list(client.Spare, true, nil)...)
 
 		if len(candidates) == 0 {
 			return -1, nil
@@ -165,7 +183,6 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 
 		domains := c.failureDomains(onlineVoters)
 		c.sortCandidates(candidates, domains)
-
 		return client.Voter, candidates
 	}
 
@@ -181,7 +198,7 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 			nodes = append(nodes, node)
 		}
 
-		return client.Spare, nodes
+		return client.Spare, c.sortVoterCandidatesToDemote(nodes)
 	}
 
 	// If we have offline voters, let's demote one of them.
@@ -192,7 +209,7 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 	// If we have less online stand-bys than desired, let's try to promote
 	// some other node.
 	if n := len(onlineStandbys); n < c.Config.StandBys {
-		candidates := c.list(client.Spare, true)
+		candidates := c.list(client.Spare, true, nil)
 
 		if len(candidates) == 0 {
 			return -1, nil
@@ -243,12 +260,14 @@ func (c *RolesChanges) get(id uint64) *client.NodeInfo {
 	return nil
 }
 
-// Return the online or offline nodes with the given role.
-func (c *RolesChanges) list(role client.NodeRole, online bool) []client.NodeInfo {
+// Return the online or offline nodes with the given role (optionally) in specific domains.
+func (c *RolesChanges) list(role client.NodeRole, online bool, domains map[uint64]bool) []client.NodeInfo {
 	nodes := []client.NodeInfo{}
 	for node, metadata := range c.State {
 		if node.Role == role && metadata != nil == online {
-			nodes = append(nodes, node)
+			if domains == nil || (domains != nil && domains[metadata.FailureDomain]) {
+				nodes = append(nodes, node)
+			}
 		}
 	}
 	return nodes
@@ -256,7 +275,7 @@ func (c *RolesChanges) list(role client.NodeRole, online bool) []client.NodeInfo
 
 // Return the number of online or offline nodes with the given role.
 func (c *RolesChanges) count(role client.NodeRole, online bool) int {
-	return len(c.list(role, online))
+	return len(c.list(role, online, nil))
 }
 
 // Return a map of the failure domains associated with the
@@ -269,6 +288,30 @@ func (c *RolesChanges) failureDomains(nodes []client.NodeInfo) map[uint64]bool {
 			continue
 		}
 		domains[metadata.FailureDomain] = true
+	}
+	return domains
+}
+
+// Return a map of all failureDomains with online nodes.
+func (c *RolesChanges) allFailureDomains() map[uint64]bool {
+	domains := map[uint64]bool{}
+	for _, metadata := range c.State {
+		if metadata == nil {
+			continue
+		}
+		domains[metadata.FailureDomain] = true
+	}
+	return domains
+}
+
+// Return a map of domains that is the "from" minus the "subtract".
+func (c *RolesChanges) domainsSubtract(from map[uint64]bool, subtract map[uint64]bool) map[uint64]bool {
+	domains := map[uint64]bool{}
+	for fd, val := range from {
+		_, common := subtract[fd]
+		if !common {
+			domains[fd] = val
+		}
 	}
 	return domains
 }
@@ -297,6 +340,49 @@ func (c *RolesChanges) sortCandidates(candidates []client.NodeInfo, domains map[
 	}
 
 	sort.Slice(candidates, less)
+}
+
+// Sort the given candidates according demotion priority. Return the sorted
+// We prefer to select a candidate from a domain with multiple candidates.
+// We prefer to select the candidate with highest weight.
+func (c *RolesChanges) sortVoterCandidatesToDemote(candidates []client.NodeInfo) []client.NodeInfo {
+	domainsMap := make(map[uint64][]client.NodeInfo)
+	for _, node := range candidates {
+		id := c.metadata(node).FailureDomain
+		domain, exists := domainsMap[id]
+		if !exists {
+			domain = []client.NodeInfo{node}
+		} else {
+			domain = append(domain, node)
+		}
+		domainsMap[id] = domain
+	}
+
+	domains := make([][]client.NodeInfo, 0, len(domainsMap))
+	for _, domain := range domainsMap {
+		domains = append(domains, domain)
+	}
+
+	sort.Slice(domains, func(i, j int) bool {
+		return len(domains[i]) > len(domains[j])
+	})
+
+	for _, domain := range domains {
+		sort.Slice(domain, func(i, j int) bool {
+			metadata1 := c.metadata(domain[i])
+			metadata2 := c.metadata(domain[j])
+
+			return metadata1.Weight > metadata2.Weight
+		})
+	}
+
+	sortedCandidates := make([]client.NodeInfo, 0, len(candidates))
+	for _, domain := range domains {
+		sortedCandidates = append(sortedCandidates, domain...)
+	}
+
+	return sortedCandidates
+
 }
 
 // Return the metadata of the given node, if any.

@@ -632,6 +632,78 @@ func TestRolesAdjustment_ReplaceVoterHonorFailureDomain(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[5].Role)
 }
 
+// If cluster is imbalanced (all voters in one failure domain), roles get re-shuffled.
+func TestRolesAdjustment_ImbalancedFailureDomain(t *testing.T) {
+	n := 8
+	apps := make([]*app.App, n)
+	cleanups := make([]func(), n)
+
+	for i := 0; i < n; i++ {
+		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		// Half of the nodes will go to failure domain 0 and half on failure domain 1
+		fd := 0
+		if i > n/2 {
+			fd = 1
+		}
+		options := []app.Option{
+			app.WithAddress(addr),
+			app.WithRolesAdjustmentFrequency(4 * time.Second),
+			app.WithFailureDomain(uint64(fd)),
+		}
+		if i > 0 {
+			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
+		}
+
+		// Nodes on failure domain 0 are started first so all voters are initially there.
+		app, cleanup := newApp(t, options...)
+
+		require.NoError(t, app.Ready(context.Background()))
+
+		apps[i] = app
+		cleanups[i] = cleanup
+	}
+
+	for i := 0; i < n; i++ {
+		defer cleanups[i]()
+	}
+
+	for i := 0; i < n; i++ {
+		cli, err := apps[i].Client(context.Background())
+		require.NoError(t, err)
+		require.NoError(t, cli.Weight(context.Background(), uint64(n-i)))
+		defer cli.Close()
+	}
+
+	time.Sleep(18 * time.Second)
+
+	cli, err := apps[0].Leader(context.Background())
+	require.NoError(t, err)
+	defer cli.Close()
+
+	cluster, err := cli.Cluster(context.Background())
+	require.NoError(t, err)
+
+	domain := map[int]bool{
+		0: false,
+		1: false,
+	}
+	for i := 0; i < n; i++ {
+		// We know we have started half of the nodes in failure domain 0 and the other half on failure domain 1
+		fd := 0
+		if i > n/2 {
+			fd = 1
+		}
+		if cluster[i].Role == client.Voter {
+			domain[fd] = true
+		}
+	}
+
+	// All domain must have a voter
+	for _, voters := range domain {
+		assert.True(t, voters)
+	}
+}
+
 // If a voter goes offline, another node takes its place. Preference will be
 // given to candidates with lower weights.
 func TestRolesAdjustment_ReplaceVoterHonorWeight(t *testing.T) {
@@ -1042,7 +1114,6 @@ func TestExternalConnWithTCP(t *testing.T) {
 	assert.Equal(t, client.Voter, cluster[2].Role)
 }
 
-
 // TestExternalPipe creates a 3-member cluster using net.Pipe
 // and ensures the cluster is successfully created, and that the connection is
 // handled manually.
@@ -1062,7 +1133,7 @@ func TestExternalConnWithPipe(t *testing.T) {
 
 	dialFunc := func(_ context.Context, addr string) (net.Conn, error) {
 		client, server := net.Pipe()
-		
+
 		dialChannels[addr] <- server
 
 		return client, nil
