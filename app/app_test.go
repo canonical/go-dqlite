@@ -667,6 +667,13 @@ func TestRolesAdjustment_ImbalancedFailureDomain(t *testing.T) {
 		defer cleanups[i]()
 	}
 
+	for i := 0; i < n; i++ {
+		cli, err := apps[i].Client(context.Background())
+		require.NoError(t, err)
+		require.NoError(t, cli.Weight(context.Background(), uint64(n-i)))
+		defer cli.Close()
+	}
+
 	time.Sleep(18 * time.Second)
 
 	cli, err := apps[0].Leader(context.Background())

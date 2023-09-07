@@ -155,12 +155,10 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 	if len(domainsWithVoters) < len(allDomains) && len(domainsWithVoters) < len(onlineVoters) {
 		// Find the domains we need to populate with voters
 		domainsWithoutVoters := c.domainsSubtract(allDomains, domainsWithVoters)
-		// Find StandBys in the domains we need to populate
+		// Find nodes in the domains we need to populate
 		candidates := c.list(client.StandBy, true, domainsWithoutVoters)
-		// If we do not have StandBys to promote see if we have Spares
-		if len(candidates) <= 0 {
-			candidates = c.list(client.Spare, true, domainsWithoutVoters)
-		}
+		candidates = append(candidates, c.list(client.Spare, true, domainsWithoutVoters)...)
+
 		if len(candidates) > 0 {
 			c.sortCandidates(candidates, domainsWithoutVoters)
 			return client.Voter, candidates
@@ -200,8 +198,7 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 			nodes = append(nodes, node)
 		}
 
-		c.sortVoterCandidatesToDemote(nodes)
-		return client.Spare, nodes
+		return client.Spare, c.sortVoterCandidatesToDemote(nodes)
 	}
 
 	// If we have offline voters, let's demote one of them.
@@ -345,39 +342,47 @@ func (c *RolesChanges) sortCandidates(candidates []client.NodeInfo, domains map[
 	sort.Slice(candidates, less)
 }
 
-// Sort the given candidates according demotion priority.
+// Sort the given candidates according demotion priority. Return the sorted
 // We prefer to select a candidate from a domain with multiple candidates.
 // We prefer to select the candidate with highest weight.
-func (c *RolesChanges) sortVoterCandidatesToDemote(candidates []client.NodeInfo) {
-	less := func(i, j int) bool {
-		metadata1 := c.metadata(candidates[i])
-		domain1 := map[uint64]bool{
-			metadata1.FailureDomain: true,
+func (c *RolesChanges) sortVoterCandidatesToDemote(candidates []client.NodeInfo) []client.NodeInfo {
+	domainsMap := make(map[uint64][]client.NodeInfo)
+	for _, node := range candidates {
+		id := c.metadata(node).FailureDomain
+		domain, exists := domainsMap[id]
+		if !exists {
+			domain = []client.NodeInfo{node}
+		} else {
+			domain = append(domain, node)
 		}
-		sameDomainAs1 := len(c.list(client.Voter, true, domain1))
-
-		metadata2 := c.metadata(candidates[j])
-		domain2 := map[uint64]bool{
-			metadata2.FailureDomain: true,
-		}
-		sameDomainAs2 := len(c.list(client.Voter, true, domain2))
-
-		// If i has more voters on the same domain and j does not,
-		// then i takes precedence.
-		if sameDomainAs1 > 1 && sameDomainAs2 <= 1 {
-			return true
-		}
-
-		// If j has more voters on the same domain and i does not,
-		// then j takes precedence.
-		if sameDomainAs2 > 1 && sameDomainAs1 <= 1 {
-			return false
-		}
-
-		return metadata1.Weight > metadata2.Weight
+		domainsMap[id] = domain
 	}
 
-	sort.Slice(candidates, less)
+	domains := make([][]client.NodeInfo, 0, len(domainsMap))
+	for _, domain := range domainsMap {
+		domains = append(domains, domain)
+	}
+
+	sort.Slice(domains, func(i, j int) bool {
+		return len(domains[i]) > len(domains[j])
+	})
+
+	for _, domain := range domains {
+		sort.Slice(domain, func(i, j int) bool {
+			metadata1 := c.metadata(domain[i])
+			metadata2 := c.metadata(domain[j])
+
+			return metadata1.Weight > metadata2.Weight
+		})
+	}
+
+	sortedCandidates := make([]client.NodeInfo, 0, len(candidates))
+	for _, domain := range domains {
+		sortedCandidates = append(sortedCandidates, domain...)
+	}
+
+	return sortedCandidates
+
 }
 
 // Return the metadata of the given node, if any.
