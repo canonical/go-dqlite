@@ -258,7 +258,7 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	var err error
 	conn.protocol, err = connector.Connect(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create dqlite connection")
+		return nil, driverError(conn.log, errors.Wrap(err, "failed to create dqlite connection"))
 	}
 
 	conn.request.Init(4096)
@@ -268,13 +268,13 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 
 	if err := conn.protocol.Call(ctx, &conn.request, &conn.response); err != nil {
 		conn.protocol.Close()
-		return nil, errors.Wrap(err, "failed to open database")
+		return nil, driverError(conn.log, errors.Wrap(err, "failed to open database"))
 	}
 
 	conn.id, err = protocol.DecodeDb(&conn.response)
 	if err != nil {
 		conn.protocol.Close()
-		return nil, errors.Wrap(err, "failed to open database")
+		return nil, driverError(conn.log, errors.Wrap(err, "failed to open database"))
 	}
 
 	return conn, nil
