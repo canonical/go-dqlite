@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"gopkg.in/yaml.v2"
 	"github.com/google/renameio"
+	"gopkg.in/yaml.v3"
 )
 
 const (
