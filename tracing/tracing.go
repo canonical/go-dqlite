@@ -8,33 +8,24 @@ const (
 	traceContextKey contextKey = "trace"
 )
 
-// TracerFromContext returns a tracer from the context. If no tracer is found,
-// an empty tracer is returned.
-func TracerFromContext(ctx context.Context) Tracer {
-	value := ctx.Value(traceContextKey)
-	if value == nil {
-		return noopTracer{}
-	}
-	tracer, ok := value.(Tracer)
-	if !ok {
-		return noopTracer{}
-	}
-	return tracer
-}
-
-// WithTracer returns a new context with the given tracer.
+// WithTracer returns a context with the tracer embedded in the context
+// under the context key.
 func WithTracer(ctx context.Context, tracer Tracer) context.Context {
-	if tracer == nil {
-		tracer = noopTracer{}
-	}
 	return context.WithValue(ctx, traceContextKey, tracer)
 }
 
 // Start returns a new context with the given trace.
+// A valid span is always returned, even if the context does not contain a
+// tracer. In that case, the span is a noop span.
 func Start(ctx context.Context, name, query string) (context.Context, Span) {
-	// Tracer is always guaranteed to be returned here. If there is no tracer
-	// available it will return a noop tracer.
-	tracer := TracerFromContext(ctx)
+	value := ctx.Value(traceContextKey)
+	if value == nil {
+		return ctx, noopSpan{}
+	}
+	tracer, ok := value.(Tracer)
+	if !ok {
+		return ctx, noopSpan{}
+	}
 	return tracer.Start(ctx, name, query)
 }
 
@@ -63,13 +54,6 @@ type Span interface {
 	// is called. Therefore, updates to the Span are not allowed after this
 	// method has been called.
 	End()
-}
-
-// noopTracer is a tracer that does nothing.
-type noopTracer struct{}
-
-func (noopTracer) Start(ctx context.Context, name, query string) (context.Context, Span) {
-	return ctx, noopSpan{}
 }
 
 // noopSpan is a span that does nothing.
