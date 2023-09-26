@@ -29,6 +29,7 @@ import (
 
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/internal/protocol"
+	"github.com/canonical/go-dqlite/tracing"
 )
 
 // Driver perform queries against a dqlite server.
@@ -339,6 +340,9 @@ type Conn struct {
 // context is for the preparation of the statement, it must not store the
 // context within the statement itself.
 func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.PrepareContext", query)
+	defer span.End()
+
 	stmt := &Stmt{
 		protocol: c.protocol,
 		request:  &c.request,
@@ -380,6 +384,9 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 
 // ExecContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.ExecContext", query)
+	defer span.End()
+
 	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
 	} else if len(args) > math.MaxUint8 {
@@ -416,6 +423,9 @@ func (c *Conn) Query(query string, args []driver.Value) (driver.Rows, error) {
 
 // QueryContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.QueryContext", query)
+	defer span.End()
+
 	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
 	} else if len(args) > math.MaxUint8 {
@@ -576,6 +586,9 @@ func (s *Stmt) NumInput() int {
 //
 // ExecContext must honor the context timeout and return when it is canceled.
 func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.Stmt.ExecContext", s.sql)
+	defer span.End()
+
 	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
 	} else if len(args) > math.MaxUint8 {
@@ -615,6 +628,9 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 //
 // QueryContext must honor the context timeout and return when it is canceled.
 func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.Stmt.QueryContext", s.sql)
+	defer span.End()
+
 	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
 	} else if len(args) > math.MaxUint8 {
