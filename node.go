@@ -145,9 +145,11 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 			return nil, err
 		}
 	}
-	if err := server.SetAutoRecovery(o.AutoRecovery); err != nil {
-		cancel()
-		return nil, err
+	if !o.AutoRecovery {
+		if err := server.SetAutoRecovery(false); err != nil {
+			cancel()
+			return nil, err
+		}
 	}
 
 	s := &Node{
