@@ -62,6 +62,16 @@ static void setInfo(dqlite_node_info_ext *infos, unsigned i, dqlite_node_id id,
 	info->dqlite_role = role;
 }
 
+__attribute__((weak))
+int dqlite_node_set_auto_recovery(dqlite_node *t, bool on);
+
+static int setAutoRecovery(dqlite_node *t, bool on) {
+	if (dqlite_node_set_auto_recovery == NULL) {
+		return DQLITE_ERROR;
+	}
+	return dqlite_node_set_auto_recovery(t, on);
+}
+
 */
 import "C"
 import (
@@ -185,7 +195,7 @@ func (s *Node) EnableDiskMode() error {
 
 func (s *Node) SetAutoRecovery(on bool) error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
-	if rc := C.dqlite_node_set_auto_recovery(server, C.bool(on)); rc != 0 {
+	if rc := C.setAutoRecovery(server, C.bool(on)); rc != 0 {
 		return fmt.Errorf("failed to set auto-recovery behavior")
 	}
 	return nil

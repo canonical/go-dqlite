@@ -103,6 +103,17 @@ func TestNode_Leader(t *testing.T) {
 	require.NoError(t, conn.Close())
 }
 
+func TestNode_Autorecovery(t *testing.T) {
+	dir, cleanup := newDir(t)
+	defer cleanup()
+
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
+	require.NoError(t, err)
+	defer server.Close()
+
+	err = server.SetAutoRecovery(false)
+}
+
 // func TestNode_Heartbeat(t *testing.T) {
 // 	server, cleanup := newNode(t)
 // 	defer cleanup()
