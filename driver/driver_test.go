@@ -147,6 +147,38 @@ func TestConn_QueryRow(t *testing.T) {
 	assert.NoError(t, conn.Close())
 }
 
+func TestConn_InterruptQuery(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.Begin()
+	require.NoError(t, err)
+
+	execer := conn.(driver.Execer)
+
+	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	require.NoError(t, err)
+
+	// When querying all these rows, dqlite will fill up more than 1
+	// response buffer allowing us to interrupt an active query.
+	for i := 0; i < 4098; i++ {
+		_, err = execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+		require.NoError(t, err)
+	}
+
+	queryer := conn.(driver.Queryer)
+
+	rows, err := queryer.Query("SELECT * FROM test", nil)
+	require.NoError(t, err)
+
+	// rows.Close() will trigger an Interrupt.
+	require.NoError(t, rows.Close())
+	assert.NoError(t, conn.Close())
+}
+
 func TestConn_QueryBlob(t *testing.T) {
 	drv, cleanup := newDriver(t)
 	defer cleanup()
