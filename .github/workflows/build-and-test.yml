@@ -38,7 +38,7 @@ jobs:
       run: |
         sudo add-apt-repository ppa:dqlite/dev -y
         sudo apt update
-        sudo apt install -y golint libsqlite3-dev libuv1-dev liblz4-dev libraft-dev libdqlite-dev
+        sudo apt install -y golint libsqlite3-dev libuv1-dev liblz4-dev libdqlite-dev
         go get github.com/go-playground/overalls
 
     - name: Build & Test
