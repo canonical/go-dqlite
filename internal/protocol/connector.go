@@ -136,13 +136,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
 		defer cancel()
 
-		version := VersionOne
-		protocol, leader, err := c.connectAttemptOne(ctx, server.Address, version)
-		if err == errBadProtocol {
-			log(logging.Warn, "unsupported protocol %d, attempt with legacy", version)
-			version = VersionLegacy
-			protocol, leader, err = c.connectAttemptOne(ctx, server.Address, version)
-		}
+		protocol, leader, err := c.connectAttemptOne(ctx, server.Address, log)
 		if err != nil {
 			// This server is unavailable, try with the next target.
 			log(logging.Warn, err.Error())
@@ -168,7 +162,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		ctx, cancel = context.WithTimeout(ctx, c.config.AttemptTimeout)
 		defer cancel()
 
-		protocol, leader, err = c.connectAttemptOne(ctx, leader, version)
+		protocol, _, err = c.connectAttemptOne(ctx, leader, log)
 		if err != nil {
 			// The leader reported by the previous server is
 			// unavailable, try with the next target.
@@ -220,7 +214,7 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 // - Target not leader and no leader known:  -> nil, "", nil
 // - Target not leader and leader known:     -> nil, leader, nil
 // - Target is the leader:                   -> server, "", nil
-func (c *Connector) connectAttemptOne(ctx context.Context, address string, version uint64) (*Protocol, string, error) {
+func (c *Connector) connectAttemptOne(ctx context.Context, address string, log logging.Func) (*Protocol, string, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, c.config.DialTimeout)
 	defer cancel()
 
@@ -230,7 +224,13 @@ func (c *Connector) connectAttemptOne(ctx context.Context, address string, versi
 		return nil, "", errors.Wrap(err, "dial")
 	}
 
+	version := VersionOne
 	protocol, err := Handshake(ctx, conn, version)
+	if err == errBadProtocol {
+		log(logging.Warn, "unsupported protocol %d, attempt with legacy", version)
+		version = VersionLegacy
+		protocol, err = Handshake(ctx, conn, version)
+	}
 	if err != nil {
 		conn.Close()
 		return nil, "", err
