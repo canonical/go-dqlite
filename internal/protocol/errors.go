@@ -16,7 +16,9 @@ var (
 
 // ErrRequest is returned in case of request failure.
 type ErrRequest struct {
+	// A SQLite-compatible error code.
 	Code        uint64
+	// A description of the error condition.
 	Description string
 }
 
