@@ -210,22 +210,19 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		}(server, protocolChan)
 	}
 
-	// Read from protocol chan, cancel context\
-	var protocol *Protocol
-	for pc := range protocolChan {
-		if protocol != nil {
-			pc.Close()
-			continue
-		}
-		protocol = pc
-		cancel()
+	// Read from protocol chan, cancel context
+	protocol, ok := <-protocolChan
+	if !ok {
+		return nil, ErrNoAvailableLeader
 	}
 
-	if protocol != nil {
-		return protocol, nil
+	cancel()
+
+	for extra := range protocolChan {
+		extra.Close()
 	}
 
-	return nil, ErrNoAvailableLeader
+	return protocol, nil
 }
 
 // Perform the initial handshake using the given protocol version.
