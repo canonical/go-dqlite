@@ -114,7 +114,8 @@ func main() {
 					return err
 				}
 
-				ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+				defer cancel()
 				result, err := sh.Process(ctx, input)
 				if err != nil {
 					fmt.Println("Error: ", err)
