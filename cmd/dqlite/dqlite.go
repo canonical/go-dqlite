@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
@@ -113,7 +114,8 @@ func main() {
 					return err
 				}
 
-				result, err := sh.Process(context.Background(), input)
+				ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
+				result, err := sh.Process(ctx, input)
 				if err != nil {
 					fmt.Println("Error: ", err)
 				} else {
