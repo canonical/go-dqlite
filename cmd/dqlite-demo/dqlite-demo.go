@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/canonical/go-dqlite/app"
+	"github.com/canonical/go-dqlite/logging"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -43,14 +44,15 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 				return errors.Wrapf(err, "can't create %s", dir)
 			}
 			logFunc := func(l client.LogLevel, format string, a ...interface{}) {
-				if !verbose {
-					return
-				}
+				// if !verbose {
+				// 	return
+				// }
+				// log.Printf("Holulul")
 				log.Printf(fmt.Sprintf("%s: %s: %s\n", api, l.String(), format), a...)
 			}
 
 			options := []app.Option{app.WithAddress(db), app.WithCluster(*join), app.WithLogFunc(logFunc),
-				app.WithDiskMode(diskMode)}
+				app.WithDiskMode(diskMode), app.WithTracing(logging.Debug)}
 
 			// Set TLS options
 			if (crt != "" && key == "") || (key != "" && crt == "") {
@@ -103,6 +105,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 				case "PUT":
 					result = "done"
 					value, _ := ioutil.ReadAll(r.Body)
+					log.Printf("dqlite-demo db body: %s", string(value[:]))
 					if _, err := db.Exec(update, key, string(value[:])); err != nil {
 						result = fmt.Sprintf("Error: %s", err.Error())
 					}
@@ -143,7 +146,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 	flags.StringVarP(&db, "db", "d", "", "address used for internal database replication")
 	join = flags.StringSliceP("join", "j", nil, "database addresses of existing nodes")
 	flags.StringVarP(&dir, "dir", "D", "/tmp/dqlite-demo", "data directory")
-	flags.BoolVarP(&verbose, "verbose", "v", false, "verbose logging")
+	flags.BoolVarP(&verbose, "verbose", "v", true, "verbose logging")
 	flags.BoolVar(&diskMode, "disk", defaultDiskMode, "Warning: Unstable, Experimental. Set this flag to enable dqlite's disk-mode.")
 	flags.StringVarP(&crt, "cert", "c", "", "public TLS cert")
 	flags.StringVarP(&key, "key", "k", "", "private TLS key")

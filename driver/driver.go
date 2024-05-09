@@ -384,37 +384,50 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 
 // ExecContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	ctx, span := tracing.Start(ctx, "dqlite.driver.ExecContext", query)
-	defer span.End()
+    ctx, span := tracing.Start(ctx, "dqlite.driver.ExecContext", query)
+    defer span.End()
 
-	if int64(len(args)) > math.MaxUint32 {
-		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
-	} else if len(args) > math.MaxUint8 {
-		protocol.EncodeExecSQLV1(&c.request, uint64(c.id), query, args)
-	} else {
-		protocol.EncodeExecSQLV0(&c.request, uint64(c.id), query, args)
-	}
+    var result protocol.Result
+	// var error error
+    var err error
 
-	var start time.Time
-	if c.tracing != client.LogNone {
-		start = time.Now()
-	}
-	err := c.protocol.Call(ctx, &c.request, &c.response)
-	if c.tracing != client.LogNone {
-		c.log(c.tracing, "%.3fs request exec: %q", time.Since(start).Seconds(), query)
-	}
-	if err != nil {
-		return nil, driverError(c.log, err)
-	}
+    for {
+        if int64(len(args)) > math.MaxUint32 {
+            return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
+        } else if len(args) > math.MaxUint8 {
+            protocol.EncodeExecSQLV1(&c.request, uint64(c.id), query, args)
+        } else {
+            protocol.EncodeExecSQLV0(&c.request, uint64(c.id), query, args)
+        }
 
-	var result protocol.Result
-	result, err = protocol.DecodeResult(&c.response)
-	if err != nil {
-		return nil, driverError(c.log, err)
-	}
+        var start time.Time
+        if c.tracing != client.LogNone {
+            start = time.Now()
+        }
+        err = c.protocol.Call(ctx, &c.request, &c.response)
+        if c.tracing != client.LogNone {
+            c.log(c.tracing, "%.3fs request exec: %q", time.Since(start).Seconds(), query)
+        }
+		if err != nil {
+			return nil, driverError(c.log, err)
+		}
+        result, err = protocol.DecodeResult(&c.response)
+        if err != nil && c.tracing != client.LogNone {
 
-	return &Result{result: result}, nil
+			duration := 20 * time.Microsecond
+			time.Sleep(duration)
+            c.log(c.tracing, "error in exec context %v", err)
+			
+			continue
+        }
+
+        // Break the loop if no error occurred or if the error was not "database is locked"
+        break
+    }
+	c.log(c.tracing, "returning response from exec")
+    return &Result{result: result}, nil
 }
+
 
 // Query is an optional interface that may be implemented by a Conn.
 func (c *Conn) Query(query string, args []driver.Value) (driver.Rows, error) {
@@ -602,7 +615,9 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 		start = time.Now()
 	}
 	err := s.protocol.Call(ctx, s.request, s.response)
+
 	if s.tracing != client.LogNone {
+		// fmt.Sprintf("this is tracinggggg")
 		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
 	}
 	if err != nil {
@@ -817,6 +832,7 @@ func driverError(log client.LogFunc, err error) error {
 	case *net.OpError:
 		log(client.LogDebug, "network connection lost: %v", err)
 		return driver.ErrBadConn
+		log(client.LogWarn, "error is hereeeeeee 11111 %v", err)
 	case protocol.ErrRequest:
 		switch err.Code {
 		case errIoErrNotLeaderLegacy:
@@ -840,6 +856,7 @@ func driverError(log client.LogFunc, err error) error {
 				log(client.LogWarn, "unexpected error code (%d - %s)", err.Code, err.Description)
 				return driver.ErrBadConn
 			}
+			log(client.LogWarn, "error is hereeeeeee 22222 %s", err.Description)
 			return Error{
 				Code:    int(err.Code),
 				Message: err.Description,
