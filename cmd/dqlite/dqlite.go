@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const queryTimeout = time.Second * 2
+
 func main() {
 	var crt string
 	var key string
@@ -92,7 +94,9 @@ func main() {
 
 			if len(args) > 1 {
 				for _, input := range strings.Split(args[1], ";") {
-					result, err := sh.Process(context.Background(), input)
+					ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+					defer cancel()
+					result, err := sh.Process(ctx, input)
 					if err != nil {
 						return err
 					} else if result != "" {
@@ -114,7 +118,7 @@ func main() {
 					return err
 				}
 
-				ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+				ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 				defer cancel()
 				result, err := sh.Process(ctx, input)
 				if err != nil {
