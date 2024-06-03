@@ -322,18 +322,9 @@ func (m *Message) getString() string {
 func (m *Message) getBlob() []byte {
 	size := m.getUint64()
 	data := make([]byte, size)
-	for i := range data {
-		data[i] = m.getUint8()
-	}
-	pad := 0
-	if (size % messageWordSize) != 0 {
-		// Account for padding
-		pad = int(messageWordSize - (size % messageWordSize))
-	}
-	// Consume padding
-	for i := 0; i < pad; i++ {
-		m.getUint8()
-	}
+	b := m.bufferForGet()
+	defer b.Advance(int(alignUp(size, messageWordSize)))
+	copy(data, b.Bytes[b.Offset:])
 	return data
 }
 
@@ -683,4 +674,9 @@ func (r *Rows) ColumnTypes() ([]string, error) {
 	}
 
 	return kinds, err
+}
+
+// alignUp rounds n up to a multiple of a. a must be a power of 2.
+func alignUp(n, a uint64) uint64 {
+	return (n + a - 1) &^ (a - 1)
 }
