@@ -52,14 +52,20 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 		}
 	}()
 
+	var deadline time.Time
 	var budget time.Duration
 
-	// Honor the ctx deadline, if present.
-	if deadline, ok := ctx.Deadline(); ok {
-		p.conn.SetDeadline(deadline)
-		budget = time.Until(deadline)
-		defer p.conn.SetDeadline(time.Time{})
+	// Honor the ctx deadline, if present. Otherwise, set a default deadline
+	// after 30 seconds, so that we don't hang forever.
+	if dl, ok := ctx.Deadline(); ok {
+		deadline = dl
+		budget = time.Until(dl)
+	} else {
+		budget = 30 * time.Second
+		deadline = time.Now().Add(budget)
 	}
+	p.conn.SetDeadline(deadline)
+	defer p.conn.SetDeadline(time.Time{})
 
 	desc := requestDesc(request.mtype)
 
