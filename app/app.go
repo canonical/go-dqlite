@@ -595,6 +595,19 @@ func (a *App) run(ctx context.Context, options *options, join bool) {
 			if err := a.maybeAdjustRoles(ctx, cli); err != nil {
 				a.warn("adjust roles: %v", err)
 			}
+
+			leader, err := cli.Leader(ctx)
+			if err != nil {
+				a.error("fetch leader info: %v", err)
+				cli.Close()
+				continue
+			}
+
+			err = options.OnRolesAdjustment(*leader, servers)
+			if err != nil {
+				a.warn("roles adjustment hook: %v", err)
+			}
+
 			cli.Close()
 		}
 	}
