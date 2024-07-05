@@ -139,6 +139,15 @@ func WithRolesAdjustmentFrequency(frequency time.Duration) Option {
 	}
 }
 
+// WithRolesAdjustmentHook will be run each time the roles are adjusted, as
+// controlled by WithRolesAdjustmentFrequency. Provides the current raft leader information
+// as well as the most up to date list of cluster members and their roles.
+func WithRolesAdjustmentHook(hook func(leader client.NodeInfo, cluster []client.NodeInfo) error) Option {
+	return func(o *options) {
+		o.OnRolesAdjustment = hook
+	}
+}
+
 // WithLogFunc sets a custom log function.
 func WithLogFunc(log client.LogFunc) Option {
 	return func(options *options) {
@@ -223,6 +232,7 @@ type options struct {
 	Voters                   int
 	StandBys                 int
 	RolesAdjustmentFrequency time.Duration
+	OnRolesAdjustment        func(client.NodeInfo, []client.NodeInfo) error
 	FailureDomain            uint64
 	NetworkLatency           time.Duration
 	UnixSocket               string
@@ -239,6 +249,7 @@ func defaultOptions() *options {
 		Voters:                   3,
 		StandBys:                 3,
 		RolesAdjustmentFrequency: 30 * time.Second,
+		OnRolesAdjustment:        func(client.NodeInfo, []client.NodeInfo) error { return nil },
 		DiskMode:                 false, // Be explicit about not enabling disk-mode by default.
 		AutoRecovery:             true,
 	}
