@@ -487,8 +487,11 @@ func (a *App) Open(ctx context.Context, database string) (*sql.DB, error) {
 }
 
 // Leader returns a client connected to the current cluster leader, if any.
-func (a *App) Leader(ctx context.Context) (*client.Client, error) {
-	return client.FindLeader(ctx, a.store, a.clientOptions()...)
+func (a *App) Leader(ctx context.Context, options ...client.Option) (*client.Client, error) {
+	allOptions := a.clientOptions()
+	allOptions = append(allOptions, options...)
+
+	return client.FindLeader(ctx, a.store, allOptions...)
 }
 
 // Client returns a client connected to the local node.
