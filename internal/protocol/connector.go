@@ -143,6 +143,16 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		close(protocolChan)
 	}()
 
+	var found bool
+	foundLock := sync.RWMutex{}
+	checkFound := func() bool {
+		foundLock.RLock()
+		defer foundLock.RUnlock()
+		localFound := found
+
+		return localFound
+	}
+
 	// Make an attempt for each address until we find the leader.
 	for _, server := range servers {
 		go func(server NodeInfo, pc chan<- *Protocol) {
@@ -165,6 +175,11 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
 			defer cancel()
 
+			// Check if another server found the leader before we redundantly send a request over the network.
+			if checkFound() {
+				return
+			}
+
 			protocol, leader, err := c.connectAttemptOne(ctx, server.Address, log)
 			if err != nil {
 				// This server is unavailable, try with the next target.
@@ -174,7 +189,10 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			if protocol != nil {
 				// We found the leader
 				log(logging.Debug, "connected")
+				foundLock.Lock()
+				found = true
 				pc <- protocol
+				foundLock.Unlock()
 				return
 			}
 			if leader == "" {
@@ -192,6 +210,11 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			ctx, cancel = context.WithTimeout(ctx, c.config.AttemptTimeout)
 			defer cancel()
 
+			// Check if another server found the leader before we redundantly send a request over the network.
+			if checkFound() {
+				return
+			}
+
 			protocol, _, err = c.connectAttemptOne(ctx, leader, log)
 			if err != nil {
 				// The leader reported by the previous server is
@@ -206,7 +229,11 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 				return
 			}
 			log(logging.Debug, "connected")
+
+			foundLock.Lock()
+			found = true
 			pc <- protocol
+			foundLock.Unlock()
 		}(server, protocolChan)
 	}
 
