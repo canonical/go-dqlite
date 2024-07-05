@@ -18,6 +18,9 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+// MaxConcurrentLeaderConns is the default maximum number of concurrent requests to other cluster members to probe for leadership.
+const MaxConcurrentLeaderConns int64 = 10
+
 // DialFunc is a function that can be used to establish a network connection.
 type DialFunc func(context.Context, string) (net.Conn, error)
 
@@ -51,6 +54,10 @@ func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *
 
 	if config.BackoffCap == 0 {
 		config.BackoffCap = time.Second
+	}
+
+	if config.ConcurrentLeaderConns == 0 {
+		config.ConcurrentLeaderConns = MaxConcurrentLeaderConns
 	}
 
 	connector := &Connector{
@@ -131,7 +138,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sem := semaphore.NewWeighted(10)
+	sem := semaphore.NewWeighted(c.config.ConcurrentLeaderConns)
 
 	protocolChan := make(chan *Protocol)
 
