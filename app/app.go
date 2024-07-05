@@ -303,7 +303,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		}()
 	}
 
-	go app.run(ctx, o.RolesAdjustmentFrequency, joinFileExists)
+	go app.run(ctx, o, joinFileExists)
 
 	return app, nil
 }
@@ -525,7 +525,7 @@ func (a *App) proxy() {
 
 // Run background tasks. The join flag is true if the node is a brand new one
 // and should join the cluster.
-func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
+func (a *App) run(ctx context.Context, options *options, join bool) {
 	defer close(a.runCh)
 
 	delay := time.Duration(0)
@@ -584,7 +584,7 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 					continue
 				}
 				ready = true
-				delay = frequency
+				delay = options.RolesAdjustmentFrequency
 				close(a.readyCh)
 				cli.Close()
 				continue
