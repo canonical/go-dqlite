@@ -51,6 +51,7 @@ type App struct {
 	voters          int
 	standbys        int
 	roles           RolesConfig
+	options         *options
 }
 
 // New creates a new application node.
@@ -219,6 +220,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		driver.WithDialFunc(driverDial),
 		driver.WithLogFunc(o.Log),
 		driver.WithTracing(o.Tracing),
+		driver.WithConcurrentLeaderConns(o.ConcurrentLeaderConns),
 	)
 	if err != nil {
 		stop()
@@ -256,6 +258,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		voters:          o.Voters,
 		standbys:        o.StandBys,
 		roles:           RolesConfig{Voters: o.Voters, StandBys: o.StandBys},
+		options:         o,
 	}
 
 	// Start the proxy if a TLS configuration was provided.
@@ -483,8 +486,11 @@ func (a *App) Open(ctx context.Context, database string) (*sql.DB, error) {
 }
 
 // Leader returns a client connected to the current cluster leader, if any.
-func (a *App) Leader(ctx context.Context) (*client.Client, error) {
-	return client.FindLeader(ctx, a.store, a.clientOptions()...)
+func (a *App) Leader(ctx context.Context, options ...client.Option) (*client.Client, error) {
+	allOptions := a.clientOptions()
+	allOptions = append(allOptions, options...)
+
+	return client.FindLeader(ctx, a.store, allOptions...)
 }
 
 // Client returns a client connected to the local node.
@@ -733,7 +739,7 @@ func (a *App) makeRolesChanges(nodes []client.NodeInfo) RolesChanges {
 
 // Return the options to use for client.FindLeader() or client.New()
 func (a *App) clientOptions() []client.Option {
-	return []client.Option{client.WithDialFunc(a.dialFunc), client.WithLogFunc(a.log)}
+	return []client.Option{client.WithDialFunc(a.dialFunc), client.WithLogFunc(a.log), client.WithConcurrentLeaderConns(*a.options.ConcurrentLeaderConns)}
 }
 
 func (a *App) debug(format string, args ...interface{}) {

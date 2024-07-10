@@ -20,7 +20,8 @@ func FindLeader(ctx context.Context, store NodeStore, options ...Option) (*Clien
 	}
 
 	config := protocol.Config{
-		Dial: o.DialFunc,
+		Dial:                  o.DialFunc,
+		ConcurrentLeaderConns: o.ConcurrentLeaderConns,
 	}
 	connector := protocol.NewConnector(0, store, config, o.LogFunc)
 	protocol, err := connector.Connect(ctx)

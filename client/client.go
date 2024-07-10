@@ -19,8 +19,9 @@ type Client struct {
 type Option func(*options)
 
 type options struct {
-	DialFunc DialFunc
-	LogFunc  LogFunc
+	DialFunc              DialFunc
+	LogFunc               LogFunc
+	ConcurrentLeaderConns int64
 }
 
 // WithDialFunc sets a custom dial function for creating the client network
@@ -36,6 +37,16 @@ func WithDialFunc(dial DialFunc) Option {
 func WithLogFunc(log LogFunc) Option {
 	return func(options *options) {
 		options.LogFunc = log
+	}
+}
+
+// WithConcurrentLeaderConns is the maximum number of concurrent connections
+// to other cluster members that will be attempted while searching for the dqlite leader.
+//
+// The default is 10 connections to other cluster members.
+func WithConcurrentLeaderConns(maxConns int64) Option {
+	return func(o *options) {
+		o.ConcurrentLeaderConns = maxConns
 	}
 }
 
@@ -313,7 +324,8 @@ func (c *Client) Close() error {
 // Create a client options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		DialFunc: DefaultDialFunc,
-		LogFunc:  DefaultLogFunc,
+		DialFunc:              DefaultDialFunc,
+		LogFunc:               DefaultLogFunc,
+		ConcurrentLeaderConns: protocol.MaxConcurrentLeaderConns,
 	}
 }

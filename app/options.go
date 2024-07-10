@@ -10,6 +10,7 @@ import (
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
 // Option can be used to tweak app parameters.
@@ -180,6 +181,17 @@ func WithNetworkLatency(latency time.Duration) Option {
 	}
 }
 
+// WithConcurrentLeaderConns is the maximum number of concurrent connections
+// to other cluster members that will be attempted while searching for the dqlite leader.
+// It takes a pointer to an integer so that the value can be dynamically modified based on cluster health.
+//
+// The default is 10 connections to other cluster members.
+func WithConcurrentLeaderConns(maxConns *int64) Option {
+	return func(o *options) {
+		o.ConcurrentLeaderConns = maxConns
+	}
+}
+
 // WithSnapshotParams sets the raft snapshot parameters.
 func WithSnapshotParams(params dqlite.SnapshotParams) Option {
 	return func(options *options) {
@@ -235,6 +247,7 @@ type options struct {
 	OnRolesAdjustment        func(client.NodeInfo, []client.NodeInfo) error
 	FailureDomain            uint64
 	NetworkLatency           time.Duration
+	ConcurrentLeaderConns    *int64
 	UnixSocket               string
 	SnapshotParams           dqlite.SnapshotParams
 	DiskMode                 bool
@@ -243,6 +256,7 @@ type options struct {
 
 // Create a options object with sane defaults.
 func defaultOptions() *options {
+	maxConns := protocol.MaxConcurrentLeaderConns
 	return &options{
 		Log:                      defaultLogFunc,
 		Tracing:                  client.LogNone,
@@ -252,6 +266,7 @@ func defaultOptions() *options {
 		OnRolesAdjustment:        func(client.NodeInfo, []client.NodeInfo) error { return nil },
 		DiskMode:                 false, // Be explicit about not enabling disk-mode by default.
 		AutoRecovery:             true,
+		ConcurrentLeaderConns:    &maxConns,
 	}
 }
 
