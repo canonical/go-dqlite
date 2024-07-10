@@ -275,8 +275,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	} else if o.Conn != nil {
 		go func() {
-			for {
-				remote := <-o.Conn.acceptCh
+			for remote := range o.Conn.acceptCh {
 
 				// keep forward compatible
 				_, isTcp := remote.(*net.TCPConn)
