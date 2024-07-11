@@ -140,14 +140,14 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 
 	sem := semaphore.NewWeighted(c.config.ConcurrentLeaderConns)
 
-	protocolChan := make(chan *Protocol)
+	protocolCh := make(chan *Protocol)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(len(servers))
 
 	go func() {
 		wg.Wait()
-		close(protocolChan)
+		close(protocolCh)
 	}()
 
 	// Make an attempt for each address until we find the leader.
@@ -214,18 +214,18 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			}
 			log(logging.Debug, "connected")
 			pc <- protocol
-		}(server, protocolChan)
+		}(server, protocolCh)
 	}
 
 	// Read from protocol chan, cancel context
-	protocol, ok := <-protocolChan
+	protocol, ok := <-protocolCh
 	if !ok {
 		return nil, ErrNoAvailableLeader
 	}
 
 	cancel()
 
-	for extra := range protocolChan {
+	for extra := range protocolCh {
 		extra.Close()
 	}
 
