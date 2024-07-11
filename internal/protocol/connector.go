@@ -135,6 +135,12 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 		return servers[i].Role < servers[j].Role
 	})
 
+	// The new context will be cancelled when we successfully connect
+	// to the leader. The original context will be used only for net.Dial.
+	// Motivation: threading the cancellation through to net.Dial results
+	// in lots of warnings being logged on remote nodes when our probing
+	// goroutines disconnect during a TLS handshake.
+	origCtx := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -172,7 +178,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
 			defer cancel()
 
-			protocol, leader, err := c.connectAttemptOne(ctx, server.Address, log)
+			protocol, leader, err := c.connectAttemptOne(origCtx, ctx, server.Address, log)
 			if err != nil {
 				// This server is unavailable, try with the next target.
 				log(logging.Warn, err.Error())
@@ -199,7 +205,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			ctx, cancel = context.WithTimeout(ctx, c.config.AttemptTimeout)
 			defer cancel()
 
-			protocol, _, err = c.connectAttemptOne(ctx, leader, log)
+			protocol, _, err = c.connectAttemptOne(origCtx, ctx, leader, log)
 			if err != nil {
 				// The leader reported by the previous server is
 				// unavailable, try with the next target.
@@ -258,14 +264,21 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 
 // Connect to the given dqlite server and check if it's the leader.
 //
+// dialCtx is used for net.Dial; ctx is used for all other requests.
+//
 // Return values:
 //
 // - Any failure is hit:                     -> nil, "", err
 // - Target not leader and no leader known:  -> nil, "", nil
 // - Target not leader and leader known:     -> nil, leader, nil
 // - Target is the leader:                   -> server, "", nil
-func (c *Connector) connectAttemptOne(ctx context.Context, address string, log logging.Func) (*Protocol, string, error) {
-	dialCtx, cancel := context.WithTimeout(ctx, c.config.DialTimeout)
+func (c *Connector) connectAttemptOne(
+	dialCtx context.Context,
+	ctx context.Context,
+	address string,
+	log logging.Func,
+) (*Protocol, string, error) {
+	dialCtx, cancel := context.WithTimeout(dialCtx, c.config.DialTimeout)
 	defer cancel()
 
 	// Establish the connection.
