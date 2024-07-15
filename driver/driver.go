@@ -52,8 +52,8 @@ const (
 	ErrBusyRecovery        = 5 | (1 << 8)
 	ErrBusySnapshot        = 5 | (2 << 8)
 	errIoErr               = 10
-	errIoErrNotLeader      = errIoErr | 40<<8
-	errIoErrLeadershipLost = errIoErr | (41 << 8)
+	ErrIoErrNotLeader      = errIoErr | (40 << 8)
+	ErrIoErrLeadershipLost = errIoErr | (41 << 8)
 	errNotFound            = 12
 
 	// Legacy error codes before version-3.32.1+replication4. Kept here
@@ -823,9 +823,9 @@ func driverError(log client.LogFunc, err error) error {
 			fallthrough
 		case errIoErrLeadershipLostLegacy:
 			fallthrough
-		case errIoErrNotLeader:
+		case ErrIoErrNotLeader:
 			fallthrough
-		case errIoErrLeadershipLost:
+		case ErrIoErrLeadershipLost:
 			log(client.LogDebug, "leadership lost (%d - %s)", err.Code, err.Description)
 			return driver.ErrBadConn
 		case errNotFound:
