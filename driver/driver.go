@@ -675,7 +675,14 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 		return nil, driverError(s.log, err)
 	}
 
-	return &Rows{ctx: ctx, request: s.request, response: s.response, protocol: s.protocol, rows: rows}, nil
+	return &Rows{
+		ctx:      ctx,
+		request:  s.request,
+		response: s.response,
+		protocol: s.protocol,
+		rows:     rows,
+		log:      s.log,
+	}, nil
 }
 
 // Query executes a query that may return rows, such as a
