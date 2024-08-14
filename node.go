@@ -220,8 +220,29 @@ func GenerateID(address string) uint64 {
 // ReconfigureMembership can be used to recover a cluster whose majority of
 // nodes have died, and therefore has become unavailable.
 //
-// It forces appending a new configuration to the raft log stored in the given
-// directory, effectively replacing the current configuration.
+// Deprecated: Use ReconfigureMembershipExt instead, which correctly accounts
+// for node roles.
+//
+// ReconfigureMembership forces appending a new configuration to the raft log
+// stored in the given directory, effectively replacing the current
+// configuration. This is an unsafe operation, and you should follow these
+// steps to avoid data loss:
+//
+// 1. Make sure no dqlite node in the cluster is running.
+//
+// 2. Identify all dqlite nodes that have survived and that you want to be part
+//    of the recovered cluster. Call this the "new member list".
+//
+// 3. From the nodes in the new member list, find the one with the most
+//    up-to-date raft term and log. Call this the "template node".
+//
+// 4. Invoke ReconfigureMembership exactly one time, on the template node,
+//    passing in the step 3, passing in the new member list.
+//
+// 5. Copy the data directory of the template node to all other nodes in the
+//    new member list, replacing their previous data directories.
+//
+// 6. Restart all nodes in the new member list.
 func ReconfigureMembership(dir string, cluster []NodeInfo) error {
 	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	if err != nil {
@@ -235,10 +256,24 @@ func ReconfigureMembership(dir string, cluster []NodeInfo) error {
 // nodes have died, and therefore has become unavailable.
 //
 // It forces appending a new configuration to the raft log stored in the given
-// directory, effectively replacing the current configuration.
-// In comparision with ReconfigureMembership, this function takes the node role
-// into account and makes use of a dqlite API that supports extending the
-// NodeInfo struct.
+// directory, effectively replacing the current configuration. This is an
+// unsafe operation, and you should follow these steps to avoid data loss:
+//
+// 1. Make sure no dqlite node in the cluster is running.
+//
+// 2. Identify all dqlite nodes that have survived and that you want to be part
+//    of the recovered cluster. Call this the "new member list".
+//
+// 3. From the nodes in the new member list, find the one with the most
+//    up-to-date raft term and log. Call this the "template node".
+//
+// 4. Invoke ReconfigureMembershipExt exactly one time, on the template node,
+//    passing in the step 3, passing in the new member list.
+//
+// 5. Copy the data directory of the template node to all other nodes in the
+//    new member list, replacing their previous data directories.
+//
+// 6. Restart all nodes in the new member list.
 func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
 	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	if err != nil {
