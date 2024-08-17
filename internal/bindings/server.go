@@ -258,6 +258,16 @@ func (s *Node) RecoverExt(cluster []protocol.NodeInfo) error {
 	return nil
 }
 
+func (s *Node) DescribeLastEntry() (uint64, uint64, error) {
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
+	index := C.uint64_t(0)
+	term := C.uint64_t(0)
+	if rc := C.dqlite_node_describe_last_entry(server, &index, &term); rc != 0 {
+		return 0, 0, fmt.Errorf("dqlite_node_describe_last_entry failed with error code %d", rc)
+	}
+	return uint64(index), uint64(term), nil
+}
+
 // GenerateID generates a unique ID for a server.
 func GenerateID(address string) uint64 {
 	caddress := C.CString(address)

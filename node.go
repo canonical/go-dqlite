@@ -263,6 +263,34 @@ func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
 	return server.RecoverExt(cluster)
 }
 
+// Information about the last entry in the persistent raft log of a node.
+//
+// The order of fields is significant and ensures that the comparison `x > y`
+// of two LastEntryInfo values is equivalent to asking whether the log of `x`
+// is more up to date than the log of `y`.
+type LastEntryInfo struct {
+	term, index uint64
+}
+
+// Read information about the last entry in the raft persistent log from a
+// node's data directory.
+//
+// This is a non-destructive operation, but is not read-only, since it has the
+// side effect of renaming raft open segment files to closed segment files.
+func ReadLastEntryInfo(dir string) (LastEntryInfo, error) {
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
+	if err != nil {
+		return LastEntryInfo{}, err
+	}
+	defer server.Close()
+	if err = server.SetAutoRecovery(false)
+	index, term, err := server.DescribeLastEntry()
+	if err != nil {
+		return LastEntryInfo{}, err
+	}
+	return LastEntryInfo{index, term}, nil
+}
+
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
