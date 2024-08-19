@@ -21,6 +21,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"os"
 	"reflect"
 	"syscall"
 	"time"
@@ -236,6 +237,8 @@ type Connector struct {
 
 // Connect returns a connection to the database.
 func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
+	c.driver.log(client.LogDebug, "sNndRx0zqM new connection");
+
 	if c.driver.context != nil {
 		ctx = c.driver.context
 	}
@@ -846,6 +849,12 @@ func driverError(log client.LogFunc, err error) error {
 	if errors.Is(err, io.EOF) {
 		log(client.LogDebug, "EOF detected: %v", err)
 		return driver.ErrBadConn
+	}
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		log(client.LogDebug, "sNndRx0zqM deadline exceeded")
+		if _, ok := os.LookupEnv("DQLITE_EAGER_BADCONN"); ok  {
+			return driver.ErrBadConn
+		}
 	}
 	return err
 }

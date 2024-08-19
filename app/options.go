@@ -283,10 +283,6 @@ func defaultAddress() (addr string, err error) {
 }
 
 func defaultLogFunc(l client.LogLevel, format string, a ...interface{}) {
-	// Log only error messages
-	if l != client.LogError {
-		return
-	}
 	msg := fmt.Sprintf("["+l.String()+"]"+" dqlite: "+format, a...)
 	log.Printf(msg)
 }
