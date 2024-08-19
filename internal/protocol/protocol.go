@@ -76,6 +76,11 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 
 // More is used when a request maps to multiple responses.
 func (p *Protocol) More(ctx context.Context, response *Message) error {
+	// Honor the ctx deadline, if present.
+	if deadline, ok := ctx.Deadline(); ok {
+		p.conn.SetDeadline(deadline)
+		defer p.conn.SetDeadline(time.Time{})
+	}
 	return p.recv(response)
 }
 

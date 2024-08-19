@@ -1,6 +1,9 @@
 package client
 
 import (
+	"fmt"
+	"log"
+
 	"github.com/canonical/go-dqlite/logging"
 )
 
@@ -19,5 +22,7 @@ const (
 	LogError = logging.Error
 )
 
-// DefaultLogFunc doesn't emit any message.
-func DefaultLogFunc(l LogLevel, format string, a ...interface{}) {}
+func DefaultLogFunc(l LogLevel, format string, a ...interface{}) {
+	msg := fmt.Sprintf("["+l.String()+"]"+" dqlite: "+format, a...)
+	log.Printf(msg)
+}
