@@ -2,17 +2,19 @@ package protocol_test
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/internal/protocol"
-	"github.com/canonical/go-dqlite/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/canonical/go-dqlite/internal/protocol"
+	"github.com/canonical/go-dqlite/logging"
 )
 
 // func TestProtocol_Heartbeat(t *testing.T) {
-// 	c, cleanup := newProtocol(t)
+// 	c, cleanup := NewProtocol(t)
 // 	defer cleanup()
 
 // 	request, response := newMessagePair(512, 512)
@@ -80,9 +82,142 @@ func TestProtocol_Prepare(t *testing.T) {
 	assert.Equal(t, uint64(0), params)
 }
 
+type testProtocolContext struct {
+	summary   string
+	f         func(protocol *protocol.Protocol, ctx context.Context, request, response *protocol.Message) error
+	hangRead  bool
+	hangWrite bool
+	cancel    time.Duration
+	timeout   time.Duration
+	err       string
+}
+
+var testsProtocolContext = []testProtocolContext{{
+	summary:  "Call timeout read",
+	f:        (*protocol.Protocol).Call,
+	hangRead: true,
+	timeout:  time.Millisecond * 200,
+	err:      `call leader \(budget .*ms\): receive: header: read pipe: i/o timeout`,
+}, {
+	summary:   "Call timeout write",
+	f:         (*protocol.Protocol).Call,
+	hangWrite: true,
+	timeout:   time.Millisecond * 200,
+	err:       `call leader \(budget .*ms\): send: header: write pipe: i/o timeout`,
+}, {
+	summary:  "Call cancel read",
+	f:        (*protocol.Protocol).Call,
+	hangRead: true,
+	cancel:   time.Millisecond * 200,
+	err:      `call leader \(canceled\): receive: header: read pipe: i/o timeout`,
+}, {
+	summary:   "Call cancel write",
+	f:         (*protocol.Protocol).Call,
+	hangWrite: true,
+	cancel:    time.Millisecond * 200,
+	err:       `call leader \(canceled\): send: header: write pipe: i/o timeout`,
+}, {
+	summary:  "Interrupt timeout read",
+	f:        (*protocol.Protocol).Interrupt,
+	hangRead: true,
+	timeout:  time.Millisecond * 200,
+	err:      `interrupt request \(budget .*ms\): receive: header: read pipe: i/o timeout`,
+}, {
+	summary:   "Interrupt timeout write",
+	f:         (*protocol.Protocol).Interrupt,
+	hangWrite: true,
+	timeout:   time.Millisecond * 200,
+	err:       `interrupt request \(budget .*ms\): send: header: write pipe: i/o timeout`,
+}, {
+	summary:  "Interrupt cancel read",
+	f:        (*protocol.Protocol).Interrupt,
+	hangRead: true,
+	cancel:   time.Millisecond * 200,
+	err:      `interrupt request \(canceled\): receive: header: read pipe: i/o timeout`,
+}, {
+	summary:   "Interrupt cancel write",
+	f:         (*protocol.Protocol).Interrupt,
+	hangWrite: true,
+	cancel:    time.Millisecond * 200,
+	err:       `interrupt request \(canceled\): send: header: write pipe: i/o timeout`,
+}}
+
+func runTestProtocolContext(t *testing.T, test testProtocolContext) {
+	// Setup client and sever.
+	server, client := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	// Kill goroutines when test is finished.
+	goroutineCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// If set, the sever will write continuously to the connection.
+	if !test.hangRead {
+		go func() {
+			for {
+				select {
+				case <-goroutineCtx.Done():
+					return
+				default:
+					server.Write([]byte{1, 2, 3})
+				}
+			}
+		}()
+	}
+	// If set, the sever will read continuously from the connection.
+	if !test.hangWrite {
+		go func() {
+			b := make([]byte, 10)
+			for {
+				select {
+				case <-goroutineCtx.Done():
+					return
+				default:
+					server.Read(b)
+				}
+			}
+		}()
+	}
+
+	p := protocol.NewProtocol(0, client)
+	assert.NotNil(t, p)
+
+	request := &protocol.Message{}
+	request.Init(8)
+	request.PutBlob([]byte{1, 2, 3, 4, 5})
+	response := &protocol.Message{}
+	response.Init(8) // TODO: turn this into a proper constructor.
+
+	// Setup the context based on the test parameters.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if test.timeout != 0 {
+		ctx, cancel = context.WithTimeout(ctx, test.timeout)
+		defer cancel()
+	}
+	if test.cancel != 0 {
+		go func() {
+			time.Sleep(test.cancel)
+			cancel()
+		}()
+	}
+
+	err := test.f(p, ctx, request, response)
+	if test.err != "" {
+		assert.Regexp(t, test.err, err.Error())
+		return
+	}
+	assert.NoError(t, err)
+}
+
+func TestProtocol_Context(t *testing.T) {
+	for _, test := range testsProtocolContext {
+		runTestProtocolContext(t, test)
+	}
+}
+
 /*
 func TestProtocol_Exec(t *testing.T) {
-	client, cleanup := newProtocol(t)
+	client, cleanup := NewProtocol(t)
 	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
@@ -99,7 +234,7 @@ func TestProtocol_Exec(t *testing.T) {
 }
 
 func TestProtocol_Query(t *testing.T) {
-	client, cleanup := newProtocol(t)
+	client, cleanup := NewProtocol(t)
 	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)

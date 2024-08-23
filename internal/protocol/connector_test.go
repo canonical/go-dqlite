@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/canonical/go-dqlite/internal/bindings"
 	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/canonical/go-dqlite/logging"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // Successful connection.
@@ -93,8 +94,8 @@ func TestConnector_EmptyNodeStore(t *testing.T) {
 	check([]string{})
 }
 
-// Connection failed because the context was canceled.
-func TestConnector_ContextCanceled(t *testing.T) {
+// Connection failed because the context expired.
+func TestConnector_ContextExpired(t *testing.T) {
 	store := newStore(t, []string{"1.2.3.4:666"})
 
 	log, check := newLogFunc(t)
@@ -109,6 +110,44 @@ func TestConnector_ContextCanceled(t *testing.T) {
 	check([]string{
 		"WARN: attempt 1: server 1.2.3.4:666: dial: dial tcp 1.2.3.4:666: i/o timeout",
 	})
+}
+
+// Connection failed because the context expired.
+func TestConnector_ContextCanceled(t *testing.T) {
+	listener, err := net.Listen("unix", "@1234")
+	defer listener.Close()
+	assert.Nil(t, err)
+	store := newStore(t, []string{listener.Addr().String()})
+	// Kill goroutine when test is finished.
+	goroutineCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		for {
+			select {
+			case <-goroutineCtx.Done():
+				return
+			default:
+				conn, err := listener.Accept()
+				if err != nil {
+					return
+				}
+				defer conn.Close()
+			}
+		}
+	}()
+
+	log, _ := newLogFunc(t) // TODO: use check when we can do regexp.
+	connector := protocol.NewConnector(0, store, protocol.Config{}, log)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		time.Sleep(time.Millisecond * 200)
+		cancel()
+	}()
+
+	_, err = connector.Connect(ctx)
+	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
 }
 
 // Simulate a server which accepts the connection but doesn't reply within the

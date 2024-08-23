@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -20,7 +21,7 @@ type Protocol struct {
 	netErr  error         // A network error occurred
 }
 
-func newProtocol(version uint64, conn net.Conn) *Protocol {
+func NewProtocol(version uint64, conn net.Conn) *Protocol {
 	protocol := &Protocol{
 		version: version,
 		conn:    conn,
@@ -52,22 +53,37 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 		}
 	}()
 
-	var budget time.Duration
-
 	// Honor the ctx deadline, if present.
+	var budget time.Duration
 	if deadline, ok := ctx.Deadline(); ok {
 		p.conn.SetDeadline(deadline)
 		budget = time.Until(deadline)
 		defer p.conn.SetDeadline(time.Time{})
 	}
+	// Honor context cancellation.
+	canceled := false
+	stop := context.AfterFunc(ctx, func() {
+		if ctx.Err() == context.Canceled {
+			canceled = true
+			// Cancel read and writes by setting deadline in the past.
+			p.conn.SetDeadline(time.Unix(1, 0))
+		}
+	})
+	defer stop()
 
 	desc := requestDesc(request.mtype)
 
 	if err = p.send(request); err != nil {
+		if canceled && errors.Is(err, os.ErrDeadlineExceeded) {
+			return errors.Wrapf(err, "call %s (canceled): send", desc)
+		}
 		return errors.Wrapf(err, "call %s (budget %s): send", desc, budget)
 	}
 
 	if err = p.recv(response); err != nil {
+		if canceled && errors.Is(err, os.ErrDeadlineExceeded) {
+			return errors.Wrapf(err, "call %s (canceled): receive", desc)
+		}
 		return errors.Wrapf(err, "call %s (budget %s): receive", desc, budget)
 	}
 
@@ -88,20 +104,38 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 	defer p.mu.Unlock()
 
 	// Honor the ctx deadline, if present.
+	var budget time.Duration
 	if deadline, ok := ctx.Deadline(); ok {
 		p.conn.SetDeadline(deadline)
+		budget = time.Until(deadline)
 		defer p.conn.SetDeadline(time.Time{})
 	}
+	// Honor context cancellation.
+	canceled := false
+	stop := context.AfterFunc(ctx, func() {
+		if ctx.Err() == context.Canceled {
+			canceled = true
+			// Cancel read and writes by setting deadline in the past.
+			p.conn.SetDeadline(time.Unix(1, 0))
+		}
+	})
+	defer stop()
 
 	EncodeInterrupt(request, 0)
 
 	if err := p.send(request); err != nil {
-		return errors.Wrap(err, "failed to send interrupt request")
+		if canceled && errors.Is(err, os.ErrDeadlineExceeded) {
+			return errors.Wrapf(err, "interrupt request (canceled): send")
+		}
+		return errors.Wrapf(err, "interrupt request (budget %s): send", budget)
 	}
 
 	for {
 		if err := p.recv(response); err != nil {
-			return errors.Wrap(err, "failed to receive response")
+			if canceled && errors.Is(err, os.ErrDeadlineExceeded) {
+				return errors.Wrapf(err, "interrupt request (canceled): receive")
+			}
+			return errors.Wrapf(err, "interrupt request (budget %s): receive", budget)
 		}
 
 		mtype, _ := response.getHeader()

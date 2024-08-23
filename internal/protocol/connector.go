@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -13,9 +14,10 @@ import (
 	"github.com/Rican7/retry"
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
-	"github.com/canonical/go-dqlite/logging"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
+
+	"github.com/canonical/go-dqlite/logging"
 )
 
 // DialFunc is a function that can be used to establish a network connection.
@@ -236,17 +238,30 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 		conn.SetDeadline(deadline)
 		defer conn.SetDeadline(time.Time{})
 	}
+	// Honor context cancellation.
+	canceled := false
+	stop := context.AfterFunc(ctx, func() {
+		if ctx.Err() == context.Canceled {
+			canceled = true
+			// Cancel read and writes by setting deadline in the past.
+			conn.SetDeadline(time.Unix(1, 0))
+		}
+	})
+	defer stop()
 
 	// Perform the protocol handshake.
 	n, err := conn.Write(protocol)
 	if err != nil {
+		if canceled && errors.Is(err, os.ErrDeadlineExceeded) {
+			return nil, errors.Wrap(err, "write handshake")
+		}
 		return nil, errors.Wrap(err, "write handshake")
 	}
 	if n != 8 {
 		return nil, errors.Wrap(io.ErrShortWrite, "short handshake write")
 	}
 
-	return newProtocol(version, conn), nil
+	return NewProtocol(version, conn), nil
 }
 
 // Connect to the given dqlite server and check if it's the leader.
