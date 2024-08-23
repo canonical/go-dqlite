@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
@@ -340,6 +341,12 @@ func (s *Shell) processQuery(ctx context.Context, line string) (string, error) {
 	n := len(columns)
 
 	var sb strings.Builder
+	writer := tabwriter.NewWriter(&sb, 0, 8, 1, '\t', 0)
+	for _, col := range columns {
+		fmt.Fprintf(writer, "%s\t", col)
+	}
+	fmt.Fprintln(writer)
+
 	for rows.Next() {
 		row := make([]interface{}, n)
 		rowPointers := make([]interface{}, n)
@@ -355,14 +362,10 @@ func (s *Shell) processQuery(ctx context.Context, line string) (string, error) {
 			return "", err
 		}
 
-		for i, column := range row {
-			if i == 0 {
-				fmt.Fprintf(&sb, "%v", column)
-			} else {
-				fmt.Fprintf(&sb, "|%v", column)
-			}
+		for _, column := range row {
+			fmt.Fprintf(writer, "%v\t", column)
 		}
-		sb.WriteByte('\n')
+		fmt.Fprintln(writer)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -375,6 +378,10 @@ func (s *Shell) processQuery(ctx context.Context, line string) (string, error) {
 
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("commit: %w", err)
+	}
+
+	if err := writer.Flush(); err != nil {
+		return "", fmt.Errorf("flush: %w", err)
 	}
 
 	return strings.TrimRight(sb.String(), "\n"), nil
