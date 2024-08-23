@@ -57,9 +57,11 @@ jobs:
         VERBOSE=1 DISK=${{ matrix.disk }} ./test/recover.sh
 
     - name: Coverage
-      uses: shogo82148/actions-goveralls@v1
+      uses: coverallsapp/github-action@v2
       with:
-        path-to-profile: coverage.out
+        file: coverage.out
+        flag-name: run-${{ join(matrix.*, '-') }}
+        parallel: true
 
     - name: Benchmark
       env:
@@ -84,3 +86,50 @@ jobs:
       with:
         name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}
         path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
+
+  finish:
+    needs: build-and-test
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Finish coverage
+      uses: coverallsapp/github-action@v2
+      with:
+        parallel-finished: true
+        carryforward: >-
+          run-1.13.x-ubuntu-20.04-0
+          run-1.13.x-ubuntu-20.04-1
+          run-1.13.x-ubuntu-22.04-0
+          run-1.13.x-ubuntu-22.04-1
+          run-1.14.x-ubuntu-20.04-0
+          run-1.14.x-ubuntu-20.04-1
+          run-1.14.x-ubuntu-22.04-0
+          run-1.14.x-ubuntu-22.04-1
+          run-1.15.x-ubuntu-20.04-0
+          run-1.15.x-ubuntu-20.04-1
+          run-1.15.x-ubuntu-22.04-0
+          run-1.15.x-ubuntu-22.04-1
+          run-1.16.x-ubuntu-20.04-0
+          run-1.16.x-ubuntu-20.04-1
+          run-1.16.x-ubuntu-22.04-0
+          run-1.16.x-ubuntu-22.04-1
+          run-1.17.x-ubuntu-20.04-0
+          run-1.17.x-ubuntu-20.04-1
+          run-1.17.x-ubuntu-22.04-0
+          run-1.17.x-ubuntu-22.04-1
+          run-1.18.x-ubuntu-20.04-0
+          run-1.18.x-ubuntu-20.04-1
+          run-1.18.x-ubuntu-22.04-0
+          run-1.18.x-ubuntu-22.04-1
+          run-1.19.x-ubuntu-20.04-0
+          run-1.19.x-ubuntu-20.04-1
+          run-1.19.x-ubuntu-22.04-0
+          run-1.19.x-ubuntu-22.04-1
+          run-1.20.x-ubuntu-20.04-0
+          run-1.20.x-ubuntu-20.04-1
+          run-1.20.x-ubuntu-22.04-0
+          run-1.20.x-ubuntu-22.04-1
+          run-1.21.x-ubuntu-20.04-0
+          run-1.21.x-ubuntu-20.04-1
+          run-1.21.x-ubuntu-22.04-0
+          run-1.21.x-ubuntu-22.04-1
