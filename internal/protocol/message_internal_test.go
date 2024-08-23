@@ -32,7 +32,7 @@ func TestMessage_putBlob(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d", c.Offset), func(t *testing.T) {
-			message.putBlob(c.Blob)
+			message.PutBlob(c.Blob)
 
 			bytes, offset := message.Body()
 
@@ -59,7 +59,7 @@ func TestMessage_putString(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.String, func(t *testing.T) {
-			message.putString(c.String)
+			message.PutString(c.String)
 
 			bytes, offset := message.Body()
 
@@ -77,7 +77,7 @@ func TestMessage_putUint8(t *testing.T) {
 
 	v := uint8(12)
 
-	message.putUint8(v)
+	message.PutUint8(v)
 
 	bytes, offset := message.Body()
 
@@ -92,7 +92,7 @@ func TestMessage_putUint16(t *testing.T) {
 
 	v := uint16(666)
 
-	message.putUint16(v)
+	message.PutUint16(v)
 
 	bytes, offset := message.Body()
 
@@ -108,7 +108,7 @@ func TestMessage_putUint32(t *testing.T) {
 
 	v := uint32(130000)
 
-	message.putUint32(v)
+	message.PutUint32(v)
 
 	bytes, offset := message.Body()
 
@@ -126,7 +126,7 @@ func TestMessage_putUint64(t *testing.T) {
 
 	v := uint64(5000000000)
 
-	message.putUint64(v)
+	message.PutUint64(v)
 
 	bytes, offset := message.Body()
 
@@ -213,7 +213,7 @@ func TestMessage_putHeader(t *testing.T) {
 	message := Message{}
 	message.Init(64)
 
-	message.putString("hello")
+	message.PutString("hello")
 	message.putHeader(RequestExec, 1)
 }
 
@@ -225,7 +225,7 @@ func BenchmarkMessage_putString(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		message.reset()
-		message.putString("hello")
+		message.PutString("hello")
 	}
 }
 
@@ -237,7 +237,7 @@ func BenchmarkMessage_putUint64(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		message.reset()
-		message.putUint64(270)
+		message.PutUint64(270)
 	}
 }
 
@@ -257,7 +257,7 @@ func TestMessage_getString(t *testing.T) {
 			message := Message{}
 			message.Init(16)
 
-			message.putString(c.String)
+			message.PutString(c.String)
 			message.putHeader(0, 0)
 
 			message.Rewind()
@@ -287,7 +287,7 @@ func TestMessage_getBlob(t *testing.T) {
 			message := Message{}
 			message.Init(64)
 
-			message.putBlob(c.Blob)
+			message.PutBlob(c.Blob)
 			message.putHeader(0, 0)
 
 			message.Rewind()
@@ -307,7 +307,7 @@ func TestMessage_getString_Overflow_WordBoundary(t *testing.T) {
 	message := Message{}
 	message.Init(8)
 
-	message.putBlob([]byte{
+	message.PutBlob([]byte{
 		'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
 		'i', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
 		0, 0, 0, 0, 0, 0, 0,

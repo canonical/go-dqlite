@@ -56,9 +56,9 @@ func (m *Message) reset() {
 }
 
 // Append a byte slice to the message.
-func (m *Message) putBlob(v []byte) {
+func (m *Message) PutBlob(v []byte) {
 	size := len(v)
-	m.putUint64(uint64(size))
+	m.PutUint64(uint64(size))
 
 	pad := 0
 	if (size % messageWordSize) != 0 {
@@ -83,7 +83,7 @@ func (m *Message) putBlob(v []byte) {
 }
 
 // Append a string to the message.
-func (m *Message) putString(v string) {
+func (m *Message) PutString(v string) {
 	size := len(v) + 1
 	pad := 0
 	if (size % messageWordSize) != 0 {
@@ -112,7 +112,7 @@ func (m *Message) putString(v string) {
 }
 
 // Append a byte to the message.
-func (m *Message) putUint8(v uint8) {
+func (m *Message) PutUint8(v uint8) {
 	b := m.bufferForPut(1)
 	defer b.Advance(1)
 
@@ -120,7 +120,7 @@ func (m *Message) putUint8(v uint8) {
 }
 
 // Append a 2-byte word to the message.
-func (m *Message) putUint16(v uint16) {
+func (m *Message) PutUint16(v uint16) {
 	b := m.bufferForPut(2)
 	defer b.Advance(2)
 
@@ -128,7 +128,7 @@ func (m *Message) putUint16(v uint16) {
 }
 
 // Append a 4-byte word to the message.
-func (m *Message) putUint32(v uint32) {
+func (m *Message) PutUint32(v uint32) {
 	b := m.bufferForPut(4)
 	defer b.Advance(4)
 
@@ -136,7 +136,7 @@ func (m *Message) putUint32(v uint32) {
 }
 
 // Append an 8-byte word to the message.
-func (m *Message) putUint64(v uint64) {
+func (m *Message) PutUint64(v uint64) {
 	b := m.bufferForPut(8)
 	defer b.Advance(8)
 
@@ -144,7 +144,7 @@ func (m *Message) putUint64(v uint64) {
 }
 
 // Append a signed 8-byte word to the message.
-func (m *Message) putInt64(v int64) {
+func (m *Message) PutInt64(v int64) {
 	b := m.bufferForPut(8)
 	defer b.Advance(8)
 
@@ -152,7 +152,7 @@ func (m *Message) putInt64(v int64) {
 }
 
 // Append a floating point number to the message.
-func (m *Message) putFloat64(v float64) {
+func (m *Message) PutFloat64(v float64) {
 	b := m.bufferForPut(8)
 	defer b.Advance(8)
 
@@ -167,19 +167,19 @@ func (m *Message) putNamedValuesInner(values NamedValues) {
 
 		switch values[i].Value.(type) {
 		case int64:
-			m.putUint8(Integer)
+			m.PutUint8(Integer)
 		case float64:
-			m.putUint8(Float)
+			m.PutUint8(Float)
 		case bool:
-			m.putUint8(Boolean)
+			m.PutUint8(Boolean)
 		case []byte:
-			m.putUint8(Blob)
+			m.PutUint8(Blob)
 		case string:
-			m.putUint8(Text)
+			m.PutUint8(Text)
 		case nil:
-			m.putUint8(Null)
+			m.PutUint8(Null)
 		case time.Time:
-			m.putUint8(ISO8601)
+			m.PutUint8(ISO8601)
 		default:
 			panic("unsupported value type")
 		}
@@ -195,24 +195,24 @@ func (m *Message) putNamedValuesInner(values NamedValues) {
 	for i := range values {
 		switch v := values[i].Value.(type) {
 		case int64:
-			m.putInt64(v)
+			m.PutInt64(v)
 		case float64:
-			m.putFloat64(v)
+			m.PutFloat64(v)
 		case bool:
 			if v {
-				m.putUint64(1)
+				m.PutUint64(1)
 			} else {
-				m.putUint64(0)
+				m.PutUint64(0)
 			}
 		case []byte:
-			m.putBlob(v)
+			m.PutBlob(v)
 		case string:
-			m.putString(v)
+			m.PutString(v)
 		case nil:
-			m.putInt64(0)
+			m.PutInt64(0)
 		case time.Time:
 			timestamp := v.Format(iso8601Formats[0])
-			m.putString(timestamp)
+			m.PutString(timestamp)
 		default:
 			panic("unsupported value type")
 		}
@@ -230,7 +230,7 @@ func (m *Message) putNamedValues(values NamedValues) {
 	}
 	n := uint8(l)
 
-	m.putUint8(n)
+	m.PutUint8(n)
 	m.putNamedValuesInner(values)
 }
 
@@ -246,7 +246,7 @@ func (m *Message) putNamedValues32(values NamedValues) {
 	}
 	n := uint32(l)
 
-	m.putUint32(n)
+	m.PutUint32(n)
 	m.putNamedValuesInner(values)
 }
 
