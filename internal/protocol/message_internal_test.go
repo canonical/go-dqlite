@@ -302,6 +302,31 @@ func TestMessage_getBlob(t *testing.T) {
 	}
 }
 
+func BenchmarkMessage_getBlob(b *testing.B) {
+	makeBlob := func(size int) []byte {
+		blob := make([]byte, size)
+		for i := range blob {
+			blob[i] = byte(i)
+		}
+		return blob
+	}
+
+	for _, size := range []int{16, 64, 256, 1024, 4096, 8096} {
+		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
+			message := Message{}
+			message.Init(size + 16)
+
+			message.PutBlob(makeBlob(size))
+			message.putHeader(0, 0)
+
+			for i := 0; i < b.N; i++ {
+				message.Rewind()
+				_ = message.getBlob()
+			}
+		})
+	}
+}
+
 // The overflowing string ends exactly at word boundary.
 func TestMessage_getString_Overflow_WordBoundary(t *testing.T) {
 	message := Message{}

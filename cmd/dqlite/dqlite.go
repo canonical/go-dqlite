@@ -9,12 +9,14 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/peterh/liner"
+	"github.com/spf13/cobra"
 
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/internal/shell"
-	"github.com/peterh/liner"
-	"github.com/spf13/cobra"
 )
 
 func main() {
@@ -22,6 +24,7 @@ func main() {
 	var key string
 	var servers *[]string
 	var format string
+	var timeoutMsec uint
 
 	cmd := &cobra.Command{
 		Use:   "dqlite -s <servers> <database> [command]",
@@ -91,7 +94,9 @@ func main() {
 
 			if len(args) > 1 {
 				for _, input := range strings.Split(args[1], ";") {
-					result, err := sh.Process(context.Background(), input)
+					ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMsec)*time.Millisecond)
+					defer cancel()
+					result, err := sh.Process(ctx, input)
 					if err != nil {
 						return err
 					} else if result != "" {
@@ -113,7 +118,9 @@ func main() {
 					return err
 				}
 
-				result, err := sh.Process(context.Background(), input)
+				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMsec)*time.Millisecond)
+				defer cancel()
+				result, err := sh.Process(ctx, input)
 				if err != nil {
 					fmt.Println("Error: ", err)
 				} else {
@@ -133,6 +140,7 @@ func main() {
 	flags.StringVarP(&crt, "cert", "c", "", "public TLS cert")
 	flags.StringVarP(&key, "key", "k", "", "private TLS key")
 	flags.StringVarP(&format, "format", "f", "tabular", "output format (tabular, json)")
+	flags.UintVar(&timeoutMsec, "timeout", 2000, "timeout of each request (msec)")
 
 	cmd.MarkFlagRequired("servers")
 

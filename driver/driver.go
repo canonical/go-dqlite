@@ -34,13 +34,14 @@ import (
 
 // Driver perform queries against a dqlite server.
 type Driver struct {
-	log               client.LogFunc   // Log function to use
-	store             client.NodeStore // Holds addresses of dqlite servers
-	context           context.Context  // Global cancellation context
-	connectionTimeout time.Duration    // Max time to wait for a new connection
-	contextTimeout    time.Duration    // Default client context timeout.
-	clientConfig      protocol.Config  // Configuration for dqlite client instances
-	tracing           client.LogLevel  // Whether to trace statements
+	log                   client.LogFunc   // Log function to use
+	store                 client.NodeStore // Holds addresses of dqlite servers
+	context               context.Context  // Global cancellation context
+	connectionTimeout     time.Duration    // Max time to wait for a new connection
+	contextTimeout        time.Duration    // Default client context timeout.
+	clientConfig          protocol.Config  // Configuration for dqlite client instances
+	tracing               client.LogLevel  // Whether to trace statements
+	concurrentLeaderConns *int64           // Maximum number of concurrent connections to other cluster members while probing for leadership.
 }
 
 // Error is returned in case of database errors.
@@ -52,8 +53,8 @@ const (
 	ErrBusyRecovery        = 5 | (1 << 8)
 	ErrBusySnapshot        = 5 | (2 << 8)
 	errIoErr               = 10
-	errIoErrNotLeader      = errIoErr | 40<<8
-	errIoErrLeadershipLost = errIoErr | (41 << 8)
+	ErrIoErrNotLeader      = errIoErr | (40 << 8)
+	ErrIoErrLeadershipLost = errIoErr | (41 << 8)
 	errNotFound            = 12
 
 	// Legacy error codes before version-3.32.1+replication4. Kept here
@@ -124,6 +125,17 @@ func WithConnectionBackoffCap(cap time.Duration) Option {
 	}
 }
 
+// WithConcurrentLeaderConns is the maximum number of concurrent connections
+// to other cluster members that will be attempted while searching for the dqlite leader.
+// It takes a pointer to an integer so that the value can be dynamically modified based on cluster health.
+//
+// The default is 10 connections to other cluster members.
+func WithConcurrentLeaderConns(maxConns *int64) Option {
+	return func(o *options) {
+		o.ConcurrentLeaderConns = maxConns
+	}
+}
+
 // WithAttemptTimeout sets the timeout for each individual connection attempt.
 //
 // The Connector.Connect() and Driver.Open() methods try to find the current
@@ -187,12 +199,13 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 	}
 
 	driver := &Driver{
-		log:               o.Log,
-		store:             store,
-		context:           o.Context,
-		connectionTimeout: o.ConnectionTimeout,
-		contextTimeout:    o.ContextTimeout,
-		tracing:           o.Tracing,
+		log:                   o.Log,
+		store:                 store,
+		context:               o.Context,
+		connectionTimeout:     o.ConnectionTimeout,
+		contextTimeout:        o.ContextTimeout,
+		tracing:               o.Tracing,
+		concurrentLeaderConns: o.ConcurrentLeaderConns,
 		clientConfig: protocol.Config{
 			Dial:           o.Dial,
 			AttemptTimeout: o.AttemptTimeout,
@@ -214,6 +227,7 @@ type options struct {
 	ContextTimeout          time.Duration
 	ConnectionBackoffFactor time.Duration
 	ConnectionBackoffCap    time.Duration
+	ConcurrentLeaderConns   *int64
 	RetryLimit              uint
 	Context                 context.Context
 	Tracing                 client.LogLevel
@@ -221,10 +235,12 @@ type options struct {
 
 // Create a options object with sane defaults.
 func defaultOptions() *options {
+	maxConns := protocol.MaxConcurrentLeaderConns
 	return &options{
-		Log:     client.DefaultLogFunc,
-		Dial:    client.DefaultDialFunc,
-		Tracing: client.LogNone,
+		Log:                   client.DefaultLogFunc,
+		Dial:                  client.DefaultDialFunc,
+		Tracing:               client.LogNone,
+		ConcurrentLeaderConns: &maxConns,
 	}
 }
 
@@ -248,7 +264,9 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	}
 
 	// TODO: generate a client ID.
-	connector := protocol.NewConnector(0, c.driver.store, c.driver.clientConfig, c.driver.log)
+	config := c.driver.clientConfig
+	config.ConcurrentLeaderConns = *c.driver.concurrentLeaderConns
+	connector := protocol.NewConnector(0, c.driver.store, config, c.driver.log)
 
 	conn := &Conn{
 		log:            c.driver.log,
@@ -657,7 +675,14 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 		return nil, driverError(s.log, err)
 	}
 
-	return &Rows{ctx: ctx, request: s.request, response: s.response, protocol: s.protocol, rows: rows}, nil
+	return &Rows{
+		ctx:      ctx,
+		request:  s.request,
+		response: s.response,
+		protocol: s.protocol,
+		rows:     rows,
+		log:      s.log,
+	}, nil
 }
 
 // Query executes a query that may return rows, such as a
@@ -823,9 +848,9 @@ func driverError(log client.LogFunc, err error) error {
 			fallthrough
 		case errIoErrLeadershipLostLegacy:
 			fallthrough
-		case errIoErrNotLeader:
+		case ErrIoErrNotLeader:
 			fallthrough
-		case errIoErrLeadershipLost:
+		case ErrIoErrLeadershipLost:
 			log(client.LogDebug, "leadership lost (%d - %s)", err.Code, err.Description)
 			return driver.ErrBadConn
 		case errNotFound:

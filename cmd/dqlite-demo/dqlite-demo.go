@@ -93,24 +93,24 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 			http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 				key := strings.TrimLeft(r.URL.Path, "/")
 				result := ""
+				err = nil
 				switch r.Method {
 				case "GET":
 					row := db.QueryRow(query, key)
-					if err := row.Scan(&result); err != nil {
-						result = fmt.Sprintf("Error: %s", err.Error())
-					}
-					break
+					err = row.Scan(&result)
 				case "PUT":
 					result = "done"
 					value, _ := ioutil.ReadAll(r.Body)
-					if _, err := db.Exec(update, key, string(value[:])); err != nil {
-						result = fmt.Sprintf("Error: %s", err.Error())
-					}
+					_, err = db.Exec(update, key, string(value[:]))
 				default:
-					result = fmt.Sprintf("Error: unsupported method %q", r.Method)
+					err = fmt.Errorf("unsupported method")
 
 				}
-				fmt.Fprintf(w, "%s\n", result)
+				if err == nil {
+					fmt.Fprint(w, result)
+				} else {
+					http.Error(w, err.Error(), 500)
+				}
 			})
 
 			listener, err := net.Listen("tcp", api)

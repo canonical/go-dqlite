@@ -51,6 +51,7 @@ type App struct {
 	voters          int
 	standbys        int
 	roles           RolesConfig
+	options         *options
 }
 
 // New creates a new application node.
@@ -219,6 +220,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		driver.WithDialFunc(driverDial),
 		driver.WithLogFunc(o.Log),
 		driver.WithTracing(o.Tracing),
+		driver.WithConcurrentLeaderConns(o.ConcurrentLeaderConns),
 	)
 	if err != nil {
 		stop()
@@ -256,6 +258,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		voters:          o.Voters,
 		standbys:        o.StandBys,
 		roles:           RolesConfig{Voters: o.Voters, StandBys: o.StandBys},
+		options:         o,
 	}
 
 	// Start the proxy if a TLS configuration was provided.
@@ -275,8 +278,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 
 	} else if o.Conn != nil {
 		go func() {
-			for {
-				remote := <-o.Conn.acceptCh
+			for remote := range o.Conn.acceptCh {
 
 				// keep forward compatible
 				_, isTcp := remote.(*net.TCPConn)
@@ -303,7 +305,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		}()
 	}
 
-	go app.run(ctx, o.RolesAdjustmentFrequency, joinFileExists)
+	go app.run(ctx, o, joinFileExists)
 
 	return app, nil
 }
@@ -484,8 +486,11 @@ func (a *App) Open(ctx context.Context, database string) (*sql.DB, error) {
 }
 
 // Leader returns a client connected to the current cluster leader, if any.
-func (a *App) Leader(ctx context.Context) (*client.Client, error) {
-	return client.FindLeader(ctx, a.store, a.clientOptions()...)
+func (a *App) Leader(ctx context.Context, options ...client.Option) (*client.Client, error) {
+	allOptions := a.clientOptions()
+	allOptions = append(allOptions, options...)
+
+	return client.FindLeader(ctx, a.store, allOptions...)
 }
 
 // Client returns a client connected to the local node.
@@ -525,7 +530,7 @@ func (a *App) proxy() {
 
 // Run background tasks. The join flag is true if the node is a brand new one
 // and should join the cluster.
-func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
+func (a *App) run(ctx context.Context, options *options, join bool) {
 	defer close(a.runCh)
 
 	delay := time.Duration(0)
@@ -584,7 +589,7 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 					continue
 				}
 				ready = true
-				delay = frequency
+				delay = options.RolesAdjustmentFrequency
 				close(a.readyCh)
 				cli.Close()
 				continue
@@ -595,6 +600,19 @@ func (a *App) run(ctx context.Context, frequency time.Duration, join bool) {
 			if err := a.maybeAdjustRoles(ctx, cli); err != nil {
 				a.warn("adjust roles: %v", err)
 			}
+
+			leader, err := cli.Leader(ctx)
+			if err != nil {
+				a.error("fetch leader info: %v", err)
+				cli.Close()
+				continue
+			}
+
+			err = options.OnRolesAdjustment(*leader, servers)
+			if err != nil {
+				a.warn("roles adjustment hook: %v", err)
+			}
+
 			cli.Close()
 		}
 	}
@@ -721,7 +739,7 @@ func (a *App) makeRolesChanges(nodes []client.NodeInfo) RolesChanges {
 
 // Return the options to use for client.FindLeader() or client.New()
 func (a *App) clientOptions() []client.Option {
-	return []client.Option{client.WithDialFunc(a.dialFunc), client.WithLogFunc(a.log)}
+	return []client.Option{client.WithDialFunc(a.dialFunc), client.WithLogFunc(a.log), client.WithConcurrentLeaderConns(*a.options.ConcurrentLeaderConns)}
 }
 
 func (a *App) debug(format string, args ...interface{}) {
