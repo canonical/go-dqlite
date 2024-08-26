@@ -57,9 +57,10 @@ jobs:
         VERBOSE=1 DISK=${{ matrix.disk }} ./test/recover.sh
 
     - name: Coverage
-      uses: shogo82148/actions-goveralls@v1
+      uses: coverallsapp/github-action@v2
       with:
-        path-to-profile: coverage.out
+        file: coverage.out
+        parallel: true
 
     - name: Benchmark
       env:
@@ -84,3 +85,13 @@ jobs:
       with:
         name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}
         path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
+
+  finish:
+    needs: build-and-test
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Finish coverage
+      uses: coverallsapp/github-action@v2
+      with:
+        parallel-finished: true
