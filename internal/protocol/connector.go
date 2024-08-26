@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"sort"
 	"sync"
 	"time"
@@ -264,9 +263,11 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 	defer stop()
 
 	// Perform the protocol handshake.
+	// TODO: this should be a message and use same code for writing and reading
+	// to the network.
 	n, err := conn.Write(protocol)
 	if err != nil {
-		if canceled && errors.Is(err, os.ErrDeadlineExceeded) {
+		if canceled && errors.Cause(err).(net.Error).Timeout() {
 			return nil, errors.Wrap(err, "write handshake")
 		}
 		return nil, errors.Wrap(err, "write handshake")
