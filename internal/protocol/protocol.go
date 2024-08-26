@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -62,10 +63,10 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 		defer p.conn.SetDeadline(time.Time{})
 	}
 	// Honor context cancellation.
-	canceled := false
+	var canceled int32 = 0
 	stop := utils.AfterFunc(ctx, func() {
 		if ctx.Err() == context.Canceled {
-			canceled = true
+			atomic.SwapInt32(&canceled, 1)
 			// Cancel read and writes by setting deadline in the past.
 			p.conn.SetDeadline(time.Unix(1, 0))
 		}
@@ -75,14 +76,14 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 	desc := requestDesc(request.mtype)
 
 	if err = p.send(request); err != nil {
-		if canceled && errors.Cause(err).(net.Error).Timeout() {
+		if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
 			return errors.Wrapf(err, "call %s (canceled): send", desc)
 		}
 		return errors.Wrapf(err, "call %s (budget %s): send", desc, budget)
 	}
 
 	if err = p.recv(response); err != nil {
-		if canceled && errors.Cause(err).(net.Error).Timeout() {
+		if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
 			return errors.Wrapf(err, "call %s (canceled): receive", desc)
 		}
 		return errors.Wrapf(err, "call %s (budget %s): receive", desc, budget)
@@ -112,10 +113,10 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 		defer p.conn.SetDeadline(time.Time{})
 	}
 	// Honor context cancellation.
-	canceled := false
+	var canceled int32 = 0
 	stop := utils.AfterFunc(ctx, func() {
 		if ctx.Err() == context.Canceled {
-			canceled = true
+			atomic.SwapInt32(&canceled, 1)
 			// Cancel read and writes by setting deadline in the past.
 			p.conn.SetDeadline(time.Unix(1, 0))
 		}
@@ -127,7 +128,7 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 	// TODO: the context cancelation and honoring should happen in the protocol
 	// primitives which can be tested better.
 	if err := p.send(request); err != nil {
-		if canceled && errors.Cause(err).(net.Error).Timeout() {
+		if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
 			return errors.Wrapf(err, "interrupt request (canceled): send")
 		}
 		return errors.Wrapf(err, "interrupt request (budget %s): send", budget)
@@ -135,7 +136,7 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 
 	for {
 		if err := p.recv(response); err != nil {
-			if canceled && errors.Cause(err).(net.Error).Timeout() {
+			if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
 				return errors.Wrapf(err, "interrupt request (canceled): receive")
 			}
 			return errors.Wrapf(err, "interrupt request (budget %s): receive", budget)

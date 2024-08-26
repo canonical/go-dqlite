@@ -8,6 +8,7 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Rican7/retry"
@@ -252,10 +253,10 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 		defer conn.SetDeadline(time.Time{})
 	}
 	// Honor context cancellation.
-	canceled := false
+	var canceled int32 = 0
 	stop := utils.AfterFunc(ctx, func() {
 		if ctx.Err() == context.Canceled {
-			canceled = true
+			atomic.SwapInt32(&canceled, 1)
 			// Cancel read and writes by setting deadline in the past.
 			conn.SetDeadline(time.Unix(1, 0))
 		}
@@ -267,7 +268,7 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 	// to the network.
 	n, err := conn.Write(protocol)
 	if err != nil {
-		if canceled && errors.Cause(err).(net.Error).Timeout() {
+		if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
 			return nil, errors.Wrap(err, "write handshake")
 		}
 		return nil, errors.Wrap(err, "write handshake")
