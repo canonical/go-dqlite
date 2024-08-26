@@ -60,7 +60,6 @@ jobs:
       uses: coverallsapp/github-action@v2
       with:
         file: coverage.out
-        flag-name: run-${{ join(matrix.*, '-') }}
         parallel: true
 
     - name: Benchmark
@@ -96,40 +95,3 @@ jobs:
       uses: coverallsapp/github-action@v2
       with:
         parallel-finished: true
-        carryforward: >-
-          run-1.13.x-ubuntu-20.04-0
-          run-1.13.x-ubuntu-20.04-1
-          run-1.13.x-ubuntu-22.04-0
-          run-1.13.x-ubuntu-22.04-1
-          run-1.14.x-ubuntu-20.04-0
-          run-1.14.x-ubuntu-20.04-1
-          run-1.14.x-ubuntu-22.04-0
-          run-1.14.x-ubuntu-22.04-1
-          run-1.15.x-ubuntu-20.04-0
-          run-1.15.x-ubuntu-20.04-1
-          run-1.15.x-ubuntu-22.04-0
-          run-1.15.x-ubuntu-22.04-1
-          run-1.16.x-ubuntu-20.04-0
-          run-1.16.x-ubuntu-20.04-1
-          run-1.16.x-ubuntu-22.04-0
-          run-1.16.x-ubuntu-22.04-1
-          run-1.17.x-ubuntu-20.04-0
-          run-1.17.x-ubuntu-20.04-1
-          run-1.17.x-ubuntu-22.04-0
-          run-1.17.x-ubuntu-22.04-1
-          run-1.18.x-ubuntu-20.04-0
-          run-1.18.x-ubuntu-20.04-1
-          run-1.18.x-ubuntu-22.04-0
-          run-1.18.x-ubuntu-22.04-1
-          run-1.19.x-ubuntu-20.04-0
-          run-1.19.x-ubuntu-20.04-1
-          run-1.19.x-ubuntu-22.04-0
-          run-1.19.x-ubuntu-22.04-1
-          run-1.20.x-ubuntu-20.04-0
-          run-1.20.x-ubuntu-20.04-1
-          run-1.20.x-ubuntu-22.04-0
-          run-1.20.x-ubuntu-22.04-1
-          run-1.21.x-ubuntu-20.04-0
-          run-1.21.x-ubuntu-20.04-1
-          run-1.21.x-ubuntu-22.04-0
-          run-1.21.x-ubuntu-22.04-1
