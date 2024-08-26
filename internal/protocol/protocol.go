@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+
+	"github.com/canonical/go-dqlite/internal/utils"
 )
 
 // Protocol sends and receive the dqlite message on the wire.
@@ -62,7 +64,7 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 	}
 	// Honor context cancellation.
 	canceled := false
-	stop := context.AfterFunc(ctx, func() {
+	stop := utils.AfterFunc(ctx, func() {
 		if ctx.Err() == context.Canceled {
 			canceled = true
 			// Cancel read and writes by setting deadline in the past.
@@ -112,7 +114,7 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 	}
 	// Honor context cancellation.
 	canceled := false
-	stop := context.AfterFunc(ctx, func() {
+	stop := utils.AfterFunc(ctx, func() {
 		if ctx.Err() == context.Canceled {
 			canceled = true
 			// Cancel read and writes by setting deadline in the past.

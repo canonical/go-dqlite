@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/canonical/go-dqlite/internal/utils"
 	"github.com/canonical/go-dqlite/logging"
 )
 
@@ -240,7 +241,7 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 	}
 	// Honor context cancellation.
 	canceled := false
-	stop := context.AfterFunc(ctx, func() {
+	stop := utils.AfterFunc(ctx, func() {
 		if ctx.Err() == context.Canceled {
 			canceled = true
 			// Cancel read and writes by setting deadline in the past.

@@ -148,14 +148,14 @@ func runTestProtocolContext(t *testing.T, test testProtocolContext) {
 	defer client.Close()
 	defer server.Close()
 	// Kill goroutines when test is finished.
-	goroutineCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	done := make(chan struct{})
+	defer close(done)
 	// If set, the sever will write continuously to the connection.
 	if !test.hangRead {
 		go func() {
 			for {
 				select {
-				case <-goroutineCtx.Done():
+				case <-done:
 					return
 				default:
 					server.Write([]byte{1, 2, 3})
@@ -169,7 +169,7 @@ func runTestProtocolContext(t *testing.T, test testProtocolContext) {
 			b := make([]byte, 10)
 			for {
 				select {
-				case <-goroutineCtx.Done():
+				case <-done:
 					return
 				default:
 					server.Read(b)

@@ -119,12 +119,12 @@ func TestConnector_ContextCanceled(t *testing.T) {
 	assert.Nil(t, err)
 	store := newStore(t, []string{listener.Addr().String()})
 	// Kill goroutine when test is finished.
-	goroutineCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
 		for {
 			select {
-			case <-goroutineCtx.Done():
+			case <-done:
 				return
 			default:
 				conn, err := listener.Accept()
