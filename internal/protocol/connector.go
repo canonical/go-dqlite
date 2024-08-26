@@ -268,7 +268,7 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 	// to the network.
 	n, err := conn.Write(protocol)
 	if err != nil {
-		if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
+		if atomic.LoadInt32(&canceled) == 1 && errors.Cause(err).(net.Error).Timeout() {
 			return nil, errors.Wrap(err, "write handshake")
 		}
 		return nil, errors.Wrap(err, "write handshake")

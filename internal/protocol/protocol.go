@@ -76,14 +76,14 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 	desc := requestDesc(request.mtype)
 
 	if err = p.send(request); err != nil {
-		if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
+		if atomic.LoadInt32(&canceled) == 1 && errors.Cause(err).(net.Error).Timeout() {
 			return errors.Wrapf(err, "call %s (canceled): send", desc)
 		}
 		return errors.Wrapf(err, "call %s (budget %s): send", desc, budget)
 	}
 
 	if err = p.recv(response); err != nil {
-		if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
+		if atomic.LoadInt32(&canceled) == 1 && errors.Cause(err).(net.Error).Timeout() {
 			return errors.Wrapf(err, "call %s (canceled): receive", desc)
 		}
 		return errors.Wrapf(err, "call %s (budget %s): receive", desc, budget)
@@ -128,7 +128,7 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 	// TODO: the context cancelation and honoring should happen in the protocol
 	// primitives which can be tested better.
 	if err := p.send(request); err != nil {
-		if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
+		if atomic.LoadInt32(&canceled) == 1 && errors.Cause(err).(net.Error).Timeout() {
 			return errors.Wrapf(err, "interrupt request (canceled): send")
 		}
 		return errors.Wrapf(err, "interrupt request (budget %s): send", budget)
@@ -136,7 +136,7 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 
 	for {
 		if err := p.recv(response); err != nil {
-			if canceled == 1 && errors.Cause(err).(net.Error).Timeout() {
+			if atomic.LoadInt32(&canceled) == 1 && errors.Cause(err).(net.Error).Timeout() {
 				return errors.Wrapf(err, "interrupt request (canceled): receive")
 			}
 			return errors.Wrapf(err, "interrupt request (budget %s): receive", budget)
