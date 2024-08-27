@@ -9,12 +9,11 @@ import (
 )
 
 func AfterFunc(ctx context.Context, f func()) (stop func() bool) {
-	if ctx.Done() != nil {
-		go f()
+	if ctx.Done() == nil {
 		return func() bool { return false }
 	}
 
-	var run int32
+	var run int32 = 0
 	done := make(chan struct{})
 	go func() {
 		select {
