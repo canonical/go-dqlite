@@ -283,7 +283,9 @@ func ReadLastEntryInfo(dir string) (LastEntryInfo, error) {
 		return LastEntryInfo{}, err
 	}
 	defer server.Close()
-	if err = server.SetAutoRecovery(false)
+	if err = server.SetAutoRecovery(false); err != nil {
+		return LastEntryInfo{}, err
+	}
 	index, term, err := server.DescribeLastEntry()
 	if err != nil {
 		return LastEntryInfo{}, err
