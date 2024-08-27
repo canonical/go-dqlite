@@ -269,7 +269,7 @@ func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
 // of two LastEntryInfo values is equivalent to asking whether the log of `x`
 // is more up to date than the log of `y`.
 type LastEntryInfo struct {
-	term, index uint64
+	Term, Index uint64
 }
 
 // Read information about the last entry in the raft persistent log from a
@@ -290,7 +290,7 @@ func ReadLastEntryInfo(dir string) (LastEntryInfo, error) {
 	if err != nil {
 		return LastEntryInfo{}, err
 	}
-	return LastEntryInfo{index, term}, nil
+	return LastEntryInfo{term, index}, nil
 }
 
 // Create a options object with sane defaults.
