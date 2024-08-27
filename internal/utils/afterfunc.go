@@ -10,7 +10,7 @@ import (
 
 func AfterFunc(ctx context.Context, f func()) (stop func() bool) {
 	if ctx.Done() == nil {
-		return func() bool { return false }
+		return func() bool { return true }
 	}
 
 	var run int32 = 0
