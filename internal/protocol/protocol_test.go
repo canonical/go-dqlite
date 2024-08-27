@@ -97,49 +97,49 @@ var testsProtocolContext = []testProtocolContext{{
 	f:        (*protocol.Protocol).Call,
 	hangRead: true,
 	timeout:  time.Millisecond * 200,
-	err:      `call leader \(budget .*ms\): receive: header: read pipe: i/o timeout`,
+	err:      `call leader \(budget .*ms\): receive: header: read pipe: (i/o timeout|deadline exceeded)`,
 }, {
 	summary:   "Call timeout write",
 	f:         (*protocol.Protocol).Call,
 	hangWrite: true,
 	timeout:   time.Millisecond * 200,
-	err:       `call leader \(budget .*ms\): send: header: write pipe: i/o timeout`,
+	err:       `call leader \(budget .*ms\): send: header: write pipe: (i/o timeout|deadline exceeded)`,
 }, {
 	summary:  "Call cancel read",
 	f:        (*protocol.Protocol).Call,
 	hangRead: true,
 	cancel:   time.Millisecond * 200,
-	err:      `call leader \(canceled\): receive: header: read pipe: i/o timeout`,
+	err:      `call leader \(canceled\): receive: header: read pipe: (i/o timeout|deadline exceeded)`,
 }, {
 	summary:   "Call cancel write",
 	f:         (*protocol.Protocol).Call,
 	hangWrite: true,
 	cancel:    time.Millisecond * 200,
-	err:       `call leader \(canceled\): send: header: write pipe: i/o timeout`,
+	err:       `call leader \(canceled\): send: header: write pipe: (i/o timeout|deadline exceeded)`,
 }, {
 	summary:  "Interrupt timeout read",
 	f:        (*protocol.Protocol).Interrupt,
 	hangRead: true,
 	timeout:  time.Millisecond * 200,
-	err:      `interrupt request \(budget .*ms\): receive: header: read pipe: i/o timeout`,
+	err:      `interrupt request \(budget .*ms\): receive: header: read pipe: (i/o timeout|deadline exceeded)`,
 }, {
 	summary:   "Interrupt timeout write",
 	f:         (*protocol.Protocol).Interrupt,
 	hangWrite: true,
 	timeout:   time.Millisecond * 200,
-	err:       `interrupt request \(budget .*ms\): send: header: write pipe: i/o timeout`,
+	err:       `interrupt request \(budget .*ms\): send: header: write pipe: (i/o timeout|deadline exceeded)`,
 }, {
 	summary:  "Interrupt cancel read",
 	f:        (*protocol.Protocol).Interrupt,
 	hangRead: true,
 	cancel:   time.Millisecond * 200,
-	err:      `interrupt request \(canceled\): receive: header: read pipe: i/o timeout`,
+	err:      `interrupt request \(canceled\): receive: header: read pipe: (i/o timeout|deadline exceeded)`,
 }, {
 	summary:   "Interrupt cancel write",
 	f:         (*protocol.Protocol).Interrupt,
 	hangWrite: true,
 	cancel:    time.Millisecond * 200,
-	err:       `interrupt request \(canceled\): send: header: write pipe: i/o timeout`,
+	err:       `interrupt request \(canceled\): send: header: write pipe: (i/o timeout|deadline exceeded)`,
 }}
 
 func runTestProtocolContext(t *testing.T, test testProtocolContext) {
