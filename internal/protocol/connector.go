@@ -270,7 +270,7 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 	if err != nil {
 		nerr, ok := errors.Cause(err).(net.Error)
 		if atomic.LoadInt32(&canceled) == 1 && ok && nerr.Timeout() {
-			return nil, errors.Wrap(err, "write handshake")
+			return nil, errors.Wrap(err, "write handshake canceled")
 		}
 		return nil, errors.Wrap(err, "write handshake")
 	}

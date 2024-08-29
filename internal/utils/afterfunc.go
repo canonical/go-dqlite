@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 )
 
+// TODO: remove custom implementation once all the supported Go versions
+// can use context.AfterFunc.
 func AfterFunc(ctx context.Context, f func()) (stop func() bool) {
 	if ctx.Done() == nil {
 		return func() bool { return true }

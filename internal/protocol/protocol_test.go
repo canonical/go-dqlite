@@ -143,14 +143,14 @@ var testsProtocolContext = []testProtocolContext{{
 }}
 
 func runTestProtocolContext(t *testing.T, test testProtocolContext) {
-	// Setup client and sever.
+	// Setup client and server.
 	server, client := net.Pipe()
 	defer client.Close()
 	defer server.Close()
 	// Kill goroutines when test is finished.
 	done := make(chan struct{})
 	defer close(done)
-	// If set, the sever will write continuously to the connection.
+	// If set, the server will write continuously to the connection.
 	if !test.hangRead {
 		go func() {
 			for {
@@ -163,7 +163,7 @@ func runTestProtocolContext(t *testing.T, test testProtocolContext) {
 			}
 		}()
 	}
-	// If set, the sever will read continuously from the connection.
+	// If set, the server will read continuously from the connection.
 	if !test.hangWrite {
 		go func() {
 			b := make([]byte, 10)

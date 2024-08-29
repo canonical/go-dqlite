@@ -94,7 +94,6 @@ func TestConnector_EmptyNodeStore(t *testing.T) {
 	check([]string{})
 }
 
-// Connection failed because the context expired.
 func TestConnector_ContextExpired(t *testing.T) {
 	store := newStore(t, []string{"1.2.3.4:666"})
 
@@ -113,7 +112,6 @@ func TestConnector_ContextExpired(t *testing.T) {
 	})*/
 }
 
-// Connection failed because the context expired.
 func TestConnector_ContextCanceled(t *testing.T) {
 	listener, err := net.Listen("unix", "@1234")
 	defer listener.Close()
