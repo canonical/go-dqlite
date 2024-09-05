@@ -252,7 +252,8 @@ func (s *Node) RecoverExt(cluster []protocol.NodeInfo) error {
 		C.setInfo(infos, C.unsigned(i), cid, caddress, crole)
 	}
 	if rc := C.dqlite_node_recover_ext(server, infos, n); rc != 0 {
-		return fmt.Errorf("recover failed with error code %d", rc)
+		errmsg := C.GoString(C.dqlite_node_errmsg(server))
+		return fmt.Errorf("recover failed with error code %d, error details: %s", rc, errmsg)
 	}
 	return nil
 }
