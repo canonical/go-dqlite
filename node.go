@@ -263,7 +263,8 @@ func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
 	return server.RecoverExt(cluster)
 }
 
-// Information about the last entry in the persistent raft log of a node.
+// LastEntryInfo holds information about the last entry in the persistent raft
+// log of a node.
 //
 // The order of fields is significant and ensures that the comparison `x > y`
 // of two LastEntryInfo values is equivalent to asking whether the log of `x`
@@ -272,8 +273,8 @@ type LastEntryInfo struct {
 	Term, Index uint64
 }
 
-// Read information about the last entry in the raft persistent log from a
-// node's data directory.
+// ReadLastEntryInfo reads information about the last entry in the raft
+// persistent log from a node's data directory.
 //
 // This is a non-destructive operation, but is not read-only, since it has the
 // side effect of renaming raft open segment files to closed segment files.
