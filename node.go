@@ -239,20 +239,16 @@ func ReconfigureMembership(dir string, cluster []NodeInfo) error {
 // loss and inconsistency:
 //
 // 1. Make sure no dqlite node in the cluster is running.
-//
 // 2. Identify all dqlite nodes that have survived and that you want to be part
 //    of the recovered cluster. Call this the "new member list".
-//
-// 3. From the nodes in the new member list, find the one with the most
-//    up-to-date raft term and log. Call this the "template node".
-//
+// 3. Call ReadLastEntryInfo on each node in the member list, and find which
+//    node has the most recent entry according to LastEntryInfo.Before. Call this
+//    the "template node".
 // 4. Invoke ReconfigureMembershipExt exactly one time, on the template node.
 //    The arguments are the data directory of the template node and the new
 //    member list.
-//
 // 5. Copy the data directory of the template node to all other nodes in the
 //    new member list, replacing their previous data directories.
-//
 // 6. Restart all nodes in the new member list.
 func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
 	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
@@ -266,28 +262,39 @@ func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
 // LastEntryInfo holds information about the last entry in the persistent raft
 // log of a node.
 //
-// The order of fields is significant and ensures that the comparison `x > y`
-// of two LastEntryInfo values is equivalent to asking whether the log of `x`
-// is more up to date than the log of `y`.
+// The zero value is not a valid entry description, and can be used as a
+// sentinel.
 type LastEntryInfo struct {
 	Term, Index uint64
+}
+
+// Before tells whether the entry described by the receiver is strictly less
+// recent than another entry.
+//
+// Entry A is less recent than entry B when A has a lower term number, or
+// when A and B have the same term number and A has a lower index.
+func (lhs LastEntryInfo) Before(rhs LastEntryInfo) bool {
+	return lhs.Term < rhs.Term || (lhs.Term == rhs.Term && lhs.Index < rhs.Index)
 }
 
 // ReadLastEntryInfo reads information about the last entry in the raft
 // persistent log from a node's data directory.
 //
+// This is intended to be used during the cluster recovery process, see
+// ReconfigureMembershipExt. The node must not be running.
+//
 // This is a non-destructive operation, but is not read-only, since it has the
 // side effect of renaming raft open segment files to closed segment files.
 func ReadLastEntryInfo(dir string) (LastEntryInfo, error) {
-	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
+	node, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	if err != nil {
 		return LastEntryInfo{}, err
 	}
-	defer server.Close()
-	if err = server.SetAutoRecovery(false); err != nil {
+	defer node.Close()
+	if err = node.SetAutoRecovery(false); err != nil {
 		return LastEntryInfo{}, err
 	}
-	index, term, err := server.DescribeLastEntry()
+	index, term, err := node.DescribeLastEntry()
 	if err != nil {
 		return LastEntryInfo{}, err
 	}
