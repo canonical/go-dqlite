@@ -1,3 +1,4 @@
+//go:build !nosqlite3
 // +build !nosqlite3
 
 package client
@@ -8,8 +9,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	_ "github.com/mattn/go-sqlite3" // Go SQLite bindings
+	"github.com/pkg/errors"
 )
 
 // Option that can be used to tweak node store parameters.
@@ -21,6 +23,7 @@ type nodeStoreOptions struct {
 
 // DatabaseNodeStore persists a list addresses of dqlite nodes in a SQL table.
 type DatabaseNodeStore struct {
+	protocol.Compass
 	db     *sql.DB // Database handle to use.
 	schema string  // Name of the schema holding the servers table.
 	table  string  // Name of the servers table.
@@ -154,4 +157,3 @@ func (d *DatabaseNodeStore) Set(ctx context.Context, servers []NodeInfo) error {
 
 	return nil
 }
-

@@ -27,11 +27,17 @@ type DialFunc func(context.Context, string) (net.Conn, error)
 // Connector is in charge of creating a dqlite SQL client connected to the
 // current leader of a cluster.
 type Connector struct {
-	id     uint64       // Conn ID to use when registering against the server.
-	store  NodeStore    // Used to get and update current cluster servers.
+	id     uint64 // Conn ID to use when registering against the server.
+	store  NodeStoreLeaderTracker
 	config Config       // Connection parameters.
 	log    logging.Func // Logging function.
 }
+
+type nonTracking struct{ NodeStore }
+
+func (nt *nonTracking) Guess() string { return "" }
+func (nt *nonTracking) Point(string)  {}
+func (nt *nonTracking) Shake()        {}
 
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
@@ -60,9 +66,14 @@ func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *
 		config.ConcurrentLeaderConns = MaxConcurrentLeaderConns
 	}
 
+	nslt, ok := store.(NodeStoreLeaderTracker)
+	if !ok {
+		nslt = &nonTracking{store}
+	}
+
 	connector := &Connector{
 		id:     id,
-		store:  store,
+		store:  nslt,
 		config: config,
 		log:    log,
 	}
@@ -122,9 +133,17 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	return protocol, nil
 }
 
-// Make a single attempt to establish a connection to the leader server trying
-// all addresses available in the store.
 func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
+	if addr := c.store.Guess(); addr != "" {
+		// TODO In the event of failure, we could still use the second
+		// return value to guide the next stage of the search.
+		if p, _, _ := c.connectAttemptOne(ctx, ctx, addr, log); p != nil {
+			log(logging.Debug, "server %s: connected on fast path", addr)
+			return p, nil
+		}
+		c.store.Shake()
+	}
+
 	servers, err := c.store.Get(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get servers")
@@ -146,19 +165,23 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 
 	sem := semaphore.NewWeighted(c.config.ConcurrentLeaderConns)
 
-	protocolCh := make(chan *Protocol)
+	type pair struct {
+		protocol *Protocol
+		address  string
+	}
+	leaderCh := make(chan pair)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(len(servers))
 
 	go func() {
 		wg.Wait()
-		close(protocolCh)
+		close(leaderCh)
 	}()
 
 	// Make an attempt for each address until we find the leader.
 	for _, server := range servers {
-		go func(server NodeInfo, pc chan<- *Protocol) {
+		go func(server NodeInfo, pc chan<- pair) {
 			defer wg.Done()
 
 			if err := sem.Acquire(ctx, 1); err != nil {
@@ -170,72 +193,61 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 				return
 			}
 
-			log := func(l logging.Level, format string, a ...interface{}) {
-				format = fmt.Sprintf("server %s: ", server.Address) + format
-				log(l, format, a...)
-			}
-
-			ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
-			defer cancel()
-
 			protocol, leader, err := c.connectAttemptOne(origCtx, ctx, server.Address, log)
 			if err != nil {
 				// This server is unavailable, try with the next target.
-				log(logging.Warn, err.Error())
+				log(logging.Warn, "server %s: %s", server.Address, err.Error())
 				return
 			}
 			if protocol != nil {
 				// We found the leader
-				log(logging.Debug, "connected")
-				pc <- protocol
+				pc <- pair{protocol, server.Address}
 				return
 			}
 			if leader == "" {
 				// This server does not know who the current leader is,
 				// try with the next target.
-				log(logging.Warn, "no known leader")
+				log(logging.Warn, "server %s: no known leader", server.Address)
 				return
 			}
 
 			// If we get here, it means this server reported that another
 			// server is the leader, let's close the connection to this
 			// server and try with the suggested one.
-			log(logging.Debug, "connect to reported leader %s", leader)
-
-			ctx, cancel = context.WithTimeout(ctx, c.config.AttemptTimeout)
-			defer cancel()
+			log(logging.Debug, "server %s: connect to reported leader %s", server.Address, leader)
 
 			protocol, _, err = c.connectAttemptOne(origCtx, ctx, leader, log)
 			if err != nil {
 				// The leader reported by the previous server is
 				// unavailable, try with the next target.
-				log(logging.Warn, "reported leader unavailable err=%v", err)
+				log(logging.Warn, "server %s: reported leader unavailable err=%v", leader, err)
 				return
 			}
 			if protocol == nil {
 				// The leader reported by the target server does not consider itself
 				// the leader, try with the next target.
-				log(logging.Warn, "reported leader server is not the leader")
+				log(logging.Warn, "server %s: reported leader server is not the leader", leader)
 				return
 			}
-			log(logging.Debug, "connected")
-			pc <- protocol
-		}(server, protocolCh)
+			pc <- pair{protocol, leader}
+		}(server, leaderCh)
 	}
 
 	// Read from protocol chan, cancel context
-	protocol, ok := <-protocolCh
+	leader, ok := <-leaderCh
 	if !ok {
 		return nil, ErrNoAvailableLeader
 	}
+	log(logging.Debug, "server %s: connected on fallback path", leader.address)
+	c.store.Point(leader.address)
 
 	cancel()
 
-	for extra := range protocolCh {
-		extra.Close()
+	for extra := range leaderCh {
+		extra.protocol.Close()
 	}
 
-	return protocol, nil
+	return leader.protocol, nil
 }
 
 // Perform the initial handshake using the given protocol version.
@@ -278,7 +290,15 @@ func (c *Connector) connectAttemptOne(
 	address string,
 	log logging.Func,
 ) (*Protocol, string, error) {
-	dialCtx, cancel := context.WithTimeout(dialCtx, c.config.DialTimeout)
+	log = func(l logging.Level, format string, a ...interface{}) {
+		format = fmt.Sprintf("server %s: ", address) + format
+		log(l, format, a...)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
+	defer cancel()
+
+	dialCtx, cancel = context.WithTimeout(dialCtx, c.config.DialTimeout)
 	defer cancel()
 
 	// Establish the connection.

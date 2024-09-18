@@ -46,6 +46,7 @@ type NodeStore interface {
 
 // InmemNodeStore keeps the list of servers in memory.
 type InmemNodeStore struct {
+	Compass
 	mu      sync.RWMutex
 	servers []NodeInfo
 }
@@ -73,4 +74,37 @@ func (i *InmemNodeStore) Set(ctx context.Context, servers []NodeInfo) error {
 	defer i.mu.Unlock()
 	i.servers = servers
 	return nil
+}
+
+type NodeStoreLeaderTracker interface {
+	NodeStore
+	Guess() string
+	Point(string)
+	Shake()
+}
+
+type Compass struct {
+	mu              sync.RWMutex
+	lastKnownLeader string
+}
+
+func (co *Compass) Guess() string {
+	co.mu.RLock()
+	defer co.mu.RUnlock()
+
+	return co.lastKnownLeader
+}
+
+func (co *Compass) Point(address string) {
+	co.mu.Lock()
+	defer co.mu.Unlock()
+
+	co.lastKnownLeader = address
+}
+
+func (co *Compass) Shake() {
+	co.mu.Lock()
+	defer co.mu.Unlock()
+
+	co.lastKnownLeader = ""
 }

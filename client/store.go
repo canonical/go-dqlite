@@ -30,6 +30,7 @@ var NewInmemNodeStore = protocol.NewInmemNodeStore
 
 // Persists a list addresses of dqlite nodes in a YAML file.
 type YamlNodeStore struct {
+	protocol.Compass
 	path    string
 	servers []NodeInfo
 	mu      sync.RWMutex

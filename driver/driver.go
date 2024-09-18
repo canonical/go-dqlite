@@ -189,7 +189,7 @@ func WithTracing(level client.LogLevel) Option {
 	}
 }
 
-// NewDriver creates a new dqlite driver, which also implements the
+// New creates a new dqlite driver, which also implements the
 // driver.Driver interface.
 func New(store client.NodeStore, options ...Option) (*Driver, error) {
 	o := defaultOptions()

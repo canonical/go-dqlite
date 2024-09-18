@@ -35,7 +35,22 @@ func TestConnector_Success(t *testing.T) {
 	assert.NoError(t, client.Close())
 
 	check([]string{
-		"DEBUG: attempt 1: server @test-0: connected",
+		"DEBUG: attempt 1: server @test-0: connected on fallback path",
+	})
+
+	log, check = newLogFunc(t)
+	connector = protocol.NewConnector(0, store, protocol.Config{}, log)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	client, err = connector.Connect(ctx)
+	require.NoError(t, err)
+
+	assert.NoError(t, client.Close())
+
+	check([]string{
+		"DEBUG: attempt 1: server @test-0: connected on fast path",
 	})
 }
 

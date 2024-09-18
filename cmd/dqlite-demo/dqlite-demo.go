@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
@@ -50,7 +51,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 			}
 
 			options := []app.Option{app.WithAddress(db), app.WithCluster(*join), app.WithLogFunc(logFunc),
-				app.WithDiskMode(diskMode)}
+				app.WithDiskMode(diskMode), app.WithRolesAdjustmentFrequency(5 * time.Second)}
 
 			// Set TLS options
 			if (crt != "" && key == "") || (key != "" && crt == "") {
