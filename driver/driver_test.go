@@ -615,10 +615,44 @@ func Test_ZeroColumns(t *testing.T) {
 	require.NoError(t, conn.Close())
 }
 
+func Test_DescribeLastEntry(t *testing.T) {
+	dir, dirCleanup := newDir(t)
+	defer dirCleanup()
+	_, cleanup := newNode(t, dir)
+	store := newStore(t, "@1")
+	log := logging.Test(t)
+	drv, err := dqlitedriver.New(store, dqlitedriver.WithLogFunc(log))
+	require.NoError(t, err)
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.(driver.Execer).Exec(`CREATE TABLE test (n INT)`, nil)
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare(`INSERT INTO test(n) VALUES(?)`)
+	require.NoError(t, err)
+
+	for i := 0; i < 300; i++ {
+		_, err := stmt.Exec([]driver.Value{ int64(i) })
+		require.NoError(t, err)
+	}
+	require.NoError(t, stmt.Close())
+	assert.NoError(t, conn.Close())
+
+	cleanup()
+
+	info, err := dqlite.ReadLastEntryInfo(dir)
+	require.NoError(t, err)
+	assert.Equal(t, info.Index, uint64(302))
+	assert.Equal(t, info.Term, uint64(1))
+}
+
 func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 	t.Helper()
 
-	_, cleanup := newNode(t)
+	dir, dirCleanup := newDir(t)
+	_, nodeCleanup := newNode(t, dir)
 
 	store := newStore(t, "@1")
 
@@ -626,6 +660,11 @@ func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 
 	driver, err := dqlitedriver.New(store, dqlitedriver.WithLogFunc(log))
 	require.NoError(t, err)
+
+	cleanup := func() {
+		nodeCleanup()
+		dirCleanup()
+	}
 
 	return driver, cleanup
 }
@@ -641,9 +680,8 @@ func newStore(t *testing.T, address string) client.NodeStore {
 	return store
 }
 
-func newNode(t *testing.T) (*dqlite.Node, func()) {
+func newNode(t *testing.T, dir string) (*dqlite.Node, func()) {
 	t.Helper()
-	dir, dirCleanup := newDir(t)
 
 	server, err := dqlite.New(uint64(1), "@1", dir, dqlite.WithBindAddress("@1"))
 	require.NoError(t, err)
@@ -653,7 +691,6 @@ func newNode(t *testing.T) (*dqlite.Node, func()) {
 
 	cleanup := func() {
 		require.NoError(t, server.Close())
-		dirCleanup()
 	}
 
 	return server, cleanup
