@@ -35,9 +35,11 @@ type Connector struct {
 
 type nonTracking struct{ NodeStore }
 
-func (nt *nonTracking) Guess() string { return "" }
-func (nt *nonTracking) Point(string)  {}
-func (nt *nonTracking) Shake()        {}
+func (nt *nonTracking) Guess() string          { return "" }
+func (nt *nonTracking) Point(string)           {}
+func (nt *nonTracking) Shake()                 {}
+func (nt *nonTracking) Lease() *Session        { return nil }
+func (nt *nonTracking) Unlease(*Session) error { return nil }
 
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
@@ -84,8 +86,22 @@ func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *
 // Connect finds the leader server and returns a connection to it.
 //
 // If the connector is stopped before a leader is found, nil is returned.
-func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
-	var protocol *Protocol
+func (c *Connector) Connect(ctx context.Context) (*Session, error) {
+	var protocol *Session
+
+	if c.config.PermitShared {
+		sess := c.store.Lease()
+		if sess != nil {
+			leader, err := askLeader(ctx, sess.Protocol)
+			if err == nil && sess.Address == leader {
+				c.log(logging.Debug, "reusing shared connection to %s", sess.Address)
+				return sess, nil
+			}
+			c.log(logging.Debug, "discarding shared connection to %s", sess.Address)
+			sess.Bad()
+			sess.Close()
+		}
+	}
 
 	strategies := makeRetryStrategies(c.config.BackoffFactor, c.config.BackoffCap, c.config.RetryLimit)
 
@@ -133,13 +149,13 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	return protocol, nil
 }
 
-func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
+func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Session, error) {
 	if addr := c.store.Guess(); addr != "" {
 		// TODO In the event of failure, we could still use the second
 		// return value to guide the next stage of the search.
 		if p, _, _ := c.connectAttemptOne(ctx, ctx, addr, log); p != nil {
 			log(logging.Debug, "server %s: connected on fast path", addr)
-			return p, nil
+			return &Session{Protocol: p, Address: addr}, nil
 		}
 		c.store.Shake()
 	}
@@ -165,11 +181,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 
 	sem := semaphore.NewWeighted(c.config.ConcurrentLeaderConns)
 
-	type pair struct {
-		protocol *Protocol
-		address  string
-	}
-	leaderCh := make(chan pair)
+	leaderCh := make(chan *Session)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(len(servers))
@@ -181,7 +193,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 
 	// Make an attempt for each address until we find the leader.
 	for _, server := range servers {
-		go func(server NodeInfo, pc chan<- pair) {
+		go func(server NodeInfo, pc chan<- *Session) {
 			defer wg.Done()
 
 			if err := sem.Acquire(ctx, 1); err != nil {
@@ -201,7 +213,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			}
 			if protocol != nil {
 				// We found the leader
-				pc <- pair{protocol, server.Address}
+				pc <- &Session{Protocol: protocol, Address: server.Address}
 				return
 			}
 			if leader == "" {
@@ -229,7 +241,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 				log(logging.Warn, "server %s: reported leader server is not the leader", leader)
 				return
 			}
-			pc <- pair{protocol, leader}
+			pc <- &Session{Protocol: protocol, Address: leader}
 		}(server, leaderCh)
 	}
 
@@ -238,16 +250,17 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 	if !ok {
 		return nil, ErrNoAvailableLeader
 	}
-	log(logging.Debug, "server %s: connected on fallback path", leader.address)
-	c.store.Point(leader.address)
+	log(logging.Debug, "server %s: connected on fallback path", leader.Address)
+	c.store.Point(leader.Address)
+	leader.Tracker = c.store
 
 	cancel()
 
 	for extra := range leaderCh {
-		extra.protocol.Close()
+		extra.Close()
 	}
 
-	return leader.protocol, nil
+	return leader, nil
 }
 
 // Perform the initial handshake using the given protocol version.
@@ -319,32 +332,11 @@ func (c *Connector) connectAttemptOne(
 		return nil, "", err
 	}
 
-	// Send the initial Leader request.
-	request := Message{}
-	request.Init(16)
-	response := Message{}
-	response.Init(512)
-
-	EncodeLeader(&request)
-
-	if err := protocol.Call(ctx, &request, &response); err != nil {
-		protocol.Close()
-		cause := errors.Cause(err)
-		// Best-effort detection of a pre-1.0 dqlite node: when sent
-		// version 1 it should close the connection immediately.
-		if err, ok := cause.(*net.OpError); ok && !err.Timeout() || cause == io.EOF {
-			return nil, "", errBadProtocol
-		}
-
-		return nil, "", err
-	}
-
-	_, leader, err := DecodeNodeCompat(protocol, &response)
+	leader, err := askLeader(ctx, protocol)
 	if err != nil {
 		protocol.Close()
 		return nil, "", err
 	}
-
 	switch leader {
 	case "":
 		// Currently this server does not know about any leader.
@@ -352,8 +344,10 @@ func (c *Connector) connectAttemptOne(
 		return nil, "", nil
 	case address:
 		// This server is the leader, register ourselves and return.
-		request.reset()
-		response.reset()
+		request := Message{}
+		request.Init(16)
+		response := Message{}
+		response.Init(512)
 
 		EncodeClient(&request, c.id)
 
@@ -378,6 +372,32 @@ func (c *Connector) connectAttemptOne(
 		protocol.Close()
 		return nil, leader, nil
 	}
+}
+
+func askLeader(ctx context.Context, protocol *Protocol) (string, error) {
+	request := Message{}
+	request.Init(16)
+	response := Message{}
+	response.Init(512)
+
+	EncodeLeader(&request)
+
+	if err := protocol.Call(ctx, &request, &response); err != nil {
+		cause := errors.Cause(err)
+		// Best-effort detection of a pre-1.0 dqlite node: when sent
+		// version 1 it should close the connection immediately.
+		if err, ok := cause.(*net.OpError); ok && !err.Timeout() || cause == io.EOF {
+			return "", errBadProtocol
+		}
+
+		return "", err
+	}
+
+	_, leader, err := DecodeNodeCompat(protocol, &response)
+	if err != nil {
+		return "", err
+	}
+	return leader, nil
 }
 
 // Return a retry strategy with exponential backoff, capped at the given amount

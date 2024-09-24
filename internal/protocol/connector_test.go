@@ -54,6 +54,46 @@ func TestConnector_Success(t *testing.T) {
 	})
 }
 
+// Open a connection with PermitShared set and then close it. Then,
+// do the same thing again and verify that original connection is re-used.
+func TestConnector_PermitShared(t *testing.T) {
+	address, cleanup := newNode(t, 0)
+	defer cleanup()
+
+	store := newStore(t, []string{address})
+
+	log, check := newLogFunc(t)
+	connector := protocol.NewConnector(0, store, protocol.Config{}, log)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	client, err := connector.Connect(ctx)
+	require.NoError(t, err)
+
+	assert.NoError(t, client.Close())
+
+	check([]string{
+		"DEBUG: attempt 1: server @test-0: connected on fallback path",
+	})
+
+	log, check = newLogFunc(t)
+	config := protocol.Config{PermitShared: true}
+	connector = protocol.NewConnector(0, store, config, log)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	client, err = connector.Connect(ctx)
+	require.NoError(t, err)
+
+	assert.NoError(t, client.Close())
+
+	check([]string{
+		"DEBUG: reusing shared connection to @test-0",
+	})
+}
+
 // The network connection can't be established within the specified number of
 // attempts.
 func TestConnector_LimitRetries(t *testing.T) {

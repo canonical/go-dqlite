@@ -12,7 +12,7 @@ type DialFunc = protocol.DialFunc
 
 // Client speaks the dqlite wire protocol.
 type Client struct {
-	protocol *protocol.Protocol
+	session *protocol.Session
 }
 
 // Option that can be used to tweak client parameters.
@@ -64,15 +64,24 @@ func New(ctx context.Context, address string, options ...Option) (*Client, error
 		return nil, errors.Wrap(err, "failed to establish network connection")
 	}
 
-	protocol, err := protocol.Handshake(ctx, conn, protocol.VersionOne)
+	proto, err := protocol.Handshake(ctx, conn, protocol.VersionOne)
 	if err != nil {
 		conn.Close()
 		return nil, err
 	}
 
-	client := &Client{protocol: protocol}
+	sess := &protocol.Session{Protocol: proto, Address: address}
+	client := &Client{session: sess}
 
 	return client, nil
+}
+
+func (c *Client) call(ctx context.Context, request *protocol.Message, response *protocol.Message) error {
+	if err := c.session.Protocol.Call(ctx, request, response); err != nil {
+		c.session.Bad()
+		return err
+	}
+	return nil
 }
 
 // Leader returns information about the current leader, if any.
@@ -84,7 +93,7 @@ func (c *Client) Leader(ctx context.Context) (*NodeInfo, error) {
 
 	protocol.EncodeLeader(&request)
 
-	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+	if err := c.call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send Leader request")
 	}
 
@@ -107,7 +116,7 @@ func (c *Client) Cluster(ctx context.Context) ([]NodeInfo, error) {
 
 	protocol.EncodeCluster(&request, protocol.ClusterFormatV1)
 
-	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+	if err := c.call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send Cluster request")
 	}
 
@@ -137,7 +146,7 @@ func (c *Client) Dump(ctx context.Context, dbname string) ([]File, error) {
 
 	protocol.EncodeDump(&request, dbname)
 
-	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+	if err := c.call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send dump request")
 	}
 
@@ -174,7 +183,7 @@ func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 
 	protocol.EncodeAdd(&request, node.ID, node.Address)
 
-	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+	if err := c.call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -210,7 +219,7 @@ func (c *Client) Assign(ctx context.Context, id uint64, role NodeRole) error {
 
 	protocol.EncodeAssign(&request, id, uint64(role))
 
-	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+	if err := c.call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -233,7 +242,7 @@ func (c *Client) Transfer(ctx context.Context, id uint64) error {
 
 	protocol.EncodeTransfer(&request, id)
 
-	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+	if err := c.call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -253,7 +262,7 @@ func (c *Client) Remove(ctx context.Context, id uint64) error {
 
 	protocol.EncodeRemove(&request, id)
 
-	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+	if err := c.call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -279,7 +288,7 @@ func (c *Client) Describe(ctx context.Context) (*NodeMetadata, error) {
 
 	protocol.EncodeDescribe(&request, protocol.RequestDescribeFormatV0)
 
-	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+	if err := c.call(ctx, &request, &response); err != nil {
 		return nil, err
 	}
 
@@ -305,7 +314,7 @@ func (c *Client) Weight(ctx context.Context, weight uint64) error {
 
 	protocol.EncodeWeight(&request, weight)
 
-	if err := c.protocol.Call(ctx, &request, &response); err != nil {
+	if err := c.call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -318,7 +327,7 @@ func (c *Client) Weight(ctx context.Context, weight uint64) error {
 
 // Close the client.
 func (c *Client) Close() error {
-	return c.protocol.Close()
+	return c.session.Close()
 }
 
 // Create a client options object with sane defaults.

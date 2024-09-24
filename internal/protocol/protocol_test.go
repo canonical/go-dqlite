@@ -165,7 +165,7 @@ func newProtocol(t *testing.T) (*protocol.Protocol, func()) {
 		serverCleanup()
 	}
 
-	return client, cleanup
+	return client.Protocol, cleanup
 }
 
 // Perform a client call.

@@ -22,14 +22,15 @@ func FindLeader(ctx context.Context, store NodeStore, options ...Option) (*Clien
 	config := protocol.Config{
 		Dial:                  o.DialFunc,
 		ConcurrentLeaderConns: o.ConcurrentLeaderConns,
+		PermitShared:          true,
 	}
 	connector := protocol.NewConnector(0, store, config, o.LogFunc)
-	protocol, err := connector.Connect(ctx)
+	sess, err := connector.Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	client := &Client{protocol: protocol}
+	client := &Client{sess}
 
 	return client, nil
 }

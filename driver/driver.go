@@ -274,11 +274,11 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 		tracing:        c.driver.tracing,
 	}
 
-	var err error
-	conn.protocol, err = connector.Connect(ctx)
+	sess, err := connector.Connect(ctx)
 	if err != nil {
 		return nil, driverError(conn.log, errors.Wrap(err, "failed to create dqlite connection"))
 	}
+	conn.protocol = sess.Protocol
 
 	conn.request.Init(4096)
 	conn.response.Init(4096)
