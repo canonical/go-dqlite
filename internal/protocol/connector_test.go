@@ -37,61 +37,109 @@ func TestConnector_Success(t *testing.T) {
 	check([]string{
 		"DEBUG: attempt 1: server @test-0: connected on fallback path",
 	})
-
-	log, check = newLogFunc(t)
-	connector = protocol.NewConnector(0, store, protocol.Config{}, log)
-
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	client, err = connector.Connect(ctx)
-	require.NoError(t, err)
-
-	assert.NoError(t, client.Close())
-
-	check([]string{
-		"DEBUG: attempt 1: server @test-0: connected on fast path",
-	})
 }
 
-// Open a connection with PermitShared set and then close it. Then,
-// do the same thing again and verify that original connection is re-used.
-func TestConnector_PermitShared(t *testing.T) {
+// Check the interaction of Connector.Connect with a leader tracker.
+//
+// The leader tracker potentially stores two pieces of data, an address and a shared connection.
+// This gives us four states: INIT (have neither address nor connection), HAVE_ADDR, HAVE_CONN, and HAVE_BOTH.
+// Transitions between these states are triggered by Connector.Connect and Protocol.Close.
+// This test methodically triggers all the possible transitions and checks that they have
+// the intended externally-observable effects.
+func TestConnector_LeaderTracker(t *testing.T) {
+	// options is a configuration for calling Connector.Connect
+	// in order to trigger a specific state transition.
+	type options struct {
+		config        protocol.Config
+		injectFailure bool
+		returnProto   bool
+		expectedLog   []string
+	}
+
+	injectFailure := func(o *options) {
+		o.injectFailure = true
+		o.expectedLog = append(o.expectedLog, "WARN: attempt 1: server @test-0: context deadline exceeded")
+	}
+	permitShared := func(o *options) {
+		o.config.PermitShared = true
+	}
+	returnProto := func(o *options) {
+		o.returnProto = true
+	}
+	expectDiscard := func(o *options) {
+		o.expectedLog = append(o.expectedLog, "DEBUG: discarding shared connection to @test-0")
+	}
+	expectFallback := func(o *options) {
+		o.expectedLog = append(o.expectedLog, "DEBUG: attempt 1: server @test-0: connected on fallback path")
+	}
+	expectFast := func(o *options) {
+		o.expectedLog = append(o.expectedLog, "DEBUG: attempt 1: server @test-0: connected on fast path")
+	}
+	expectShared := func(o *options) {
+		o.expectedLog = append(o.expectedLog, "DEBUG: reusing shared connection to @test-0")
+	}
+
 	address, cleanup := newNode(t, 0)
 	defer cleanup()
-
 	store := newStore(t, []string{address})
 
-	log, check := newLogFunc(t)
-	connector := protocol.NewConnector(0, store, protocol.Config{}, log)
+	check := func(opts ...func(*options)) *protocol.Protocol {
+		o := &options{config: protocol.Config{RetryLimit: 1}}
+		for _, opt := range opts {
+			opt(o)
+		}
+		log, checkLog := newLogFunc(t)
+		connector := protocol.NewConnector(0, store, o.config, log)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		if o.injectFailure {
+			ctx, cancel = context.WithDeadline(ctx, time.Unix(1, 0))
+			defer cancel()
+		}
+		proto, err := connector.Connect(ctx)
+		if o.injectFailure {
+			require.Equal(t, protocol.ErrNoAvailableLeader, err)
+		} else {
+			require.NoError(t, err)
+		}
+		checkLog(o.expectedLog)
+		if o.returnProto {
+			return proto
+		} else if err == nil {
+			assert.NoError(t, proto.Close())
+		}
+		return nil
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	client, err := connector.Connect(ctx)
-	require.NoError(t, err)
-
-	assert.NoError(t, client.Close())
-
-	check([]string{
-		"DEBUG: attempt 1: server @test-0: connected on fallback path",
-	})
-
-	log, check = newLogFunc(t)
-	config := protocol.Config{PermitShared: true}
-	connector = protocol.NewConnector(0, store, config, log)
-
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	client, err = connector.Connect(ctx)
-	require.NoError(t, err)
-
-	assert.NoError(t, client.Close())
-
-	check([]string{
-		"DEBUG: reusing shared connection to @test-0",
-	})
+	// INIT -> INIT
+	check(injectFailure)
+	// INIT -> HAVE_ADDR
+	check(expectFallback)
+	// HAVE_ADDR -> HAVE_ADDR
+	proto := check(permitShared, expectFast, returnProto)
+	// We need an extra protocol to trigger INIT->HAVE_CONN later.
+	// Grab one here where it doesn't cause a state transition.
+	protoForLater := check(permitShared, expectFast, returnProto)
+	// HAVE_ADDR -> HAVE_BOTH
+	assert.NoError(t, proto.Close())
+	// HAVE_BOTH -> HAVE_BOTH
+	check(expectFast)
+	// HAVE_BOTH -> HAVE_CONN
+	check(injectFailure)
+	// HAVE_CONN -> HAVE_CONN
+	check(injectFailure)
+	// HAVE_CONN -> INIT
+	check(permitShared, expectDiscard, injectFailure)
+	// INIT -> HAVE_CONN
+	assert.NoError(t, protoForLater.Close())
+	// HAVE_CONN -> HAVE_BOTH
+	check(expectFallback)
+	// HAVE_BOTH -> HAVE_ADDR
+	proto = check(permitShared, expectShared, returnProto)
+	proto.Bad()
+	assert.NoError(t, proto.Close())
+	// HAVE_ADDR -> INIT
+	check(injectFailure)
 }
 
 // The network connection can't be established within the specified number of
