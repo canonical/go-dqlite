@@ -113,11 +113,13 @@ func (c *Connector) Connect(ctx context.Context) (*Session, error) {
 			c.log(l, format, a...)
 		}
 
-		select {
-		case <-ctx.Done():
-			// Stop retrying
-			return nil
-		default:
+		if attempt > 1 {
+			select {
+			case <-ctx.Done():
+				// Stop retrying
+				return nil
+			default:
+			}
 		}
 
 		var err error
