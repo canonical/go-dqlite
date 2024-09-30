@@ -13,21 +13,12 @@ import (
 
 // Protocol sends and receive the dqlite message on the wire.
 type Protocol struct {
-	version uint64        // Protocol version
-	conn    net.Conn      // Underlying network connection.
-	closeCh chan struct{} // Stops the heartbeat when the connection gets closed
-	mu      sync.Mutex    // Serialize requests
-	netErr  error         // A network error occurred
-}
-
-func newProtocol(version uint64, conn net.Conn) *Protocol {
-	protocol := &Protocol{
-		version: version,
-		conn:    conn,
-		closeCh: make(chan struct{}),
-	}
-
-	return protocol
+	version uint64     // Protocol version
+	conn    net.Conn   // Underlying network connection.
+	mu      sync.Mutex // Serialize requests
+	netErr  error      // A network error occurred
+	addr    string
+	tracker LeaderTracker
 }
 
 // Call invokes a dqlite RPC, sending a request message and receiving a
@@ -38,14 +29,15 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.netErr != nil {
-		return p.netErr
+	if err = p.netErr; err != nil {
+		return
 	}
 
 	defer func() {
 		if err == nil {
 			return
 		}
+		p.Bad()
 		switch errors.Cause(err).(type) {
 		case *net.OpError:
 			p.netErr = err
@@ -75,13 +67,16 @@ func (p *Protocol) Call(ctx context.Context, request, response *Message) (err er
 }
 
 // More is used when a request maps to multiple responses.
-func (p *Protocol) More(ctx context.Context, response *Message) error {
-	return p.recv(response)
+func (p *Protocol) More(ctx context.Context, response *Message) (err error) {
+	if err = p.recv(response); err != nil {
+		p.Bad()
+	}
+	return
 }
 
 // Interrupt sends an interrupt request and awaits for the server's empty
 // response.
-func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Message) error {
+func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Message) (err error) {
 	// We need to take a lock since the dqlite server currently does not
 	// support concurrent requests.
 	p.mu.Lock()
@@ -95,12 +90,18 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 
 	EncodeInterrupt(request, 0)
 
-	if err := p.send(request); err != nil {
+	defer func() {
+		if err != nil {
+			p.Bad()
+		}
+	}()
+
+	if err = p.send(request); err != nil {
 		return errors.Wrap(err, "failed to send interrupt request")
 	}
 
 	for {
-		if err := p.recv(response); err != nil {
+		if err = p.recv(response); err != nil {
 			return errors.Wrap(err, "failed to receive response")
 		}
 
@@ -114,10 +115,25 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 	return nil
 }
 
-// Close the client connection.
+// Bad prevents a protocol from being reused when it is released.
+//
+// There is no need to call Bad after a method of Protocol returns an error.
+// Only call Bad when the protocol is deemed unsuitable for reuse for some
+// higher-level reason.
+func (p *Protocol) Bad() {
+	p.tracker = nil
+}
+
+// Close releases a protocol.
+//
+// If the protocol was associated with a LeaderTracker, it will be made
+// available for reuse by that tracker. Otherwise, the underlying connection
+// will be closed.
 func (p *Protocol) Close() error {
-	close(p.closeCh)
-	return p.conn.Close()
+	if tr := p.tracker; tr == nil || !tr.DonateSharedProtocol(p) {
+		return p.conn.Close()
+	}
+	return nil
 }
 
 func (p *Protocol) send(req *Message) error {
@@ -236,63 +252,6 @@ func (p *Protocol) recvFill(buf []byte) (int, error) {
 	}
 	return -1, io.ErrNoProgress
 }
-
-/*
-func (p *Protocol) heartbeat() {
-	request := Message{}
-	request.Init(16)
-	response := Message{}
-	response.Init(512)
-
-	for {
-		delay := c.heartbeatTimeout / 3
-
-		//c.logger.Debug("sending heartbeat", zap.Duration("delay", delay))
-		time.Sleep(delay)
-
-		// Check if we've been closed.
-		select {
-		case <-c.closeCh:
-			return
-		default:
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-
-		EncodeHeartbeat(&request, uint64(time.Now().Unix()))
-
-		err := c.Call(ctx, &request, &response)
-
-		// We bail out upon failures.
-		//
-		// TODO: make the client survive temporary disconnections.
-		if err != nil {
-			cancel()
-			//c.logger.Error("heartbeat failed", zap.Error(err))
-			return
-		}
-
-		//addresses, err := DecodeNodes(&response)
-		_, err = DecodeNodes(&response)
-		if err != nil {
-			cancel()
-			//c.logger.Error("invalid heartbeat response", zap.Error(err))
-			return
-		}
-
-		// if err := c.store.Set(ctx, addresses); err != nil {
-		// 	cancel()
-		// 	c.logger.Error("failed to update servers", zap.Error(err))
-		// 	return
-		// }
-
-		cancel()
-
-		request.Reset()
-		response.Reset()
-	}
-}
-*/
 
 // DecodeNodeCompat handles also pre-1.0 legacy server messages.
 func DecodeNodeCompat(protocol *Protocol, response *Message) (uint64, string, error) {

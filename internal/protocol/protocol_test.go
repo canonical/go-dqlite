@@ -156,16 +156,16 @@ func newProtocol(t *testing.T) (*protocol.Protocol, func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 
-	client, err := connector.Connect(ctx)
+	proto, err := connector.Connect(ctx)
 
 	require.NoError(t, err)
 
 	cleanup := func() {
-		client.Close()
+		proto.Close()
 		serverCleanup()
 	}
 
-	return client.Protocol, cleanup
+	return proto, cleanup
 }
 
 // Perform a client call.

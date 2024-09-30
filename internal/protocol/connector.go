@@ -33,13 +33,19 @@ type Connector struct {
 	log    logging.Func // Logging function.
 }
 
+// nonTracking extends any NodeStore with no-op leader tracking.
+//
+// This is used as a fallback when the NodeStore used by the connector doesn't
+// implement NodeStoreLeaderTracker. This can only be the case for a custom NodeStore
+// provided by downstream. In this case, the connector will behave as it did before
+// the LeaderTracker optimizations were introduced.
 type nonTracking struct{ NodeStore }
 
-func (nt *nonTracking) Guess() string          { return "" }
-func (nt *nonTracking) Point(string)           {}
-func (nt *nonTracking) Shake()                 {}
-func (nt *nonTracking) Lease() *Session        { return nil }
-func (nt *nonTracking) Unlease(*Session) error { return nil }
+func (nt *nonTracking) GetLeaderAddr() string               { return "" }
+func (nt *nonTracking) SetLeaderAddr(string)                {}
+func (nt *nonTracking) UnsetLeaderAddr()                    {}
+func (nt *nonTracking) TakeSharedProtocol() *Protocol       { return nil }
+func (nt *nonTracking) DonateSharedProtocol(*Protocol) bool { return false }
 
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
@@ -73,40 +79,29 @@ func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *
 		nslt = &nonTracking{store}
 	}
 
-	connector := &Connector{
-		id:     id,
-		store:  nslt,
-		config: config,
-		log:    log,
-	}
-
-	return connector
+	return &Connector{id: id, store: nslt, config: config, log: log}
 }
 
-// Connect finds the leader server and returns a connection to it.
+// Connect returns a connection to the cluster leader.
 //
-// If the connector is stopped before a leader is found, nil is returned.
-func (c *Connector) Connect(ctx context.Context) (*Session, error) {
-	var protocol *Session
-
+// If the connector was configured with PermitShared, and a reusable connection
+// is available from the leader tracker, that connection is returned. Otherwise,
+// a new connection is opened.
+func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	if c.config.PermitShared {
-		sess := c.store.Lease()
-		if sess != nil {
-			leader, err := askLeader(ctx, sess.Protocol)
-			if err == nil && sess.Address == leader {
-				c.log(logging.Debug, "reusing shared connection to %s", sess.Address)
-				return sess, nil
+		if sharedProto := c.store.TakeSharedProtocol(); sharedProto != nil {
+			if leaderAddr, err := askLeader(ctx, sharedProto); err == nil && sharedProto.addr == leaderAddr {
+				c.log(logging.Debug, "reusing shared connection to %s", sharedProto.addr)
+				c.store.SetLeaderAddr(leaderAddr)
+				return sharedProto, nil
 			}
-			c.log(logging.Debug, "discarding shared connection to %s", sess.Address)
-			sess.Bad()
-			sess.Close()
+			c.log(logging.Debug, "discarding shared connection to %s", sharedProto.addr)
+			sharedProto.Bad()
+			sharedProto.Close()
 		}
 	}
 
-	strategies := makeRetryStrategies(c.config.BackoffFactor, c.config.BackoffCap, c.config.RetryLimit)
-
-	// The retry strategy should be configured to retry indefinitely, until
-	// the given context is done.
+	var proto *Protocol
 	err := retry.Retry(func(attempt uint) error {
 		log := func(l logging.Level, format string, a ...interface{}) {
 			format = fmt.Sprintf("attempt %d: ", attempt) + format
@@ -123,51 +118,54 @@ func (c *Connector) Connect(ctx context.Context) (*Session, error) {
 		}
 
 		var err error
-		protocol, err = c.connectAttemptAll(ctx, log)
-		if err != nil {
-			return err
-		}
+		proto, err = c.connectAttemptAll(ctx, log)
+		return err
+	}, c.config.RetryStrategies()...)
 
-		return nil
-	}, strategies...)
-
-	if err != nil {
-		// We exhausted the number of retries allowed by the configured
-		// strategy.
-		return nil, ErrNoAvailableLeader
-	}
-
-	if ctx.Err() != nil {
+	if err != nil || ctx.Err() != nil {
 		return nil, ErrNoAvailableLeader
 	}
 
 	// At this point we should have a connected protocol object, since the
 	// retry loop didn't hit any error and the given context hasn't
 	// expired.
-	if protocol == nil {
+	if proto == nil {
 		panic("no protocol object")
 	}
 
-	return protocol, nil
+	c.store.SetLeaderAddr(proto.addr)
+	if c.config.PermitShared {
+		proto.tracker = c.store
+	}
+
+	return proto, nil
 }
 
-func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Session, error) {
-	if addr := c.store.Guess(); addr != "" {
+// connectAttemptAll tries to establish a new connection to the cluster leader.
+//
+// First, if the address of the last known leader has been recorded, try
+// to connect to that server and confirm its leadership. This is a fast path
+// for stable clusters that avoids opening lots of connections. If that fails,
+// fall back to probing all servers in parallel, checking whether each
+// is the leader itself or knows who the leader is.
+func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
+	if addr := c.store.GetLeaderAddr(); addr != "" {
 		// TODO In the event of failure, we could still use the second
 		// return value to guide the next stage of the search.
-		if p, _, _ := c.connectAttemptOne(ctx, ctx, addr, log); p != nil {
+		if proto, _, _ := c.connectAttemptOne(ctx, ctx, addr, log); proto != nil {
 			log(logging.Debug, "server %s: connected on fast path", addr)
-			return &Session{Protocol: p, Address: addr}, nil
+			return proto, nil
 		}
-		c.store.Shake()
+		c.store.UnsetLeaderAddr()
 	}
 
 	servers, err := c.store.Get(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get servers")
 	}
-
-	// Sort servers by Role, from low to high.
+	// Probe voters before standbys before spares. Only voters can potentially
+	// be the leader, and standbys are more likely to know who the leader is
+	// than spares since they participate more in the cluster.
 	sort.Slice(servers, func(i, j int) bool {
 		return servers[i].Role < servers[j].Role
 	})
@@ -181,21 +179,16 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*S
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	leaderCh := make(chan *Protocol)
 	sem := semaphore.NewWeighted(c.config.ConcurrentLeaderConns)
-
-	leaderCh := make(chan *Session)
-
 	wg := &sync.WaitGroup{}
 	wg.Add(len(servers))
-
 	go func() {
 		wg.Wait()
 		close(leaderCh)
 	}()
-
-	// Make an attempt for each address until we find the leader.
 	for _, server := range servers {
-		go func(server NodeInfo, pc chan<- *Session) {
+		go func(server NodeInfo) {
 			defer wg.Done()
 
 			if err := sem.Acquire(ctx, 1); err != nil {
@@ -203,70 +196,46 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*S
 			}
 			defer sem.Release(1)
 
-			if ctx.Err() != nil {
-				return
-			}
-
-			protocol, leader, err := c.connectAttemptOne(origCtx, ctx, server.Address, log)
+			proto, leader, err := c.connectAttemptOne(origCtx, ctx, server.Address, log)
 			if err != nil {
-				// This server is unavailable, try with the next target.
-				log(logging.Warn, "server %s: %s", server.Address, err.Error())
+				log(logging.Warn, "server %s: %v", server.Address, err)
 				return
-			}
-			if protocol != nil {
-				// We found the leader
-				pc <- &Session{Protocol: protocol, Address: server.Address}
+			} else if proto != nil {
+				leaderCh <- proto
 				return
-			}
-			if leader == "" {
-				// This server does not know who the current leader is,
-				// try with the next target.
+			} else if leader == "" {
 				log(logging.Warn, "server %s: no known leader", server.Address)
 				return
 			}
 
-			// If we get here, it means this server reported that another
-			// server is the leader, let's close the connection to this
-			// server and try with the suggested one.
+			// Try the server that the original server thinks is the leader.
 			log(logging.Debug, "server %s: connect to reported leader %s", server.Address, leader)
-
-			protocol, _, err = c.connectAttemptOne(origCtx, ctx, leader, log)
+			proto, _, err = c.connectAttemptOne(origCtx, ctx, leader, log)
 			if err != nil {
-				// The leader reported by the previous server is
-				// unavailable, try with the next target.
-				log(logging.Warn, "server %s: reported leader unavailable err=%v", leader, err)
+				log(logging.Warn, "server %s: %v", leader, err)
 				return
-			}
-			if protocol == nil {
-				// The leader reported by the target server does not consider itself
-				// the leader, try with the next target.
+			} else if proto == nil {
 				log(logging.Warn, "server %s: reported leader server is not the leader", leader)
 				return
 			}
-			pc <- &Session{Protocol: protocol, Address: leader}
-		}(server, leaderCh)
+			leaderCh <- proto
+		}(server)
 	}
 
-	// Read from protocol chan, cancel context
 	leader, ok := <-leaderCh
+	cancel()
 	if !ok {
 		return nil, ErrNoAvailableLeader
 	}
-	log(logging.Debug, "server %s: connected on fallback path", leader.Address)
-	c.store.Point(leader.Address)
-	leader.Tracker = c.store
-
-	cancel()
-
+	log(logging.Debug, "server %s: connected on fallback path", leader.addr)
 	for extra := range leaderCh {
 		extra.Close()
 	}
-
 	return leader, nil
 }
 
 // Perform the initial handshake using the given protocol version.
-func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, error) {
+func Handshake(ctx context.Context, conn net.Conn, version uint64, addr string) (*Protocol, error) {
 	// Latest protocol version.
 	protocol := make([]byte, 8)
 	binary.LittleEndian.PutUint64(protocol, version)
@@ -286,7 +255,7 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 		return nil, errors.Wrap(io.ErrShortWrite, "short handshake write")
 	}
 
-	return newProtocol(version, conn), nil
+	return &Protocol{conn: conn, version: version, addr: addr}, nil
 }
 
 // Connect to the given dqlite server and check if it's the leader.
@@ -310,6 +279,10 @@ func (c *Connector) connectAttemptOne(
 		log(l, format, a...)
 	}
 
+	if ctx.Err() != nil {
+		return nil, "", ctx.Err()
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
 	defer cancel()
 
@@ -323,11 +296,11 @@ func (c *Connector) connectAttemptOne(
 	}
 
 	version := VersionOne
-	protocol, err := Handshake(ctx, conn, version)
+	protocol, err := Handshake(ctx, conn, version, address)
 	if err == errBadProtocol {
 		log(logging.Warn, "unsupported protocol %d, attempt with legacy", version)
 		version = VersionLegacy
-		protocol, err = Handshake(ctx, conn, version)
+		protocol, err = Handshake(ctx, conn, version, address)
 	}
 	if err != nil {
 		conn.Close()
@@ -376,6 +349,8 @@ func (c *Connector) connectAttemptOne(
 	}
 }
 
+// TODO move client logic including Leader method to Protocol,
+// and get rid of this.
 func askLeader(ctx context.Context, protocol *Protocol) (string, error) {
 	request := Message{}
 	request.Init(16)
