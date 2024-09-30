@@ -13,7 +13,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/canonical/go-dqlite/app"
 	"github.com/canonical/go-dqlite/client"
