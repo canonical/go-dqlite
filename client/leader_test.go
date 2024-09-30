@@ -25,12 +25,12 @@ func TestReuse(t *testing.T) {
 
 	cli, err := client.FindLeader(ctx, store)
 	require.NoError(t, err)
-	firstProto := reflect.ValueOf(cli).Elem().FieldByName("proto").Pointer()
+	firstProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
 	require.NoError(t, cli.Close())
 
 	cli, err = client.FindLeader(ctx, store)
 	require.NoError(t, err)
-	secondProto := reflect.ValueOf(cli).Elem().FieldByName("proto").Pointer()
+	secondProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
 
 	// The first leader connection was returned to the leader tracker
 	// when we closed the client, and is returned by the second call
@@ -51,7 +51,7 @@ func TestReuse(t *testing.T) {
 
 	cli, err = client.FindLeader(ctx, store)
 	require.NoError(t, err)
-	thirdProto := reflect.ValueOf(cli).Elem().FieldByName("proto").Pointer()
+	thirdProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
 	require.NoError(t, cli.Close())
 
 	// The previous connection was not reused.
