@@ -46,7 +46,7 @@ type NodeStore interface {
 
 // InmemNodeStore keeps the list of servers in memory.
 type InmemNodeStore struct {
-	Compass
+	LT
 	mu      sync.RWMutex
 	servers []NodeInfo
 }
@@ -83,7 +83,18 @@ type LeaderTracker interface {
 	SetLeaderAddr(string)
 	UnsetLeaderAddr()
 
+	// TakeSharedProtocol transfers the reusable connection to the caller,
+	// if one is stored.
 	TakeSharedProtocol() *Protocol
+	// DonateSharedProtocol possibly stores the given connection for reuse.
+	//
+	// The tracker has only one slot for a reusable connection. If the slot
+	// is already occupied, DonateSharedProtocol does nothing and returns
+	// false. Otherwise, it adopts the connection and returns true.
+	//
+	// This is called automatically by Protocol.Close for a connection that
+	// was obtained from TakeSharedProtocol. It's okay to call it with a
+	// connection that didn't come from TakeSharedProtocol, though.
 	DonateSharedProtocol(*Protocol) (accepted bool)
 }
 
@@ -93,51 +104,51 @@ type NodeStoreLeaderTracker interface {
 	LeaderTracker
 }
 
-// Compass implements LeaderTracker and is intended for embedding into a NodeStore.
-type Compass struct {
+// LT implements LeaderTracker and is intended for embedding into a NodeStore.
+type LT struct {
 	mu                  sync.RWMutex
 	lastKnownLeaderAddr string
 
 	proto *Protocol
 }
 
-func (co *Compass) GetLeaderAddr() string {
-	co.mu.RLock()
-	defer co.mu.RUnlock()
+func (lt *LT) GetLeaderAddr() string {
+	lt.mu.RLock()
+	defer lt.mu.RUnlock()
 
-	return co.lastKnownLeaderAddr
+	return lt.lastKnownLeaderAddr
 }
 
-func (co *Compass) SetLeaderAddr(address string) {
-	co.mu.Lock()
-	defer co.mu.Unlock()
+func (lt *LT) SetLeaderAddr(address string) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
 
-	co.lastKnownLeaderAddr = address
+	lt.lastKnownLeaderAddr = address
 }
 
-func (co *Compass) UnsetLeaderAddr() {
-	co.mu.Lock()
-	defer co.mu.Unlock()
+func (lt *LT) UnsetLeaderAddr() {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
 
-	co.lastKnownLeaderAddr = ""
+	lt.lastKnownLeaderAddr = ""
 }
 
-func (co *Compass) TakeSharedProtocol() (proto *Protocol) {
-	co.mu.Lock()
-	defer co.mu.Unlock()
+func (lt *LT) TakeSharedProtocol() (proto *Protocol) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
 
-	if proto, co.proto = co.proto, nil; proto != nil {
-		proto.tracker = co
+	if proto, lt.proto = lt.proto, nil; proto != nil {
+		proto.tracker = lt
 	}
 	return
 }
 
-func (co *Compass) DonateSharedProtocol(proto *Protocol) (accepted bool) {
-	co.mu.Lock()
-	defer co.mu.Unlock()
+func (lt *LT) DonateSharedProtocol(proto *Protocol) (accepted bool) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
 
-	if accepted = co.proto == nil; accepted {
-		co.proto = proto
+	if accepted = lt.proto == nil; accepted {
+		lt.proto = proto
 	}
 	return
 }
