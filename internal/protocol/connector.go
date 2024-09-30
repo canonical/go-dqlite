@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/Rican7/retry"
-	"github.com/Rican7/retry/backoff"
-	"github.com/Rican7/retry/strategy"
 	"github.com/canonical/go-dqlite/logging"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
@@ -375,36 +373,6 @@ func askLeader(ctx context.Context, protocol *Protocol) (string, error) {
 		return "", err
 	}
 	return leader, nil
-}
-
-// Return a retry strategy with exponential backoff, capped at the given amount
-// of time and possibly with a maximum number of retries.
-func makeRetryStrategies(factor, cap time.Duration, limit uint) []strategy.Strategy {
-	limit += 1 // Fix for change in behavior: https://github.com/Rican7/retry/pull/12
-	backoff := backoff.BinaryExponential(factor)
-
-	strategies := []strategy.Strategy{}
-
-	if limit > 1 {
-		strategies = append(strategies, strategy.Limit(limit))
-	}
-
-	strategies = append(strategies,
-		func(attempt uint) bool {
-			if attempt > 0 {
-				duration := backoff(attempt)
-				// Duration might be negative in case of integer overflow.
-				if duration > cap || duration <= 0 {
-					duration = cap
-				}
-				time.Sleep(duration)
-			}
-
-			return true
-		},
-	)
-
-	return strategies
 }
 
 var errBadProtocol = fmt.Errorf("bad protocol")
