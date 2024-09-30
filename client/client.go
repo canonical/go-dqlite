@@ -12,7 +12,7 @@ type DialFunc = protocol.DialFunc
 
 // Client speaks the dqlite wire protocol.
 type Client struct {
-	proto *protocol.Protocol
+	protocol *protocol.Protocol
 }
 
 // Option that can be used to tweak client parameters.
@@ -82,7 +82,7 @@ func (c *Client) Leader(ctx context.Context) (*NodeInfo, error) {
 
 	protocol.EncodeLeader(&request)
 
-	if err := c.proto.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send Leader request")
 	}
 
@@ -105,7 +105,7 @@ func (c *Client) Cluster(ctx context.Context) ([]NodeInfo, error) {
 
 	protocol.EncodeCluster(&request, protocol.ClusterFormatV1)
 
-	if err := c.proto.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send Cluster request")
 	}
 
@@ -135,7 +135,7 @@ func (c *Client) Dump(ctx context.Context, dbname string) ([]File, error) {
 
 	protocol.EncodeDump(&request, dbname)
 
-	if err := c.proto.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return nil, errors.Wrap(err, "failed to send dump request")
 	}
 
@@ -172,7 +172,7 @@ func (c *Client) Add(ctx context.Context, node NodeInfo) error {
 
 	protocol.EncodeAdd(&request, node.ID, node.Address)
 
-	if err := c.proto.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -208,7 +208,7 @@ func (c *Client) Assign(ctx context.Context, id uint64, role NodeRole) error {
 
 	protocol.EncodeAssign(&request, id, uint64(role))
 
-	if err := c.proto.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -231,7 +231,7 @@ func (c *Client) Transfer(ctx context.Context, id uint64) error {
 
 	protocol.EncodeTransfer(&request, id)
 
-	if err := c.proto.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -251,7 +251,7 @@ func (c *Client) Remove(ctx context.Context, id uint64) error {
 
 	protocol.EncodeRemove(&request, id)
 
-	if err := c.proto.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -277,7 +277,7 @@ func (c *Client) Describe(ctx context.Context) (*NodeMetadata, error) {
 
 	protocol.EncodeDescribe(&request, protocol.RequestDescribeFormatV0)
 
-	if err := c.proto.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return nil, err
 	}
 
@@ -303,7 +303,7 @@ func (c *Client) Weight(ctx context.Context, weight uint64) error {
 
 	protocol.EncodeWeight(&request, weight)
 
-	if err := c.proto.Call(ctx, &request, &response); err != nil {
+	if err := c.protocol.Call(ctx, &request, &response); err != nil {
 		return err
 	}
 
@@ -316,7 +316,7 @@ func (c *Client) Weight(ctx context.Context, weight uint64) error {
 
 // Close the client.
 func (c *Client) Close() error {
-	return c.proto.Close()
+	return c.protocol.Close()
 }
 
 // Create a client options object with sane defaults.
