@@ -77,7 +77,7 @@ func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *
 		nslt = &nonTracking{store}
 	}
 
-	return &Connector{id: id, store: nslt, config: config, log: log}
+	return &Connector{id, nslt, config, log}
 }
 
 // Connect returns a connection to the cluster leader.
@@ -99,7 +99,7 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 		}
 	}
 
-	var proto *Protocol
+	var protocol *Protocol
 	err := retry.Retry(func(attempt uint) error {
 		log := func(l logging.Level, format string, a ...interface{}) {
 			format = fmt.Sprintf("attempt %d: ", attempt) + format
@@ -116,7 +116,7 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 		}
 
 		var err error
-		proto, err = c.connectAttemptAll(ctx, log)
+		protocol, err = c.connectAttemptAll(ctx, log)
 		return err
 	}, c.config.RetryStrategies()...)
 
@@ -127,16 +127,16 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	// At this point we should have a connected protocol object, since the
 	// retry loop didn't hit any error and the given context hasn't
 	// expired.
-	if proto == nil {
+	if protocol == nil {
 		panic("no protocol object")
 	}
 
-	c.store.SetLeaderAddr(proto.addr)
+	c.store.SetLeaderAddr(protocol.addr)
 	if c.config.PermitShared {
-		proto.tracker = c.store
+		protocol.tracker = c.store
 	}
 
-	return proto, nil
+	return protocol, nil
 }
 
 // connectAttemptAll tries to establish a new connection to the cluster leader.
@@ -194,12 +194,12 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			}
 			defer sem.Release(1)
 
-			proto, leader, err := c.connectAttemptOne(origCtx, ctx, server.Address, log)
+			protocol, leader, err := c.connectAttemptOne(origCtx, ctx, server.Address, log)
 			if err != nil {
 				log(logging.Warn, "server %s: %v", server.Address, err)
 				return
-			} else if proto != nil {
-				leaderCh <- proto
+			} else if protocol != nil {
+				leaderCh <- protocol
 				return
 			} else if leader == "" {
 				log(logging.Warn, "server %s: no known leader", server.Address)
@@ -208,15 +208,15 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 
 			// Try the server that the original server thinks is the leader.
 			log(logging.Debug, "server %s: connect to reported leader %s", server.Address, leader)
-			proto, _, err = c.connectAttemptOne(origCtx, ctx, leader, log)
+			protocol, _, err = c.connectAttemptOne(origCtx, ctx, leader, log)
 			if err != nil {
 				log(logging.Warn, "server %s: %v", leader, err)
 				return
-			} else if proto == nil {
+			} else if protocol == nil {
 				log(logging.Warn, "server %s: reported leader server is not the leader", leader)
 				return
 			}
-			leaderCh <- proto
+			leaderCh <- protocol
 		}(server)
 	}
 

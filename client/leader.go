@@ -25,12 +25,9 @@ func FindLeader(ctx context.Context, store NodeStore, options ...Option) (*Clien
 		PermitShared:          true,
 	}
 	connector := protocol.NewConnector(0, store, config, o.LogFunc)
-	proto, err := connector.Connect(ctx)
+	protocol, err := connector.Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	client := &Client{proto}
-
-	return client, nil
+	return &Client{protocol}, nil
 }

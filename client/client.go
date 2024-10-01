@@ -64,13 +64,13 @@ func New(ctx context.Context, address string, options ...Option) (*Client, error
 		return nil, errors.Wrap(err, "failed to establish network connection")
 	}
 
-	proto, err := protocol.Handshake(ctx, conn, protocol.VersionOne, address)
+	protocol, err := protocol.Handshake(ctx, conn, protocol.VersionOne, address)
 	if err != nil {
 		conn.Close()
 		return nil, err
 	}
 
-	return &Client{proto}, nil
+	return &Client{protocol}, nil
 }
 
 // Leader returns information about the current leader, if any.
