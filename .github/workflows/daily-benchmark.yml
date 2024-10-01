@@ -47,7 +47,7 @@ jobs:
         echo "Read results:"
         head -n 5 /tmp/dqlite-benchmark/127.0.0.1:9001/results/0-query-*
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: dqlite-daily-benchmark
         path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
