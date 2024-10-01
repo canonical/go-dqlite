@@ -11,7 +11,6 @@ import (
 
 // Node runs a dqlite node.
 type Node struct {
-	log         client.LogFunc // Logger
 	server      *bindings.Node // Low-level C implementation
 	acceptCh    chan error     // Receives connection handling errors
 	id          uint64

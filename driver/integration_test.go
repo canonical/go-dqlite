@@ -93,9 +93,9 @@ func TestIntegration_ConstraintError(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = db.Exec("INSERT INTO test (n) VALUES (1)")
-	if err, ok := err.(driver.Error); ok {
-		assert.Equal(t, SQLITE_CONSTRAINT_UNIQUE, err.Code)
-		assert.Equal(t, "UNIQUE constraint failed: test.n", err.Message)
+	if derr, ok := err.(driver.Error); ok {
+		assert.Equal(t, SQLITE_CONSTRAINT_UNIQUE, derr.Code)
+		assert.Equal(t, "UNIQUE constraint failed: test.n", derr.Message)
 	} else {
 		t.Fatalf("expected diver error, got %+v", err)
 	}
@@ -192,8 +192,9 @@ func TestIntegration_Recover(t *testing.T) {
 
 	helpers[0].Create()
 
-	infos := []client.NodeInfo{{ID: 1, Address: "@1"}}
-	require.NoError(t, helpers[0].Node.Recover(infos))
+	infos := []client.NodeInfo{{ID: 1, Address: "@1", Role: client.Voter}}
+	err = dqlite.ReconfigureMembershipExt(helpers[0].Dir, infos)
+	require.NoError(t, err)
 
 	helpers[0].Start()
 
@@ -343,13 +344,6 @@ func newDBWithInfos(t *testing.T, infos []client.NodeInfo) (*sql.DB, []*nodeHelp
 	}
 
 	return db, helpers, cleanup
-}
-
-func registerDriver(driver *driver.Driver) string {
-	name := fmt.Sprintf("dqlite-integration-test-%d", driversCount)
-	sql.Register(name, driver)
-	driversCount++
-	return name
 }
 
 type nodeHelper struct {
