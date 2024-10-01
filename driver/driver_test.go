@@ -627,7 +627,7 @@ func Test_DescribeLastEntry(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.(driver.ExecerContext).Exec(`CREATE TABLE test (n INT)`, nil)
+	_, err = conn.(driver.ExecerContext).ExecContext(`CREATE TABLE test (n INT)`, nil)
 	require.NoError(t, err)
 
 	stmt, err := conn.Prepare(`INSERT INTO test(n) VALUES(?)`)
