@@ -253,8 +253,8 @@ func New(dir string, options ...Option) (app *App, err error) {
 		tls:             o.TLS,
 		ctx:             ctx,
 		stop:            stop,
-		runCh:           make(chan struct{}, 0),
-		readyCh:         make(chan struct{}, 0),
+		runCh:           make(chan struct{}),
+		readyCh:         make(chan struct{}),
 		voters:          o.Voters,
 		standbys:        o.StandBys,
 		roles:           RolesConfig{Voters: o.Voters, StandBys: o.StandBys},
@@ -267,7 +267,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("listen to %s: %w", info.Address, err)
 		}
-		proxyCh := make(chan struct{}, 0)
+		proxyCh := make(chan struct{})
 
 		app.listener = listener
 		app.proxyCh = proxyCh
@@ -746,6 +746,7 @@ func (a *App) debug(format string, args ...interface{}) {
 	a.log(client.LogDebug, format, args...)
 }
 
+//lint:ignore U1000 not currently used but preserved for consistency
 func (a *App) info(format string, args ...interface{}) {
 	a.log(client.LogInfo, format, args...)
 }
