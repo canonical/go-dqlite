@@ -366,7 +366,7 @@ func TestHandover_VoterHonorFailureDomain(t *testing.T) {
 
 	require.NoError(t, apps[2].Handover(context.Background()))
 
-	cluster, err = cli.Cluster(context.Background())
+	cluster, err := cli.Cluster(context.Background())
 	require.NoError(t, err)
 
 	assert.Equal(t, client.Voter, cluster[0].Role)
