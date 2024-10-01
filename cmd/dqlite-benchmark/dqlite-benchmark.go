@@ -87,9 +87,10 @@ func main() {
 				return errors.Wrap(err, "App not ready in time")
 			}
 
+			ch := signalChannel()
 			if !driver {
 				fmt.Println("Benchmark client ready. Send signal to abort or when done.")
-				<-signalChannel()
+				<-ch
 				return nil
 			}
 
