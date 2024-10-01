@@ -228,19 +228,19 @@ func TestStmt_Exec(t *testing.T) {
 	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
 
-	values := []driver.Value{
-		int64(1),
+	values := []driver.NamedValue{
+		{Ordinal: 1, Value: int64(1)},
 	}
 
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(?)")
 	require.NoError(t, err)
 
-	result, err := stmt.Exec(values)
+	result, err := stmt.(driver.StmtExecContext).ExecContext(context.Background(), values)
 	require.NoError(t, err)
 
 	lastInsertID, err := result.LastInsertId()
@@ -271,7 +271,7 @@ func TestStmt_ExecManyParams(t *testing.T) {
 	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -279,11 +279,11 @@ func TestStmt_ExecManyParams(t *testing.T) {
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES " + strings.Repeat("(?), ", 299) + " (?)")
 	require.NoError(t, err)
 
-	values := make([]driver.Value, 300)
+	values := make([]driver.NamedValue, 300)
 	for i := range values {
-		values[i] = int64(1)
+		values[i] = driver.NamedValue{Ordinal: i + 1, Value: int64(1)}
 	}
-	_, err = stmt.Exec(values)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), values)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -303,7 +303,7 @@ func TestStmt_Query(t *testing.T) {
 	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -311,7 +311,7 @@ func TestStmt_Query(t *testing.T) {
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(-123)")
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -319,7 +319,7 @@ func TestStmt_Query(t *testing.T) {
 	stmt, err = conn.Prepare("SELECT n FROM test")
 	require.NoError(t, err)
 
-	rows, err := stmt.Query(nil)
+	rows, err := stmt.(driver.StmtQueryContext).QueryContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, rows.Columns(), []string{"n"})
@@ -349,7 +349,7 @@ func TestStmt_QueryManyParams(t *testing.T) {
 	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -357,11 +357,11 @@ func TestStmt_QueryManyParams(t *testing.T) {
 	stmt, err = conn.Prepare("SELECT n FROM test WHERE n IN (" + strings.Repeat("?, ", 299) + " ?)")
 	require.NoError(t, err)
 
-	values := make([]driver.Value, 300)
+	values := make([]driver.NamedValue, 300)
 	for i := range values {
-		values[i] = int64(1)
+		values[i] = driver.NamedValue{Ordinal: i + 1, Value: int64(1)}
 	}
-	_, err = stmt.Query(values)
+	_, err = stmt.(driver.StmtQueryContext).QueryContext(context.Background(), values)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -481,7 +481,7 @@ func Test_ColumnTypesEmpty(t *testing.T) {
 	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -489,7 +489,7 @@ func Test_ColumnTypesEmpty(t *testing.T) {
 	stmt, err = conn.Prepare("SELECT n FROM test")
 	require.NoError(t, err)
 
-	rows, err := stmt.Query(nil)
+	rows, err := stmt.(driver.StmtQueryContext).QueryContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, err)
@@ -517,7 +517,7 @@ func Test_ColumnTypesExists(t *testing.T) {
 	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -525,13 +525,13 @@ func Test_ColumnTypesExists(t *testing.T) {
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(-123)")
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	stmt, err = conn.Prepare("SELECT n FROM test")
 	require.NoError(t, err)
 
-	rows, err := stmt.Query(nil)
+	rows, err := stmt.(driver.StmtQueryContext).QueryContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, err)
@@ -560,7 +560,7 @@ func Test_ColumnTypesEnd(t *testing.T) {
 	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -568,13 +568,13 @@ func Test_ColumnTypesEnd(t *testing.T) {
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(-123)")
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	stmt, err = conn.Prepare("SELECT n FROM test")
 	require.NoError(t, err)
 
-	rows, err := stmt.Query(nil)
+	rows, err := stmt.(driver.StmtQueryContext).QueryContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, err)
@@ -634,7 +634,8 @@ func Test_DescribeLastEntry(t *testing.T) {
 	require.NoError(t, err)
 
 	for i := 0; i < 300; i++ {
-		_, err := stmt.Exec([]driver.Value{ int64(i) })
+		values := []driver.NamedValue{{Ordinal: 1, Value: int64(i)}}
+		_, err := stmt.(driver.StmtExecContext).ExecContext(context.Background(), values)
 		require.NoError(t, err)
 	}
 	require.NoError(t, stmt.Close())
