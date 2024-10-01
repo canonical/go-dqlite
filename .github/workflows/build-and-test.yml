@@ -35,18 +35,6 @@ jobs:
       run: |
         go get -t -tags libsqlite3 ./...
 
-    - name: Go vet
-      run: |
-        go vet -tags libsqlite3 ./...
-
-    - name: Staticcheck
-      uses: dominikh/staticcheck-action@v1
-      with:
-        version: '2024.1.1'
-        # staticcheck doesn't build with our minimum supported Go version.
-        #install-go: false
-        build-tags: libsqlite3
-
     - name: Test
       env:
         GO_DQLITE_MULTITHREAD: 1

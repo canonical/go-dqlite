@@ -1,0 +1,19 @@
+name: Static checks
+on:
+  - push
+  - pull_request
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+      - name: Go vet
+        run: |
+          go vet -tags libsqlite3 ./...
+      - uses: dominikh/staticcheck-action@v1
+        with:
+          version: '2024.1.1'
+          build-tags: libsqlite3
+          install-go: false
