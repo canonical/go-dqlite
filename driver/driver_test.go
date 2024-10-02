@@ -618,7 +618,7 @@ func Test_ZeroColumns(t *testing.T) {
 func Test_DescribeLastEntry(t *testing.T) {
 	dir, dirCleanup := newDir(t)
 	defer dirCleanup()
-	_, cleanup := newNode(t, dir)
+	_, cleanup := bootstrapNode(t, dir)
 	store := newStore(t, "@1")
 	log := logging.Test(t)
 	drv, err := dqlitedriver.New(store, dqlitedriver.WithLogFunc(log))
@@ -664,11 +664,39 @@ func TestDriver_ConnectorURI(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDriver_ConnectorDirect(t *testing.T) {
+	t.Helper()
+	dir1, dirCleanup := newDir(t)
+	defer dirCleanup()
+	_, nodeCleanup := bootstrapNode(t, dir1)
+	defer nodeCleanup()
+	dir2, dirCleanup := newDir(t)
+	defer dirCleanup()
+	_, nodeCleanup = newNode(t, dir2, uint64(2), "@2")
+	defer nodeCleanup()
+	store := newStore(t, "@1")
+	log := logging.Test(t)
+	drv, err := dqlitedriver.New(store, dqlitedriver.WithLogFunc(log))
+	require.NoError(t, err)
+	connector, err := drv.OpenConnector("file:test.db?dqlite_direct=@2")
+	require.NoError(t, err)
+	conn, err := connector.Connect(context.Background())
+	require.NoError(t, err)
+	defer conn.Close()
+	stmt, err := conn.Prepare("SELECT * from sqlite_schema")
+	require.NoError(t, err)
+	defer stmt.Close()
+	queryer := stmt.(driver.StmtQueryContext)
+	rows, err := queryer.QueryContext(context.Background(), nil)
+	require.NoError(t, err)
+	defer rows.Close()
+}
+
 func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 	t.Helper()
 
 	dir, dirCleanup := newDir(t)
-	_, nodeCleanup := newNode(t, dir)
+	_, nodeCleanup := bootstrapNode(t, dir)
 
 	store := newStore(t, "@1")
 
@@ -696,10 +724,14 @@ func newStore(t *testing.T, address string) client.NodeStore {
 	return store
 }
 
-func newNode(t *testing.T, dir string) (*dqlite.Node, func()) {
+func bootstrapNode(t *testing.T, dir string) (*dqlite.Node, func()) {
+	return newNode(t, dir, uint64(1), "@1")
+}
+
+func newNode(t *testing.T, dir string, id uint64, address string) (*dqlite.Node, func()) {
 	t.Helper()
 
-	server, err := dqlite.New(uint64(1), "@1", dir, dqlite.WithBindAddress("@1"))
+	server, err := dqlite.New(id, address, dir, dqlite.WithBindAddress(address))
 	require.NoError(t, err)
 
 	err = server.Start()
