@@ -267,7 +267,7 @@ func decomposeURI(raw string) (string, string, error) {
 }
 
 // Connect returns a connection to the database.
-func (c *Connector) Connect(ctx context.Context) (_ driver.Conn, err error) {
+func (c *Connector) Connect(ctx context.Context) (_ driver.Conn, retErr error) {
 	if c.driver.context != nil {
 		ctx = c.driver.context
 	}
@@ -292,7 +292,7 @@ func (c *Connector) Connect(ctx context.Context) (_ driver.Conn, err error) {
 		return nil, driverError(log, errors.Wrap(err, "failed to create dqlite connection"))
 	}
 	defer func() {
-		if err != nil {
+		if retErr != nil {
 			proto.Close()
 		}
 	}()

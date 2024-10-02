@@ -634,7 +634,7 @@ func Test_DescribeLastEntry(t *testing.T) {
 	require.NoError(t, err)
 
 	for i := 0; i < 300; i++ {
-		_, err := stmt.Exec([]driver.Value{ int64(i) })
+		_, err := stmt.Exec([]driver.Value{int64(i)})
 		require.NoError(t, err)
 	}
 	require.NoError(t, stmt.Close())
@@ -646,6 +646,22 @@ func Test_DescribeLastEntry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, info.Index, uint64(302))
 	assert.Equal(t, info.Term, uint64(1))
+}
+
+func TestDriver_ConnectorURI(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+	connector, err := drv.OpenConnector("file:test.db")
+	require.NoError(t, err)
+	conn, err := connector.Connect(context.Background())
+	require.NoError(t, err)
+	defer conn.Close()
+	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+	defer stmt.Close()
+	execer := stmt.(driver.StmtExecContext)
+	_, err = execer.ExecContext(context.Background(), nil)
+	require.NoError(t, err)
 }
 
 func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
