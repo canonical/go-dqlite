@@ -13,4 +13,5 @@ type Config struct {
 	BackoffCap            time.Duration // Maximum connection retry backoff value,
 	RetryLimit            uint          // Maximum number of retries, or 0 for unlimited.
 	ConcurrentLeaderConns int64         // Maximum number of concurrent connections to other cluster members while probing for leadership.
+	Direct                string
 }

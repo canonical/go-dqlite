@@ -125,6 +125,11 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 // Make a single attempt to establish a connection to the leader server trying
 // all addresses available in the store.
 func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
+	if direct := c.config.Direct; direct != "" {
+		proto, _, err := c.connectAttemptOne(ctx, ctx, direct, log)
+		return proto, err
+	}
+
 	servers, err := c.store.Get(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get servers")

@@ -11,6 +11,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	AllowStaleQueries = 1 << iota
+)
+
 // Protocol sends and receive the dqlite message on the wire.
 type Protocol struct {
 	version uint64        // Protocol version
