@@ -1,0 +1,26 @@
+name: Static checks
+on:
+  - push
+  - pull_request
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install libdqlite
+        run: |
+          sudo add-apt-repository ppa:dqlite/dev -y
+          sudo apt update
+          sudo apt install -y libdqlite-dev
+      - name: Go vet
+        run: |
+          go vet -tags libsqlite3 ./...
+      - uses: dominikh/staticcheck-action@v1
+        with:
+          version: '2024.1.1'
+          build-tags: libsqlite3
+          install-go: false

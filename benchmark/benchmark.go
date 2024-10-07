@@ -85,7 +85,7 @@ func (bm *Benchmark) reportFiles() map[string]string {
 		reports := worker.report()
 		for w, report := range reports {
 			file := reportName(i, w)
-			allReports[file] = fmt.Sprintf("%s", report)
+			allReports[file] = report.String()
 		}
 	}
 	return allReports

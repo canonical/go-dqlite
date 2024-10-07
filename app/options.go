@@ -330,5 +330,5 @@ func defaultLogFunc(l client.LogLevel, format string, a ...interface{}) {
 		return
 	}
 	msg := fmt.Sprintf("["+l.String()+"]"+" dqlite: "+format, a...)
-	log.Printf(msg)
+	log.Printf("%s", msg)
 }

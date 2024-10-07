@@ -5,13 +5,7 @@ on:
 
 jobs:
   benchmark:
-    strategy:
-      fail-fast: false
-      matrix:
-        disk:
-          - 1
-          - 0
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -19,7 +13,7 @@ jobs:
     - name: Install Go
       uses: actions/setup-go@v5
       with:
-        go-version: 1.18.x
+        go-version: stable
 
     - name: Setup dependencies
       run: |
@@ -29,13 +23,11 @@ jobs:
 
     - name: Build & Benchmark
       env:
-        CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
         GO_DQLITE_MULTITHREAD: 1
       run: |
         go get -t -tags libsqlite3 ./...
         go install -tags libsqlite3 github.com/canonical/go-dqlite/cmd/dqlite-benchmark
-        diskmode=$(if [ ${{ matrix.disk }} -eq 1 ]; then echo -n "--disk"; fi)
-        dqlite-benchmark --db 127.0.0.1:9001 --duration 3600 --driver $diskmode --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
+        dqlite-benchmark --db 127.0.0.1:9001 --duration 3600 --driver --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
         masterpid=$!
         dqlite-benchmark --db 127.0.0.1:9002 --join 127.0.0.1:9001 &
         dqlite-benchmark --db 127.0.0.1:9003 --join 127.0.0.1:9001 &

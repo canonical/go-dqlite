@@ -9,21 +9,12 @@ jobs:
       fail-fast: false
       matrix:
         go:
-          - 1.13.x
-          - 1.14.x
-          - 1.15.x
-          - 1.16.x
-          - 1.17.x
-          - 1.18.x
-          - 1.19.x
-          - 1.20.x
-          - 1.21.x
+          - '1.13'
+          - stable
         os:
           - ubuntu-20.04
           - ubuntu-22.04
-        disk:
-          - 1
-          - 0
+          - ubuntu-24.04
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout code
@@ -38,23 +29,21 @@ jobs:
       run: |
         sudo add-apt-repository ppa:dqlite/dev -y
         sudo apt update
-        sudo apt install -y golint libsqlite3-dev libuv1-dev liblz4-dev libdqlite-dev
-        go get github.com/go-playground/overalls
+        sudo apt install -y libsqlite3-dev libuv1-dev liblz4-dev libdqlite-dev
 
-    - name: Build & Test
-      env:
-        CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
+    - name: Download deps
       run: |
-        go version
         go get -t -tags libsqlite3 ./...
-        go vet -tags libsqlite3 ./...
-        golint
-        export GO_DQLITE_MULTITHREAD=1
-        go test -v -race -coverprofile=coverage.out ./...
+
+    - name: Test
+      env:
+        GO_DQLITE_MULTITHREAD: 1
+      run: |
+        go test -v -tags libsqlite3 -race -coverprofile=coverage.out ./...
         go test -v -tags nosqlite3 ./...
-        VERBOSE=1 DISK=${{ matrix.disk }} ./test/dqlite-demo.sh
-        VERBOSE=1 DISK=${{ matrix.disk }} ./test/roles.sh
-        VERBOSE=1 DISK=${{ matrix.disk }} ./test/recover.sh
+        VERBOSE=1 ./test/dqlite-demo.sh
+        VERBOSE=1 ./test/roles.sh
+        VERBOSE=1 ./test/recover.sh
 
     - name: Coverage
       uses: coverallsapp/github-action@v2
@@ -64,15 +53,13 @@ jobs:
 
     - name: Benchmark
       env:
-        CGO_LDFLAGS_ALLOW: "-Wl,-z,now"
         GO_DQLITE_MULTITHREAD: 1
       run: |
         go install -tags libsqlite3 github.com/canonical/go-dqlite/cmd/dqlite-benchmark
-        diskmode=$(if [ ${{ matrix.disk }} -eq 1 ]; then echo -n "--disk"; fi)
-        dqlite-benchmark --db 127.0.0.1:9001 --driver $diskmode --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
+        dqlite-benchmark --db 127.0.0.1:9001 --driver --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
         masterpid=$!
-        dqlite-benchmark --db 127.0.0.1:9002 $diskmode --join 127.0.0.1:9001 &
-        dqlite-benchmark --db 127.0.0.1:9003 $diskmode --join 127.0.0.1:9001 &
+        dqlite-benchmark --db 127.0.0.1:9002 --join 127.0.0.1:9001 &
+        dqlite-benchmark --db 127.0.0.1:9003 --join 127.0.0.1:9001 &
         wait $masterpid
         echo "Write results:"
         head -n 5 /tmp/dqlite-benchmark/127.0.0.1:9001/results/0-exec-*

@@ -131,7 +131,7 @@ func (s *Shell) processCluster(ctx context.Context, line string) (string, error)
 		}
 		var indented bytes.Buffer
 		json.Indent(&indented, data, "", "\t")
-		result = string(indented.Bytes())
+		result = indented.String()
 	}
 
 	return result, nil
@@ -205,7 +205,7 @@ func (s *Shell) processDescribe(ctx context.Context, line string) (string, error
 		}
 		var indented bytes.Buffer
 		json.Indent(&indented, data, "", "\t")
-		result = string(indented.Bytes())
+		result = indented.String()
 	}
 
 	return result, nil
@@ -250,6 +250,7 @@ func (s *Shell) processDump(ctx context.Context, line string) (string, error) {
 func (s *Shell) processReconfigure(ctx context.Context, line string) (string, error) {
 	parts := strings.Split(line, " ")
 	if len(parts) != 3 {
+		//lint:ignore ST1005 intentional long prosy error message
 		return "NOK", fmt.Errorf("bad command format, should be: .reconfigure <dir> <clusteryaml>\n" +
 			"Args:\n" +
 			"\tdir - Directory of node with up to date data\n" +
@@ -385,25 +386,4 @@ func (s *Shell) processQuery(ctx context.Context, line string) (string, error) {
 	}
 
 	return strings.TrimRight(sb.String(), "\n"), nil
-}
-
-func (s *Shell) processExec(ctx context.Context, line string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	if _, err := tx.Exec(line); err != nil {
-		err = fmt.Errorf("exec: %w", err)
-		if rbErr := tx.Rollback(); rbErr != nil {
-			return fmt.Errorf("unable to rollback: %v", err)
-		}
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
-	}
-
-	return nil
 }

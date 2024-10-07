@@ -112,6 +112,7 @@ func TestNode_Autorecovery(t *testing.T) {
 	defer server.Close()
 
 	err = server.SetAutoRecovery(false)
+	require.NoError(t, err)
 }
 
 // func TestNode_Heartbeat(t *testing.T) {

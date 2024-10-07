@@ -28,6 +28,7 @@ func TestDefaultNodeStore(t *testing.T) {
 	require.NoError(t, err)
 
 	servers, err := store.Get(context.Background())
+	require.NoError(t, err)
 	assert.Equal(t, []client.NodeInfo{
 		{ID: uint64(1), Address: "1.2.3.4:666"},
 		{ID: uint64(1), Address: "5.6.7.8:666"}},
@@ -40,6 +41,7 @@ func TestDefaultNodeStore(t *testing.T) {
 	require.NoError(t, err)
 
 	servers, err = store.Get(context.Background())
+	require.NoError(t, err)
 	assert.Equal(t, []client.NodeInfo{
 		{ID: uint64(1), Address: "1.2.3.4:666"},
 		{ID: uint64(1), Address: "9.9.9.9:666"}},
@@ -53,6 +55,7 @@ func TestDefaultNodeStore(t *testing.T) {
 	assert.EqualError(t, err, "failed to insert server 1.2.3.4:666: UNIQUE constraint failed: servers.address")
 
 	servers, err = store.Get(context.Background())
+	require.NoError(t, err)
 	assert.Equal(t, []client.NodeInfo{
 		{ID: uint64(1), Address: "1.2.3.4:666"},
 		{ID: uint64(1), Address: "9.9.9.9:666"}},
