@@ -4,7 +4,7 @@ module github.com/canonical/go-dqlite
 go 1.13
 
 require (
-	github.com/Rican7/retry v0.3.0
+	github.com/Rican7/retry v0.3.1
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/renameio v1.0.1
 	github.com/kr/pretty v0.1.0 // indirect
