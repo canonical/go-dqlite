@@ -13,6 +13,12 @@ import (
 // function will keep retrying (with a capped exponential backoff) until the
 // given context is canceled.
 func FindLeader(ctx context.Context, store NodeStore, options ...Option) (*Client, error) {
+	return NewLeaderConnector(store, options...).Find(ctx)
+}
+
+type LeaderConnector protocol.Connector
+
+func NewLeaderConnector(store NodeStore, options ...Option) *LeaderConnector {
 	o := defaultOptions()
 
 	for _, option := range options {
@@ -22,12 +28,15 @@ func FindLeader(ctx context.Context, store NodeStore, options ...Option) (*Clien
 	config := protocol.Config{
 		Dial:                  o.DialFunc,
 		ConcurrentLeaderConns: o.ConcurrentLeaderConns,
-		PermitShared:          true,
 	}
-	connector := protocol.NewConnector(0, store, config, o.LogFunc)
-	protocol, err := connector.Connect(ctx)
+	pc := protocol.NewConnector(0, store, config, o.LogFunc)
+	return (*LeaderConnector)(pc)
+}
+
+func (lc *LeaderConnector) Find(ctx context.Context) (*Client, error) {
+	proto, err := (*protocol.Connector)(lc).ConnectPermitShared(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{protocol}, nil
+	return &Client{proto}, nil
 }

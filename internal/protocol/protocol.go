@@ -18,7 +18,7 @@ type Protocol struct {
 	mu      sync.Mutex // Serialize requests
 	netErr  error      // A network error occurred
 	addr    string
-	tracker LeaderTracker
+	lt      *LeaderTracker
 }
 
 // Call invokes a dqlite RPC, sending a request message and receiving a
@@ -121,7 +121,7 @@ func (p *Protocol) Interrupt(ctx context.Context, request *Message, response *Me
 // Only call Bad when the protocol is deemed unsuitable for reuse for some
 // higher-level reason.
 func (p *Protocol) Bad() {
-	p.tracker = nil
+	p.lt = nil
 }
 
 // Close releases a protocol.
@@ -130,7 +130,7 @@ func (p *Protocol) Bad() {
 // available for reuse by that tracker. Otherwise, the underlying connection
 // will be closed.
 func (p *Protocol) Close() error {
-	if tr := p.tracker; tr == nil || !tr.DonateSharedProtocol(p) {
+	if tr := p.lt; tr == nil || !tr.DonateSharedProtocol(p) {
 		return p.conn.Close()
 	}
 	return nil

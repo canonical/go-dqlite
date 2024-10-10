@@ -247,8 +247,9 @@ func defaultOptions() *options {
 // A Connector represents a driver in a fixed configuration and can create any
 // number of equivalent Conns for use by multiple goroutines.
 type Connector struct {
-	uri    string
-	driver *Driver
+	uri      string
+	driver   *Driver
+	protocol *protocol.Connector
 }
 
 // Connect returns a connection to the database.
@@ -263,18 +264,13 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 		defer cancel()
 	}
 
-	// TODO: generate a client ID.
-	config := c.driver.clientConfig
-	config.ConcurrentLeaderConns = *c.driver.concurrentLeaderConns
-	connector := protocol.NewConnector(0, c.driver.store, config, c.driver.log)
-
 	conn := &Conn{
 		log:            c.driver.log,
 		contextTimeout: c.driver.contextTimeout,
 		tracing:        c.driver.tracing,
 	}
 
-	proto, err := connector.Connect(ctx)
+	proto, err := c.protocol.Connect(ctx)
 	if err != nil {
 		return nil, driverError(conn.log, errors.Wrap(err, "failed to create dqlite connection"))
 	}
@@ -304,12 +300,16 @@ func (c *Connector) Driver() driver.Driver {
 	return c.driver
 }
 
-// OpenConnector must parse the name in the same format that Driver.Open
-// parses the name parameter.
+// OpenConnector creates a reusable Connector for a specific database.
 func (d *Driver) OpenConnector(name string) (driver.Connector, error) {
+	// TODO: generate a client ID.
+	config := d.clientConfig
+	config.ConcurrentLeaderConns = *d.concurrentLeaderConns
+	pc := protocol.NewConnector(0, d.store, config, d.log)
 	connector := &Connector{
-		uri:    name,
-		driver: d,
+		uri:      name,
+		driver:   d,
+		protocol: pc,
 	}
 	return connector, nil
 }

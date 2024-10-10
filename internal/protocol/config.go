@@ -16,7 +16,6 @@ type Config struct {
 	BackoffFactor         time.Duration // Exponential backoff factor for retries.
 	BackoffCap            time.Duration // Maximum connection retry backoff value,
 	ConcurrentLeaderConns int64         // Maximum number of concurrent connections to other cluster members while probing for leadership.
-	PermitShared          bool          // Whether it's okay to return a reused connection.
 }
 
 // RetryStrategies returns a configuration for the retry package based on a Config.

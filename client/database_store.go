@@ -23,7 +23,7 @@ type nodeStoreOptions struct {
 
 // DatabaseNodeStore persists a list addresses of dqlite nodes in a SQL table.
 type DatabaseNodeStore struct {
-	protocol.LT
+	protocol.LeaderTracker
 	db     *sql.DB // Database handle to use.
 	schema string  // Name of the schema holding the servers table.
 	table  string  // Name of the servers table.

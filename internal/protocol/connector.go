@@ -22,28 +22,63 @@ const MaxConcurrentLeaderConns int64 = 10
 // DialFunc is a function that can be used to establish a network connection.
 type DialFunc func(context.Context, string) (net.Conn, error)
 
+type LeaderTracker struct {
+	mu                  sync.RWMutex
+	lastKnownLeaderAddr string
+
+	proto *Protocol
+}
+
+func (lt *LeaderTracker) GetLeaderAddr() string {
+	lt.mu.RLock()
+	defer lt.mu.RUnlock()
+
+	return lt.lastKnownLeaderAddr
+}
+
+func (lt *LeaderTracker) SetLeaderAddr(address string) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+
+	lt.lastKnownLeaderAddr = address
+}
+
+func (lt *LeaderTracker) UnsetLeaderAddr() {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+
+	lt.lastKnownLeaderAddr = ""
+}
+
+func (lt *LeaderTracker) TakeSharedProtocol() (proto *Protocol) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+
+	if proto, lt.proto = lt.proto, nil; proto != nil {
+		proto.lt = lt
+	}
+	return
+}
+
+func (lt *LeaderTracker) DonateSharedProtocol(proto *Protocol) (accepted bool) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+
+	if accepted = lt.proto == nil; accepted {
+		lt.proto = proto
+	}
+	return
+}
+
 // Connector is in charge of creating a dqlite SQL client connected to the
 // current leader of a cluster.
 type Connector struct {
 	id     uint64 // Conn ID to use when registering against the server.
-	store  NodeStoreLeaderTracker
+	store  NodeStore
+	lt     *LeaderTracker
 	config Config       // Connection parameters.
 	log    logging.Func // Logging function.
 }
-
-// nonTracking extends any NodeStore with no-op leader tracking.
-//
-// This is used as a fallback when the NodeStore used by the connector doesn't
-// implement NodeStoreLeaderTracker. This can only be the case for a custom NodeStore
-// provided by downstream. In this case, the connector will behave as it did before
-// the LeaderTracker optimizations were introduced.
-type nonTracking struct{ NodeStore }
-
-func (nt *nonTracking) GetLeaderAddr() string               { return "" }
-func (nt *nonTracking) SetLeaderAddr(string)                {}
-func (nt *nonTracking) UnsetLeaderAddr()                    {}
-func (nt *nonTracking) TakeSharedProtocol() *Protocol       { return nil }
-func (nt *nonTracking) DonateSharedProtocol(*Protocol) bool { return false }
 
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
@@ -72,33 +107,35 @@ func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *
 		config.ConcurrentLeaderConns = MaxConcurrentLeaderConns
 	}
 
-	nslt, ok := store.(NodeStoreLeaderTracker)
-	if !ok {
-		nslt = &nonTracking{store}
-	}
+	lt := &LeaderTracker{}
 
-	return &Connector{id, nslt, config, log}
+	return &Connector{id, store, lt, config, log}
 }
 
-// Connect returns a connection to the cluster leader.
-//
-// If the connector was configured with PermitShared, and a reusable connection
-// is available from the leader tracker, that connection is returned. Otherwise,
-// a new connection is opened.
-func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
-	if c.config.PermitShared {
-		if sharedProto := c.store.TakeSharedProtocol(); sharedProto != nil {
-			if leaderAddr, err := askLeader(ctx, sharedProto); err == nil && sharedProto.addr == leaderAddr {
-				c.log(logging.Debug, "reusing shared connection to %s", sharedProto.addr)
-				c.store.SetLeaderAddr(leaderAddr)
-				return sharedProto, nil
-			}
-			c.log(logging.Debug, "discarding shared connection to %s", sharedProto.addr)
-			sharedProto.Bad()
-			sharedProto.Close()
+// Connect returns a connection to the cluster leader, possibly recycled from
+// the LeaderTracker.
+func (c *Connector) ConnectPermitShared(ctx context.Context) (*Protocol, error) {
+	if sharedProto := c.lt.TakeSharedProtocol(); sharedProto != nil {
+		if leaderAddr, err := askLeader(ctx, sharedProto); err == nil && sharedProto.addr == leaderAddr {
+			c.log(logging.Debug, "reusing shared connection to %s", sharedProto.addr)
+			c.lt.SetLeaderAddr(leaderAddr)
+			return sharedProto, nil
 		}
+		c.log(logging.Debug, "discarding shared connection to %s", sharedProto.addr)
+		sharedProto.Bad()
+		sharedProto.Close()
 	}
 
+	protocol, err := c.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	protocol.lt = c.lt
+	return protocol, nil
+}
+
+// Connect returns a new connection to the cluster leader.
+func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	var protocol *Protocol
 	err := retry.Retry(func(attempt uint) error {
 		log := func(l logging.Level, format string, a ...interface{}) {
@@ -131,10 +168,7 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 		panic("no protocol object")
 	}
 
-	c.store.SetLeaderAddr(protocol.addr)
-	if c.config.PermitShared {
-		protocol.tracker = c.store
-	}
+	c.lt.SetLeaderAddr(protocol.addr)
 
 	return protocol, nil
 }
@@ -147,14 +181,14 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 // fall back to probing all servers in parallel, checking whether each
 // is the leader itself or knows who the leader is.
 func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
-	if addr := c.store.GetLeaderAddr(); addr != "" {
+	if addr := c.lt.GetLeaderAddr(); addr != "" {
 		// TODO In the event of failure, we could still use the second
 		// return value to guide the next stage of the search.
 		if proto, _, _ := c.connectAttemptOne(ctx, ctx, addr, log); proto != nil {
 			log(logging.Debug, "server %s: connected on fast path", addr)
 			return proto, nil
 		}
-		c.store.UnsetLeaderAddr()
+		c.lt.UnsetLeaderAddr()
 	}
 
 	servers, err := c.store.Get(ctx)
