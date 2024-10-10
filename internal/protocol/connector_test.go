@@ -50,10 +50,10 @@ func TestConnector_LeaderTracker(t *testing.T) {
 	// options is a configuration for calling Connector.Connect
 	// in order to trigger a specific state transition.
 	type options struct {
-		config        protocol.Config
 		injectFailure bool
 		returnProto   bool
 		expectedLog   []string
+		permitShared  bool
 	}
 
 	injectFailure := func(o *options) {
@@ -61,7 +61,7 @@ func TestConnector_LeaderTracker(t *testing.T) {
 		o.expectedLog = append(o.expectedLog, "WARN: attempt 1: server @test-0: context deadline exceeded")
 	}
 	permitShared := func(o *options) {
-		o.config.PermitShared = true
+		o.permitShared = true
 	}
 	returnProto := func(o *options) {
 		o.returnProto = true
@@ -82,21 +82,26 @@ func TestConnector_LeaderTracker(t *testing.T) {
 	address, cleanup := newNode(t, 0)
 	defer cleanup()
 	store := newStore(t, []string{address})
-
+	log, checkLog := newLogFunc(t)
+	connector := protocol.NewConnector(0, store, protocol.Config{RetryLimit: 1}, log)
 	check := func(opts ...func(*options)) *protocol.Protocol {
-		o := &options{config: protocol.Config{RetryLimit: 1}}
+		o := &options{}
 		for _, opt := range opts {
 			opt(o)
 		}
-		log, checkLog := newLogFunc(t)
-		connector := protocol.NewConnector(0, store, o.config, log)
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
 		if o.injectFailure {
 			ctx, cancel = context.WithDeadline(ctx, time.Unix(1, 0))
 			defer cancel()
 		}
-		proto, err := connector.Connect(ctx)
+		var proto *protocol.Protocol
+		var err error
+		if o.permitShared {
+			proto, err = connector.ConnectPermitShared(ctx)
+		} else {
+			proto, err = connector.Connect(ctx)
+		}
 		if o.injectFailure {
 			require.Equal(t, protocol.ErrNoAvailableLeader, err)
 		} else {
@@ -407,6 +412,7 @@ func newLogFunc(t *testing.T) (logging.Func, func([]string)) {
 	}
 	check := func(expected []string) {
 		assert.Equal(t, expected, messages)
+		messages = messages[:0]
 	}
 	return log, check
 }

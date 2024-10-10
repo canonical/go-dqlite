@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// client.FindLeader recycles leader connections intelligently.
-func TestReuse(t *testing.T) {
+// LeaderConnector recycles connections intelligently.
+func TestLeaderConnector(t *testing.T) {
 	infos, cleanup := setup(t)
 	defer cleanup()
 
@@ -23,12 +23,14 @@ func TestReuse(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cli, err := client.FindLeader(ctx, store)
+	connector := client.NewLeaderConnector(store)
+
+	cli, err := connector.Find(ctx)
 	require.NoError(t, err)
 	firstProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
 	require.NoError(t, cli.Close())
 
-	cli, err = client.FindLeader(ctx, store)
+	cli, err = connector.Find(ctx)
 	require.NoError(t, err)
 	secondProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
 
@@ -49,7 +51,7 @@ func TestReuse(t *testing.T) {
 	require.Error(t, err)
 	require.NoError(t, cli.Close())
 
-	cli, err = client.FindLeader(ctx, store)
+	cli, err = connector.Find(ctx)
 	require.NoError(t, err)
 	thirdProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
 	require.NoError(t, cli.Close())
