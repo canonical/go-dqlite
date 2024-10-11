@@ -224,6 +224,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			defer wg.Done()
 
 			if err := sem.Acquire(ctx, 1); err != nil {
+				log(logging.Warn, "server %s: %v", server.Address, err)
 				return
 			}
 			defer sem.Release(1)
@@ -304,11 +305,11 @@ func (c *Connector) connectAttemptOne(
 	dialCtx context.Context,
 	ctx context.Context,
 	address string,
-	log logging.Func,
+	origLog logging.Func,
 ) (*Protocol, string, error) {
-	log = func(l logging.Level, format string, a ...interface{}) {
+	log := func(l logging.Level, format string, a ...interface{}) {
 		format = fmt.Sprintf("server %s: ", address) + format
-		log(l, format, a...)
+		origLog(l, format, a...)
 	}
 
 	if ctx.Err() != nil {
