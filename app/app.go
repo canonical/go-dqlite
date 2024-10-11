@@ -494,7 +494,9 @@ func (a *App) Open(ctx context.Context, database string) (*sql.DB, error) {
 	return db, nil
 }
 
-// Leader returns a client connected to the current cluster leader, if any.
+// Leader returns a client connected to the cluster leader.
+//
+// Prefer to use FindLeader instead unless you need to pass custom options.
 func (a *App) Leader(ctx context.Context, options ...client.Option) (*client.Client, error) {
 	allOptions := a.clientOptions()
 	allOptions = append(allOptions, options...)
@@ -502,6 +504,10 @@ func (a *App) Leader(ctx context.Context, options ...client.Option) (*client.Cli
 	return client.FindLeader(ctx, a.store, allOptions...)
 }
 
+// FindLeader returns a client connected to the cluster leader.
+//
+// Compared to Leader, this method avoids opening extra connections int many
+// cases, but doesn't accept custom options.
 func (a *App) FindLeader(ctx context.Context) (*client.Client, error) {
 	return a.lc.Find(ctx)
 }
