@@ -40,6 +40,7 @@ type App struct {
 	tls             *tlsSetup
 	dialFunc        client.DialFunc
 	store           client.NodeStore
+	lc              *client.LeaderConnector
 	driver          *driver.Driver
 	driverName      string
 	log             client.LogFunc
@@ -239,6 +240,13 @@ func New(dir string, options ...Option) (app *App, err error) {
 		nodeBindAddress = nodeBindAddress[1:]
 	}
 
+	lc := client.NewLeaderConnector(
+		store,
+		client.WithDialFunc(driverDial),
+		client.WithLogFunc(o.Log),
+		client.WithConcurrentLeaderConns(*o.ConcurrentLeaderConns),
+	)
+
 	app = &App{
 		id:              info.ID,
 		address:         info.Address,
@@ -247,6 +255,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		nodeBindAddress: nodeBindAddress,
 		store:           store,
 		dialFunc:        driverDial,
+		lc:              lc,
 		driver:          driver,
 		driverName:      driverName,
 		log:             o.Log,
@@ -325,7 +334,7 @@ func (a *App) Handover(ctx context.Context) error {
 	ctx, cancel = context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
-	cli, err := a.Leader(ctx)
+	cli, err := a.FindLeader(ctx)
 	if err != nil {
 		return fmt.Errorf("find leader: %w", err)
 	}
@@ -379,7 +388,7 @@ func (a *App) Handover(ctx context.Context) error {
 					return fmt.Errorf("transfer leadership: %w", err)
 				}
 			}
-			cli, err = a.Leader(ctx)
+			cli, err = a.FindLeader(ctx)
 			if err != nil {
 				return fmt.Errorf("find new leader: %w", err)
 			}
@@ -493,6 +502,10 @@ func (a *App) Leader(ctx context.Context, options ...client.Option) (*client.Cli
 	return client.FindLeader(ctx, a.store, allOptions...)
 }
 
+func (a *App) FindLeader(ctx context.Context) (*client.Client, error) {
+	return a.lc.Find(ctx)
+}
+
 // Client returns a client connected to the local node.
 func (a *App) Client(ctx context.Context) (*client.Client, error) {
 	return client.New(ctx, a.nodeBindAddress)
@@ -545,7 +558,7 @@ func (a *App) run(ctx context.Context, options *options, join bool) {
 			}
 			return
 		case <-time.After(delay):
-			cli, err := a.Leader(ctx)
+			cli, err := a.FindLeader(ctx)
 			if err != nil {
 				continue
 			}
@@ -739,7 +752,11 @@ func (a *App) makeRolesChanges(nodes []client.NodeInfo) RolesChanges {
 
 // Return the options to use for client.FindLeader() or client.New()
 func (a *App) clientOptions() []client.Option {
-	return []client.Option{client.WithDialFunc(a.dialFunc), client.WithLogFunc(a.log), client.WithConcurrentLeaderConns(*a.options.ConcurrentLeaderConns)}
+	return []client.Option{
+		client.WithDialFunc(a.dialFunc),
+		client.WithLogFunc(a.log),
+		client.WithConcurrentLeaderConns(*a.options.ConcurrentLeaderConns),
+	}
 }
 
 func (a *App) debug(format string, args ...interface{}) {
