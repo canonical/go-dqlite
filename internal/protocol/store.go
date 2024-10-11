@@ -46,7 +46,6 @@ type NodeStore interface {
 
 // InmemNodeStore keeps the list of servers in memory.
 type InmemNodeStore struct {
-	LeaderTracker
 	mu      sync.RWMutex
 	servers []NodeInfo
 }

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/canonical/go-dqlite/internal/protocol"
 	_ "github.com/mattn/go-sqlite3" // Go SQLite bindings
 	"github.com/pkg/errors"
 )
@@ -23,7 +22,6 @@ type nodeStoreOptions struct {
 
 // DatabaseNodeStore persists a list addresses of dqlite nodes in a SQL table.
 type DatabaseNodeStore struct {
-	protocol.LeaderTracker
 	db     *sql.DB // Database handle to use.
 	schema string  // Name of the schema holding the servers table.
 	table  string  // Name of the servers table.
