@@ -64,7 +64,7 @@ func TestRecovery(t *testing.T) {
 	// can't commit a change
 	shortCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	db, err = apps[1].Open(shortCtx, "test.db")
+	_, err = apps[1].Open(shortCtx, "test.db")
 	require.Error(t, err)
 
 	// take down the final node for recovery
