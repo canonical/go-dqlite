@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/gob"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 
 	"github.com/canonical/go-dqlite/app"
+	"github.com/canonical/go-dqlite/client"
 	"golang.org/x/term"
 )
 
@@ -17,17 +19,32 @@ func main() {
 	dir := flag.String("dir", "", "local data directory")
 	address := flag.String("address", "", "new address of this node")
 	mode := flag.String("mode", "", "'prepare' or 'propagate'")
+	clusterPath := flag.String("cluster", "", "path to node store describing the new configuration (prepare mode only)")
 	flag.Parse()
 	if *address == "" {
-		log.Fatal("address is required")
+		log.Fatal("-address is required")
 	}
 	if *dir == "" {
-		log.Fatal("dir is required")
+		log.Fatal("-dir is required")
+	}
+	if *mode == "prepare" && *clusterPath == "" {
+		log.Fatal("-cluster is required for prepare mode")
+	}
+	if *mode == "propagate" && *clusterPath != "" {
+		log.Fatal("-cluster is forbidden for propagate mode")
 	}
 
 	switch *mode {
 	case "prepare":
-		kern, err := app.PrepareRecovery(*dir, *address)
+		store, err := client.DefaultNodeStore(*clusterPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		cluster, err := store.Get(context.Background())
+		if err != nil {
+			log.Fatal(err)
+		}
+		kern, err := app.PrepareRecovery(*dir, *address, cluster)
 		if err != nil {
 			log.Fatal(err)
 		}
