@@ -252,18 +252,18 @@ type Connector struct {
 	driver *Driver
 }
 
-func decomposeURI(raw string) (string, string, error) {
+func decomposeURI(raw string) (string, url.Values, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return "", "", err
+		return "", nil, err
 	}
 	if u.Scheme == "" {
-		return u.Path, "", nil
+		return u.Path, make(map[string][]string), nil
 	}
 	if !(u.Scheme == "file" && u.Opaque != "" && u.Host == "" && u.Path == "") {
-		return "", "", fmt.Errorf("bad URI")
+		return "", nil, fmt.Errorf("disallowed format for URI")
 	}
-	return u.Opaque, u.Query().Get("dqlite_direct"), nil
+	return u.Opaque, u.Query(), nil
 }
 
 // Connect returns a connection to the database.
@@ -278,12 +278,18 @@ func (c *Connector) Connect(ctx context.Context) (_ driver.Conn, retErr error) {
 	}
 	log := c.driver.log
 
-	config := c.driver.clientConfig
-	config.ConcurrentLeaderConns = *c.driver.concurrentLeaderConns
-	dbName, directAddr, err := decomposeURI(c.uri)
+	dbName, uriQuery, err := decomposeURI(c.uri)
 	if err != nil {
 		return nil, driverError(log, errors.Wrap(err, "failed to parse URI"))
 	}
+	directAddr := uriQuery.Get("dqlite_addr")
+	mode := uriQuery.Get("mode")
+	if mode != "ro" {
+		return nil, driverError(log, fmt.Errorf("mode=ro is required for direct dqlite connections")
+	}
+
+	config := c.driver.clientConfig
+	config.ConcurrentLeaderConns = *c.driver.concurrentLeaderConns
 	config.Direct = directAddr
 	// TODO: generate a client ID.
 	protoConnector := protocol.NewConnector(0, c.driver.store, config, log)

@@ -678,7 +678,7 @@ func TestDriver_ConnectorDirect(t *testing.T) {
 	log := logging.Test(t)
 	drv, err := dqlitedriver.New(store, dqlitedriver.WithLogFunc(log))
 	require.NoError(t, err)
-	connector, err := drv.OpenConnector("file:test.db?dqlite_direct=@2")
+	connector, err := drv.OpenConnector("file:test.db?mode=ro&dqlite_addr=@2")
 	require.NoError(t, err)
 	conn, err := connector.Connect(context.Background())
 	require.NoError(t, err)
