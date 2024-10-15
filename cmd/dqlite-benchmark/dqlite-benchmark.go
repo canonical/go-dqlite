@@ -90,10 +90,8 @@ func main() {
 			ch := signalChannel()
 			if !driver {
 				fmt.Println("Benchmark client ready. Send signal to abort or when done.")
-				select {
-				case <-ch:
-					return nil
-				}
+				<-ch
+				return nil
 			}
 
 			if len(*cluster) == 0 {

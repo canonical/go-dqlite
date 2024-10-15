@@ -63,15 +63,15 @@ func TestConn_Exec(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	execer := conn.(driver.Execer)
+	execer := conn.(driver.ExecerContext)
 
-	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (n INT)", nil)
 	require.NoError(t, err)
 
-	result, err := execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+	result, err := execer.ExecContext(context.Background(), "INSERT INTO test(n) VALUES(1)", nil)
 	require.NoError(t, err)
 
 	lastInsertID, err := result.LastInsertId()
@@ -94,20 +94,20 @@ func TestConn_Query(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	execer := conn.(driver.Execer)
+	execer := conn.(driver.ExecerContext)
 
-	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (n INT)", nil)
 	require.NoError(t, err)
 
-	_, err = execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+	_, err = execer.ExecContext(context.Background(), "INSERT INTO test(n) VALUES(1)", nil)
 	require.NoError(t, err)
 
-	queryer := conn.(driver.Queryer)
+	queryer := conn.(driver.QueryerContext)
 
-	_, err = queryer.Query("SELECT n FROM test", nil)
+	_, err = queryer.QueryContext(context.Background(), "SELECT n FROM test", nil)
 	require.NoError(t, err)
 
 	assert.NoError(t, conn.Close())
@@ -120,23 +120,23 @@ func TestConn_QueryRow(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	execer := conn.(driver.Execer)
+	execer := conn.(driver.ExecerContext)
 
-	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (n INT)", nil)
 	require.NoError(t, err)
 
-	_, err = execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+	_, err = execer.ExecContext(context.Background(), "INSERT INTO test(n) VALUES(1)", nil)
 	require.NoError(t, err)
 
-	_, err = execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+	_, err = execer.ExecContext(context.Background(), "INSERT INTO test(n) VALUES(1)", nil)
 	require.NoError(t, err)
 
-	queryer := conn.(driver.Queryer)
+	queryer := conn.(driver.QueryerContext)
 
-	rows, err := queryer.Query("SELECT n FROM test", nil)
+	rows, err := queryer.QueryContext(context.Background(), "SELECT n FROM test", nil)
 	require.NoError(t, err)
 
 	values := make([]driver.Value, 1)
@@ -154,24 +154,24 @@ func TestConn_InterruptQuery(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	execer := conn.(driver.Execer)
+	execer := conn.(driver.ExecerContext)
 
-	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (n INT)", nil)
 	require.NoError(t, err)
 
 	// When querying all these rows, dqlite will fill up more than 1
 	// response buffer allowing us to interrupt an active query.
 	for i := 0; i < 4098; i++ {
-		_, err = execer.Exec("INSERT INTO test(n) VALUES(1)", nil)
+		_, err = execer.ExecContext(context.Background(), "INSERT INTO test(n) VALUES(1)", nil)
 		require.NoError(t, err)
 	}
 
-	queryer := conn.(driver.Queryer)
+	queryer := conn.(driver.QueryerContext)
 
-	rows, err := queryer.Query("SELECT * FROM test", nil)
+	rows, err := queryer.QueryContext(context.Background(), "SELECT * FROM test", nil)
 	require.NoError(t, err)
 
 	// rows.Close() will trigger an Interrupt.
@@ -186,31 +186,31 @@ func TestConn_QueryBlob(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	execer := conn.(driver.Execer)
+	execer := conn.(driver.ExecerContext)
 
-	_, err = execer.Exec("CREATE TABLE test (data BLOB)", nil)
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (data BLOB)", nil)
 	require.NoError(t, err)
 
-	values := []driver.Value{
-		[]byte{'a', 'b', 'c'},
+	values := []driver.NamedValue{
+		{Ordinal: 1, Value: []byte{'a', 'b', 'c'}},
 	}
-	_, err = execer.Exec("INSERT INTO test(data) VALUES(?)", values)
+	_, err = execer.ExecContext(context.Background(), "INSERT INTO test(data) VALUES(?)", values)
 	require.NoError(t, err)
 
-	queryer := conn.(driver.Queryer)
+	queryer := conn.(driver.QueryerContext)
 
-	rows, err := queryer.Query("SELECT data FROM test", nil)
+	rows, err := queryer.QueryContext(context.Background(), "SELECT data FROM test", nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, rows.Columns(), []string{"data"})
 
-	values = make([]driver.Value, 1)
-	require.NoError(t, rows.Next(values))
+	rowValues := make([]driver.Value, 1)
+	require.NoError(t, rows.Next(rowValues))
 
-	assert.Equal(t, []byte{'a', 'b', 'c'}, values[0])
+	assert.Equal(t, []byte{'a', 'b', 'c'}, rowValues[0])
 
 	assert.NoError(t, conn.Close())
 }
@@ -225,22 +225,22 @@ func TestStmt_Exec(t *testing.T) {
 	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
 
-	values := []driver.Value{
-		int64(1),
+	values := []driver.NamedValue{
+		{Ordinal: 1, Value: int64(1)},
 	}
 
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(?)")
 	require.NoError(t, err)
 
-	result, err := stmt.Exec(values)
+	result, err := stmt.(driver.StmtExecContext).ExecContext(context.Background(), values)
 	require.NoError(t, err)
 
 	lastInsertID, err := result.LastInsertId()
@@ -268,10 +268,10 @@ func TestStmt_ExecManyParams(t *testing.T) {
 	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -279,11 +279,11 @@ func TestStmt_ExecManyParams(t *testing.T) {
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES " + strings.Repeat("(?), ", 299) + " (?)")
 	require.NoError(t, err)
 
-	values := make([]driver.Value, 300)
+	values := make([]driver.NamedValue, 300)
 	for i := range values {
-		values[i] = int64(1)
+		values[i] = driver.NamedValue{Ordinal: i + 1, Value: int64(1)}
 	}
-	_, err = stmt.Exec(values)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), values)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -300,10 +300,10 @@ func TestStmt_Query(t *testing.T) {
 	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -311,7 +311,7 @@ func TestStmt_Query(t *testing.T) {
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(-123)")
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -319,7 +319,7 @@ func TestStmt_Query(t *testing.T) {
 	stmt, err = conn.Prepare("SELECT n FROM test")
 	require.NoError(t, err)
 
-	rows, err := stmt.Query(nil)
+	rows, err := stmt.(driver.StmtQueryContext).QueryContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, rows.Columns(), []string{"n"})
@@ -346,10 +346,10 @@ func TestStmt_QueryManyParams(t *testing.T) {
 	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -357,11 +357,11 @@ func TestStmt_QueryManyParams(t *testing.T) {
 	stmt, err = conn.Prepare("SELECT n FROM test WHERE n IN (" + strings.Repeat("?, ", 299) + " ?)")
 	require.NoError(t, err)
 
-	values := make([]driver.Value, 300)
+	values := make([]driver.NamedValue, 300)
 	for i := range values {
-		values[i] = int64(1)
+		values[i] = driver.NamedValue{Ordinal: i + 1, Value: int64(1)}
 	}
-	_, err = stmt.Query(values)
+	_, err = stmt.(driver.StmtQueryContext).QueryContext(context.Background(), values)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -375,15 +375,15 @@ func TestConn_QueryParams(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	execer := conn.(driver.Execer)
+	execer := conn.(driver.ExecerContext)
 
-	_, err = execer.Exec("CREATE TABLE test (n INT, t TEXT)", nil)
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (n INT, t TEXT)", nil)
 	require.NoError(t, err)
 
-	_, err = execer.Exec(`
+	_, err = execer.ExecContext(context.Background(), `
 INSERT INTO test (n,t) VALUES (1,'a');
 INSERT INTO test (n,t) VALUES (2,'a');
 INSERT INTO test (n,t) VALUES (2,'b');
@@ -392,25 +392,25 @@ INSERT INTO test (n,t) VALUES (3,'b');
 		nil)
 	require.NoError(t, err)
 
-	values := []driver.Value{
-		int64(1),
-		"a",
+	values := []driver.NamedValue{
+		{Ordinal: 1, Value: int64(1)},
+		{Ordinal: 2, Value: "a"},
 	}
 
-	queryer := conn.(driver.Queryer)
+	queryer := conn.(driver.QueryerContext)
 
-	rows, err := queryer.Query("SELECT n, t FROM test WHERE n > ? AND t = ?", values)
+	rows, err := queryer.QueryContext(context.Background(), "SELECT n, t FROM test WHERE n > ? AND t = ?", values)
 	require.NoError(t, err)
 
 	assert.Equal(t, rows.Columns()[0], "n")
 
-	values = make([]driver.Value, 2)
-	require.NoError(t, rows.Next(values))
+	rowValues := make([]driver.Value, 2)
+	require.NoError(t, rows.Next(rowValues))
 
-	assert.Equal(t, int64(2), values[0])
-	assert.Equal(t, "a", values[1])
+	assert.Equal(t, int64(2), rowValues[0])
+	assert.Equal(t, "a", rowValues[1])
 
-	require.Equal(t, io.EOF, rows.Next(values))
+	require.Equal(t, io.EOF, rows.Next(rowValues))
 
 	assert.NoError(t, conn.Close())
 }
@@ -422,20 +422,20 @@ func TestConn_QueryManyParams(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	execer := conn.(driver.Execer)
+	execer := conn.(driver.ExecerContext)
 
-	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (n INT)", nil)
 	require.NoError(t, err)
 
-	values := make([]driver.Value, 300)
+	values := make([]driver.NamedValue, 300)
 	for i := range values {
-		values[i] = int64(1)
+		values[i] = driver.NamedValue{Ordinal: i + 1, Value: int64(1)}
 	}
-	queryer := conn.(driver.Queryer)
-	_, err = queryer.Query("SELECT n FROM test WHERE n IN ("+strings.Repeat("?, ", 299)+" ?)", values)
+	queryer := conn.(driver.QueryerContext)
+	_, err = queryer.QueryContext(context.Background(), "SELECT n FROM test WHERE n IN ("+strings.Repeat("?, ", 299)+" ?)", values)
 	require.NoError(t, err)
 
 	assert.NoError(t, conn.Close())
@@ -448,20 +448,20 @@ func TestConn_ExecManyParams(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	execer := conn.(driver.Execer)
+	execer := conn.(driver.ExecerContext)
 
-	_, err = execer.Exec("CREATE TABLE test (n INT)", nil)
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (n INT)", nil)
 	require.NoError(t, err)
 
-	values := make([]driver.Value, 300)
+	values := make([]driver.NamedValue, 300)
 	for i := range values {
-		values[i] = int64(1)
+		values[i] = driver.NamedValue{Ordinal: i + 1, Value: int64(1)}
 	}
 
-	_, err = execer.Exec("INSERT INTO test(n) VALUES "+strings.Repeat("(?), ", 299)+" (?)", values)
+	_, err = execer.ExecContext(context.Background(), "INSERT INTO test(n) VALUES "+strings.Repeat("(?), ", 299)+" (?)", values)
 	require.NoError(t, err)
 
 	assert.NoError(t, conn.Close())
@@ -478,10 +478,10 @@ func Test_ColumnTypesEmpty(t *testing.T) {
 	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -489,7 +489,7 @@ func Test_ColumnTypesEmpty(t *testing.T) {
 	stmt, err = conn.Prepare("SELECT n FROM test")
 	require.NoError(t, err)
 
-	rows, err := stmt.Query(nil)
+	rows, err := stmt.(driver.StmtQueryContext).QueryContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, err)
@@ -514,10 +514,10 @@ func Test_ColumnTypesExists(t *testing.T) {
 	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -525,13 +525,13 @@ func Test_ColumnTypesExists(t *testing.T) {
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(-123)")
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	stmt, err = conn.Prepare("SELECT n FROM test")
 	require.NoError(t, err)
 
-	rows, err := stmt.Query(nil)
+	rows, err := stmt.(driver.StmtQueryContext).QueryContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, err)
@@ -557,10 +557,10 @@ func Test_ColumnTypesEnd(t *testing.T) {
 	stmt, err := conn.Prepare("CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
-	_, err = conn.Begin()
+	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, stmt.Close())
@@ -568,13 +568,13 @@ func Test_ColumnTypesEnd(t *testing.T) {
 	stmt, err = conn.Prepare("INSERT INTO test(n) VALUES(-123)")
 	require.NoError(t, err)
 
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	stmt, err = conn.Prepare("SELECT n FROM test")
 	require.NoError(t, err)
 
-	rows, err := stmt.Query(nil)
+	rows, err := stmt.(driver.StmtQueryContext).QueryContext(context.Background(), nil)
 	require.NoError(t, err)
 
 	require.NoError(t, err)
@@ -605,9 +605,9 @@ func Test_ZeroColumns(t *testing.T) {
 
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
-	queryer := conn.(driver.Queryer)
+	queryer := conn.(driver.QueryerContext)
 
-	rows, err := queryer.Query("CREATE TABLE foo (bar INTEGER)", []driver.Value{})
+	rows, err := queryer.QueryContext(context.Background(), "CREATE TABLE foo (bar INTEGER)", []driver.NamedValue{})
 	require.NoError(t, err)
 	values := []driver.Value{}
 	require.Equal(t, io.EOF, rows.Next(values))
@@ -627,14 +627,15 @@ func Test_DescribeLastEntry(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.(driver.Execer).Exec(`CREATE TABLE test (n INT)`, nil)
+	_, err = conn.(driver.ExecerContext).ExecContext(context.Background(), `CREATE TABLE test (n INT)`, nil)
 	require.NoError(t, err)
 
 	stmt, err := conn.Prepare(`INSERT INTO test(n) VALUES(?)`)
 	require.NoError(t, err)
 
 	for i := 0; i < 300; i++ {
-		_, err := stmt.Exec([]driver.Value{ int64(i) })
+		values := []driver.NamedValue{{Ordinal: 1, Value: int64(i)}}
+		_, err := stmt.(driver.StmtExecContext).ExecContext(context.Background(), values)
 		require.NoError(t, err)
 	}
 	require.NoError(t, stmt.Close())
