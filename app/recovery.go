@@ -44,10 +44,12 @@ var belongsInKernelPattern = regexp.MustCompile(`\A(metadata[1-2]|[0-9]{16}-[0-9
 
 func PrepareRecovery(dir string, address string, cluster []dqlite.NodeInfo) (*RecoveryKernel, error) {
 	var me *dqlite.NodeInfo
-	for _, node := range cluster {
-		if node.Address == address {
+	for i := range cluster {
+		node := cluster[i]
+		if node.ID == 0 {
+			return nil, fmt.Errorf("node ID may not be zero")
+		} else if node.Address == address {
 			me = &node
-			break
 		}
 	}
 	if me == nil {
