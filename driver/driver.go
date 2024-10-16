@@ -21,6 +21,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"net/url"
 	"reflect"
 	"syscall"
 	"time"
@@ -251,55 +252,76 @@ type Connector struct {
 	driver *Driver
 }
 
+func decomposeURI(raw string) (string, url.Values, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", nil, err
+	}
+	if u.Scheme == "" {
+		return u.Path, make(map[string][]string), nil
+	}
+	if !(u.Scheme == "file" && u.Opaque != "" && u.Host == "" && u.Path == "") {
+		return "", nil, fmt.Errorf("disallowed format for URI")
+	}
+	return u.Opaque, u.Query(), nil
+}
+
 // Connect returns a connection to the database.
-func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
+func (c *Connector) Connect(ctx context.Context) (_ driver.Conn, retErr error) {
 	if c.driver.context != nil {
 		ctx = c.driver.context
 	}
-
-	if c.driver.connectionTimeout != 0 {
+	if to := c.driver.connectionTimeout; to != 0 {
 		var cancel func()
-		ctx, cancel = context.WithTimeout(ctx, c.driver.connectionTimeout)
+		ctx, cancel = context.WithTimeout(ctx, to)
 		defer cancel()
 	}
+	log := c.driver.log
 
-	// TODO: generate a client ID.
+	dbName, uriQuery, err := decomposeURI(c.uri)
+	if err != nil {
+		return nil, driverError(log, errors.Wrap(err, "failed to parse URI"))
+	}
+	directAddr := uriQuery.Get("dqlite_addr")
+	mode := uriQuery.Get("mode")
+	if mode != "ro" {
+		return nil, driverError(log, fmt.Errorf("mode=ro is required for direct dqlite connections")
+	}
+
 	config := c.driver.clientConfig
 	config.ConcurrentLeaderConns = *c.driver.concurrentLeaderConns
-	connector := protocol.NewConnector(0, c.driver.store, config, c.driver.log)
-
-	conn := &Conn{
-		log:            c.driver.log,
-		contextTimeout: c.driver.contextTimeout,
-		tracing:        c.driver.tracing,
-	}
-
-	var err error
-	conn.protocol, err = connector.Connect(ctx)
+	config.Direct = directAddr
+	// TODO: generate a client ID.
+	protoConnector := protocol.NewConnector(0, c.driver.store, config, log)
+	proto, err := protoConnector.Connect(ctx)
 	if err != nil {
-		return nil, driverError(conn.log, errors.Wrap(err, "failed to create dqlite connection"))
+		return nil, driverError(log, errors.Wrap(err, "failed to create dqlite connection"))
 	}
-
-	conn.request.Init(4096)
-	conn.response.Init(4096)
-
-	protocol.EncodeOpen(&conn.request, c.uri, 0, "volatile")
-
-	if err := conn.protocol.Call(ctx, &conn.request, &conn.response); err != nil {
-		conn.protocol.Close()
-		return nil, driverError(conn.log, errors.Wrap(err, "failed to open database"))
+	defer func() {
+		if retErr != nil {
+			proto.Close()
+		}
+	}()
+	var request, response protocol.Message
+	request.Init(4096)
+	response.Init(4096)
+	var flags uint64
+	if config.Direct != "" {
+		flags = protocol.AllowStaleQueries
 	}
-
-	conn.id, err = protocol.DecodeDb(&conn.response)
+	protocol.EncodeOpen(&request, dbName, flags, "")
+	if err := proto.Call(ctx, &request, &response); err != nil {
+		return nil, driverError(log, errors.Wrap(err, "failed to open database"))
+	}
+	dbID, err := protocol.DecodeDb(&response)
 	if err != nil {
-		conn.protocol.Close()
-		return nil, driverError(conn.log, errors.Wrap(err, "failed to open database"))
+		return nil, driverError(log, errors.Wrap(err, "failed to open database"))
 	}
-
+	conn := &Conn{c.driver.log, proto, request, response, dbID, c.driver.connectionTimeout, c.driver.tracing}
 	return conn, nil
 }
 
-// Driver returns the underlying Driver of the Connector,
+// Driver returns the underlying Driver of the Connector.
 func (c *Connector) Driver() driver.Driver {
 	return c.driver
 }

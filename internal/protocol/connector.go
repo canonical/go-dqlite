@@ -125,6 +125,11 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 // Make a single attempt to establish a connection to the leader server trying
 // all addresses available in the store.
 func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*Protocol, error) {
+	if direct := c.config.Direct; direct != "" {
+		proto, _, err := c.connectAttemptOne(ctx, ctx, direct, log, noCheckLeader)
+		return proto, err
+	}
+
 	servers, err := c.store.Get(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "get servers")
@@ -262,6 +267,10 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64) (*Protocol, e
 	return newProtocol(version, conn), nil
 }
 
+const (
+	noCheckLeader = 1 << iota
+)
+
 // Connect to the given dqlite server and check if it's the leader.
 //
 // dialCtx is used for net.Dial; ctx is used for all other requests.
@@ -277,7 +286,13 @@ func (c *Connector) connectAttemptOne(
 	ctx context.Context,
 	address string,
 	log logging.Func,
+	options ...uint,
 ) (*Protocol, string, error) {
+	var o uint
+	for _, opt := range options {
+		o |= opt
+	}
+
 	dialCtx, cancel := context.WithTimeout(dialCtx, c.config.DialTimeout)
 	defer cancel()
 
@@ -297,6 +312,10 @@ func (c *Connector) connectAttemptOne(
 	if err != nil {
 		conn.Close()
 		return nil, "", err
+	}
+
+	if o&noCheckLeader != 0 {
+		return protocol, "", nil
 	}
 
 	// Send the initial Leader request.
