@@ -70,72 +70,110 @@ func (lt *LeaderTracker) DonateSharedProtocol(proto *Protocol) (accepted bool) {
 	return
 }
 
-// Connector is in charge of creating a dqlite SQL client connected to the
-// current leader of a cluster.
 type Connector struct {
-	id     uint64 // Conn ID to use when registering against the server.
-	store  NodeStore
-	lt     *LeaderTracker
-	config Config       // Connection parameters.
-	log    logging.Func // Logging function.
+	clientID    uint64 // Conn ID to use when registering against the server.
+	store       NodeStore
+	nodeID      uint64
+	nodeAddress string
+	lt          *LeaderTracker
+	config      Config       // Connection parameters.
+	log         logging.Func // Logging function.
 }
 
 // NewConnector returns a new connector that can be used by a dqlite driver to
 // create new clients connected to a leader dqlite server.
-func NewConnector(id uint64, store NodeStore, config Config, log logging.Func) *Connector {
+func NewLeaderConnector(store NodeStore, config Config, log logging.Func) *Connector {
 	if config.Dial == nil {
 		config.Dial = Dial
 	}
-
 	if config.DialTimeout == 0 {
 		config.DialTimeout = 5 * time.Second
 	}
-
 	if config.AttemptTimeout == 0 {
 		config.AttemptTimeout = 15 * time.Second
 	}
-
 	if config.BackoffFactor == 0 {
 		config.BackoffFactor = 100 * time.Millisecond
 	}
-
 	if config.BackoffCap == 0 {
 		config.BackoffCap = time.Second
 	}
-
 	if config.ConcurrentLeaderConns == 0 {
 		config.ConcurrentLeaderConns = MaxConcurrentLeaderConns
 	}
 
-	lt := &LeaderTracker{}
-
-	return &Connector{id, store, lt, config, log}
+	return &Connector{
+		store:  store,
+		lt:     &LeaderTracker{},
+		config: config,
+		log:    log,
+	}
 }
 
-// Connect returns a connection to the cluster leader, possibly recycled from
-// the LeaderTracker.
-func (c *Connector) ConnectPermitShared(ctx context.Context) (*Protocol, error) {
-	if sharedProto := c.lt.TakeSharedProtocol(); sharedProto != nil {
-		if leaderAddr, err := askLeader(ctx, sharedProto); err == nil && sharedProto.addr == leaderAddr {
-			c.log(logging.Debug, "reusing shared connection to %s", sharedProto.addr)
-			c.lt.SetLeaderAddr(leaderAddr)
-			return sharedProto, nil
-		}
-		c.log(logging.Debug, "discarding shared connection to %s", sharedProto.addr)
-		sharedProto.Bad()
-		sharedProto.Close()
+func NewDirectConnector(id uint64, address string, config Config, log logging.Func) *Connector {
+	if config.Dial == nil {
+		config.Dial = Dial
+	}
+	if config.DialTimeout == 0 {
+		config.DialTimeout = 5 * time.Second
+	}
+	if config.AttemptTimeout == 0 {
+		config.AttemptTimeout = 15 * time.Second
+	}
+	if config.BackoffFactor == 0 {
+		config.BackoffFactor = 100 * time.Millisecond
+	}
+	if config.BackoffCap == 0 {
+		config.BackoffCap = time.Second
+	}
+	if config.ConcurrentLeaderConns == 0 {
+		config.ConcurrentLeaderConns = MaxConcurrentLeaderConns
 	}
 
-	protocol, err := c.Connect(ctx)
-	if err != nil {
-		return nil, err
+	return &Connector{
+		nodeID:      id,
+		nodeAddress: address,
+		lt:          &LeaderTracker{},
+		config:      config,
+		log:         log,
 	}
-	protocol.lt = c.lt
-	return protocol, nil
 }
 
-// Connect returns a new connection to the cluster leader.
 func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
+	if c.nodeID != 0 {
+		ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
+		defer cancel()
+		conn, err := c.config.Dial(ctx, c.nodeAddress)
+		if err != nil {
+			return nil, errors.Wrap(err, "dial")
+		}
+		version := VersionOne
+		protocol, err := Handshake(ctx, conn, version, c.nodeAddress)
+		if err == errBadProtocol {
+			c.log(logging.Warn, "unsupported protocol %d, attempt with legacy", version)
+			version = VersionLegacy
+			protocol, err = Handshake(ctx, conn, version, c.nodeAddress)
+		}
+		if err != nil {
+			conn.Close()
+			return nil, errors.Wrap(err, "handshake")
+		}
+		return protocol, nil
+	}
+
+	if c.config.PermitShared {
+		if sharedProto := c.lt.TakeSharedProtocol(); sharedProto != nil {
+			if leaderAddr, err := askLeader(ctx, sharedProto); err == nil && sharedProto.addr == leaderAddr {
+				c.log(logging.Debug, "reusing shared connection to %s", sharedProto.addr)
+				c.lt.SetLeaderAddr(leaderAddr)
+				return sharedProto, nil
+			}
+			c.log(logging.Debug, "discarding shared connection to %s", sharedProto.addr)
+			sharedProto.Bad()
+			sharedProto.Close()
+		}
+	}
+
 	var protocol *Protocol
 	err := retry.Retry(func(attempt uint) error {
 		log := func(l logging.Level, format string, a ...interface{}) {
@@ -169,7 +207,9 @@ func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	}
 
 	c.lt.SetLeaderAddr(protocol.addr)
-
+	if c.config.PermitShared {
+		protocol.lt = c.lt
+	}
 	return protocol, nil
 }
 
@@ -357,7 +397,7 @@ func (c *Connector) connectAttemptOne(
 		response := Message{}
 		response.Init(512)
 
-		EncodeClient(&request, c.id)
+		EncodeClient(&request, c.clientID)
 
 		if err := protocol.Call(ctx, &request, &response); err != nil {
 			protocol.Close()

@@ -151,7 +151,7 @@ func newProtocol(t *testing.T) (*protocol.Protocol, func()) {
 		AttemptTimeout: 100 * time.Millisecond,
 		BackoffFactor:  time.Millisecond,
 	}
-	connector := protocol.NewConnector(0, store, config, logging.Test(t))
+	connector := protocol.NewLeaderConnector(store, config, logging.Test(t))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()

@@ -12,10 +12,11 @@ type Config struct {
 	Dial                  DialFunc      // Network dialer.
 	DialTimeout           time.Duration // Timeout for establishing a network connection .
 	AttemptTimeout        time.Duration // Timeout for each individual attempt to probe a server's leadership.
-	RetryLimit            uint          // Maximum number of retries, or 0 for unlimited.
 	BackoffFactor         time.Duration // Exponential backoff factor for retries.
 	BackoffCap            time.Duration // Maximum connection retry backoff value,
+	RetryLimit            uint          // Maximum number of retries, or 0 for unlimited.
 	ConcurrentLeaderConns int64         // Maximum number of concurrent connections to other cluster members while probing for leadership.
+	PermitShared          bool
 }
 
 // RetryStrategies returns a configuration for the retry package based on a Config.

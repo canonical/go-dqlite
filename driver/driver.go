@@ -302,10 +302,9 @@ func (c *Connector) Driver() driver.Driver {
 
 // OpenConnector creates a reusable Connector for a specific database.
 func (d *Driver) OpenConnector(name string) (driver.Connector, error) {
-	// TODO: generate a client ID.
 	config := d.clientConfig
 	config.ConcurrentLeaderConns = *d.concurrentLeaderConns
-	pc := protocol.NewConnector(0, d.store, config, d.log)
+	pc := protocol.NewLeaderConnector(d.store, config, d.log)
 	connector := &Connector{
 		uri:      name,
 		driver:   d,

@@ -40,7 +40,7 @@ type App struct {
 	tls             *tlsSetup
 	dialFunc        client.DialFunc
 	store           client.NodeStore
-	lc              *client.LeaderConnector
+	lc              *client.Connector
 	driver          *driver.Driver
 	driverName      string
 	log             client.LogFunc
@@ -245,6 +245,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		client.WithDialFunc(driverDial),
 		client.WithLogFunc(o.Log),
 		client.WithConcurrentLeaderConns(*o.ConcurrentLeaderConns),
+		client.WithPermitShared(true),
 	)
 
 	app = &App{
@@ -509,7 +510,7 @@ func (a *App) Leader(ctx context.Context, options ...client.Option) (*client.Cli
 // Compared to Leader, this method avoids opening extra connections int many
 // cases, but doesn't accept custom options.
 func (a *App) FindLeader(ctx context.Context) (*client.Client, error) {
-	return a.lc.Find(ctx)
+	return a.lc.Connect(ctx)
 }
 
 // Client returns a client connected to the local node.

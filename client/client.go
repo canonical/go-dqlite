@@ -22,6 +22,7 @@ type options struct {
 	DialFunc              DialFunc
 	LogFunc               LogFunc
 	ConcurrentLeaderConns int64
+	PermitShared          bool
 }
 
 // WithDialFunc sets a custom dial function for creating the client network
@@ -47,6 +48,12 @@ func WithLogFunc(log LogFunc) Option {
 func WithConcurrentLeaderConns(maxConns int64) Option {
 	return func(o *options) {
 		o.ConcurrentLeaderConns = maxConns
+	}
+}
+
+func WithPermitShared(permit bool) Option {
+	return func(o *options) {
+		o.PermitShared = permit
 	}
 }
 
@@ -326,4 +333,38 @@ func defaultOptions() *options {
 		LogFunc:               DefaultLogFunc,
 		ConcurrentLeaderConns: protocol.MaxConcurrentLeaderConns,
 	}
+}
+
+type Connector protocol.Connector
+
+func NewLeaderConnector(store NodeStore, options ...Option) *Connector {
+	opts := defaultOptions()
+	for _, o := range options {
+		o(opts)
+	}
+	config := protocol.Config{
+		Dial:                  opts.DialFunc,
+		ConcurrentLeaderConns: opts.ConcurrentLeaderConns,
+		PermitShared:          opts.PermitShared,
+	}
+	inner := protocol.NewLeaderConnector(store, config, opts.LogFunc)
+	return (*Connector)(inner)
+}
+
+func NewDirectConnector(id uint64, address string, options ...Option) *Connector {
+	opts := defaultOptions()
+	for _, o := range options {
+		o(opts)
+	}
+	config := protocol.Config{Dial: opts.DialFunc}
+	inner := protocol.NewDirectConnector(id, address, config, opts.LogFunc)
+	return (*Connector)(inner)
+}
+
+func (connector *Connector) Connect(ctx context.Context) (*Client, error) {
+	protocol, err := (*protocol.Connector)(connector).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{protocol}, nil
 }

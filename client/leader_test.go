@@ -23,20 +23,20 @@ func TestLeaderConnector(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	connector := client.NewLeaderConnector(store)
+	connector := client.NewLeaderConnector(store, client.WithPermitShared(true))
 
-	cli, err := connector.Find(ctx)
+	cli, err := connector.Connect(ctx)
 	require.NoError(t, err)
 	firstProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
 	require.NoError(t, cli.Close())
 
-	cli, err = connector.Find(ctx)
+	cli, err = connector.Connect(ctx)
 	require.NoError(t, err)
 	secondProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
 
 	// The first leader connection was returned to the leader tracker
 	// when we closed the client, and is returned by the second call
-	// to FindLeader.
+	// to Connect.
 	require.Equal(t, firstProto, secondProto)
 
 	// The reused connection is good to go.
@@ -51,7 +51,7 @@ func TestLeaderConnector(t *testing.T) {
 	require.Error(t, err)
 	require.NoError(t, cli.Close())
 
-	cli, err = connector.Find(ctx)
+	cli, err = connector.Connect(ctx)
 	require.NoError(t, err)
 	thirdProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
 	require.NoError(t, cli.Close())
