@@ -232,7 +232,7 @@ func (s *Node) Close() {
 
 // Remark that Recover doesn't take the node role into account
 func (s *Node) Recover(cluster []protocol.NodeInfo) error {
-	for i, _ := range cluster {
+	for i := range cluster {
 		cluster[i].Role = protocol.Voter
 	}
 	return s.RecoverExt(cluster)

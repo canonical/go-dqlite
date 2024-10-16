@@ -42,8 +42,8 @@ func proxy(ctx context.Context, remote net.Conn, local net.Conn, config *tls.Con
 		}
 	}
 
-	remoteToLocal := make(chan error, 0)
-	localToRemote := make(chan error, 0)
+	remoteToLocal := make(chan error)
+	localToRemote := make(chan error)
 
 	// Start copying data back and forth until either the client or the
 	// server get closed or hit an error.
