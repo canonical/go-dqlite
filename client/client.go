@@ -329,8 +329,16 @@ func defaultOptions() *options {
 	}
 }
 
+// Connector is a reusable configuration for creating new Clients.
+//
+// In some cases, Connector.Connect can take advantage of state stored in the
+// Connector to be more efficient than New or FindLeader, so prefer to use a
+// Connector whenever several Clients need to be created with the same
+// parameters.
 type Connector protocol.Connector
 
+// NewLeaderConnector creates a Connector that will yield Clients connected to
+// the cluster leader.
 func NewLeaderConnector(store NodeStore, options ...Option) *Connector {
 	opts := defaultOptions()
 	for _, o := range options {
@@ -345,6 +353,8 @@ func NewLeaderConnector(store NodeStore, options ...Option) *Connector {
 	return (*Connector)(inner)
 }
 
+// NewDirectConnector creates a Connector that will yield Clients connected to
+// the node with the given ID and address.
 func NewDirectConnector(id uint64, address string, options ...Option) *Connector {
 	opts := defaultOptions()
 	for _, o := range options {
@@ -355,6 +365,7 @@ func NewDirectConnector(id uint64, address string, options ...Option) *Connector
 	return (*Connector)(inner)
 }
 
+// Connect opens a Client based on the Connector's configuration.
 func (connector *Connector) Connect(ctx context.Context) (*Client, error) {
 	protocol, err := (*protocol.Connector)(connector).Connect(ctx)
 	if err != nil {
