@@ -401,8 +401,13 @@ func TestHandover_GracefulShutdown(t *testing.T) {
 		defer cleanup()
 
 		addr := fmt.Sprintf("127.0.0.1:900%d", i+1)
+		log := func(l client.LogLevel, format string, a ...interface{}) {
+			format = fmt.Sprintf("%s - %d: %s: %s", time.Now().Format("15:04:01.000"), i, l.String(), format)
+			t.Logf(format, a...)
+		}
 		options := []app.Option{
 			app.WithAddress(addr),
+			app.WithLogFunc(log),
 		}
 		if i > 0 {
 			options = append(options, app.WithCluster([]string{"127.0.0.1:9001"}))
@@ -1292,8 +1297,8 @@ func Test_TxRowsAffected(t *testing.T) {
 CREATE TABLE test (
 	id            TEXT PRIMARY KEY,
 	value         INT
-);`);
-	require.NoError(t, err);
+);`)
+	require.NoError(t, err)
 
 	// Insert watermark
 	err = tx(context.Background(), db, func(ctx context.Context, tx *sql.Tx) error {

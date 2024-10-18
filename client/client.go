@@ -22,6 +22,7 @@ type options struct {
 	DialFunc              DialFunc
 	LogFunc               LogFunc
 	ConcurrentLeaderConns int64
+	PermitShared          bool
 }
 
 // WithDialFunc sets a custom dial function for creating the client network
@@ -64,15 +65,13 @@ func New(ctx context.Context, address string, options ...Option) (*Client, error
 		return nil, errors.Wrap(err, "failed to establish network connection")
 	}
 
-	protocol, err := protocol.Handshake(ctx, conn, protocol.VersionOne)
+	protocol, err := protocol.Handshake(ctx, conn, protocol.VersionOne, address)
 	if err != nil {
 		conn.Close()
 		return nil, err
 	}
 
-	client := &Client{protocol: protocol}
-
-	return client, nil
+	return &Client{protocol}, nil
 }
 
 // Leader returns information about the current leader, if any.
@@ -328,4 +327,49 @@ func defaultOptions() *options {
 		LogFunc:               DefaultLogFunc,
 		ConcurrentLeaderConns: protocol.MaxConcurrentLeaderConns,
 	}
+}
+
+// Connector is a reusable configuration for creating new Clients.
+//
+// In some cases, Connector.Connect can take advantage of state stored in the
+// Connector to be more efficient than New or FindLeader, so prefer to use a
+// Connector whenever several Clients need to be created with the same
+// parameters.
+type Connector protocol.Connector
+
+// NewLeaderConnector creates a Connector that will yield Clients connected to
+// the cluster leader.
+func NewLeaderConnector(store NodeStore, options ...Option) *Connector {
+	opts := defaultOptions()
+	for _, o := range options {
+		o(opts)
+	}
+	config := protocol.Config{
+		Dial:                  opts.DialFunc,
+		ConcurrentLeaderConns: opts.ConcurrentLeaderConns,
+		PermitShared:          opts.PermitShared,
+	}
+	inner := protocol.NewLeaderConnector(store, config, opts.LogFunc)
+	return (*Connector)(inner)
+}
+
+// NewDirectConnector creates a Connector that will yield Clients connected to
+// the node with the given ID and address.
+func NewDirectConnector(id uint64, address string, options ...Option) *Connector {
+	opts := defaultOptions()
+	for _, o := range options {
+		o(opts)
+	}
+	config := protocol.Config{Dial: opts.DialFunc}
+	inner := protocol.NewDirectConnector(id, address, config, opts.LogFunc)
+	return (*Connector)(inner)
+}
+
+// Connect opens a Client based on the Connector's configuration.
+func (connector *Connector) Connect(ctx context.Context) (*Client, error) {
+	protocol, err := (*protocol.Connector)(connector).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{protocol}, nil
 }

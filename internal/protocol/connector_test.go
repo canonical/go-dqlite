@@ -24,7 +24,7 @@ func TestConnector_Success(t *testing.T) {
 	store := newStore(t, []string{address})
 
 	log, check := newLogFunc(t)
-	connector := protocol.NewConnector(0, store, protocol.Config{}, log)
+	connector := protocol.NewLeaderConnector(store, protocol.Config{}, log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -35,8 +35,102 @@ func TestConnector_Success(t *testing.T) {
 	assert.NoError(t, client.Close())
 
 	check([]string{
-		"DEBUG: attempt 1: server @test-0: connected",
+		"DEBUG: attempt 1: server @test-0: connected on fallback path",
 	})
+}
+
+// Check the interaction of Connector.Connect with a leader tracker.
+//
+// The leader tracker potentially stores two pieces of data, an address and a shared connection.
+// This gives us four states: INIT (have neither address nor connection), HAVE_ADDR, HAVE_CONN, and HAVE_BOTH.
+// Transitions between these states are triggered by Connector.Connect and Protocol.Close.
+// This test methodically triggers all the possible transitions and checks that they have
+// the intended externally-observable effects.
+func TestConnector_LeaderTracker(t *testing.T) {
+	// options is a configuration for calling Connector.Connect
+	// in order to trigger a specific state transition.
+	type options struct {
+		injectFailure bool
+		returnProto   bool
+		expectedLog   []string
+	}
+
+	injectFailure := func(o *options) {
+		o.injectFailure = true
+		o.expectedLog = append(o.expectedLog, "WARN: attempt 1: server @test-0: context deadline exceeded")
+	}
+	returnProto := func(o *options) {
+		o.returnProto = true
+	}
+	expectDiscard := func(o *options) {
+		o.expectedLog = append(o.expectedLog, "DEBUG: discarding shared connection to @test-0")
+	}
+	expectFallback := func(o *options) {
+		o.expectedLog = append(o.expectedLog, "DEBUG: attempt 1: server @test-0: connected on fallback path")
+	}
+	expectFast := func(o *options) {
+		o.expectedLog = append(o.expectedLog, "DEBUG: attempt 1: server @test-0: connected on fast path")
+	}
+	expectShared := func(o *options) {
+		o.expectedLog = append(o.expectedLog, "DEBUG: reusing shared connection to @test-0")
+	}
+
+	address, cleanup := newNode(t, 0)
+	defer cleanup()
+	store := newStore(t, []string{address})
+	log, checkLog := newLogFunc(t)
+	connector := protocol.NewLeaderConnector(store, protocol.Config{RetryLimit: 1, PermitShared: true}, log)
+	check := func(opts ...func(*options)) *protocol.Protocol {
+		o := &options{}
+		for _, opt := range opts {
+			opt(o)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		if o.injectFailure {
+			ctx, cancel = context.WithDeadline(ctx, time.Unix(1, 0))
+			defer cancel()
+		}
+		proto, err := connector.Connect(ctx)
+		if o.injectFailure {
+			require.Equal(t, protocol.ErrNoAvailableLeader, err)
+		} else {
+			require.NoError(t, err)
+		}
+		checkLog(o.expectedLog)
+		if o.returnProto {
+			return proto
+		} else if err == nil {
+			assert.NoError(t, proto.Close())
+		}
+		return nil
+	}
+
+	// INIT -> INIT
+	check(injectFailure)
+	// INIT -> HAVE_ADDR
+	proto := check(expectFallback, returnProto)
+	proto.Bad()
+	assert.NoError(t, proto.Close())
+	// HAVE_ADDR -> HAVE_ADDR
+	proto = check(expectFast, returnProto)
+	// We need an extra protocol to trigger INIT->HAVE_CONN later.
+	// Grab one here where it doesn't cause a state transition.
+	protoForLater := check(expectFast, returnProto)
+	// HAVE_ADDR -> HAVE_BOTH
+	assert.NoError(t, proto.Close())
+	// HAVE_BOTH -> HAVE_ADDR -> HAVE_BOTH
+	check(expectShared)
+	// HAVE_BOTH -> HAVE_ADDR
+	check(expectDiscard, injectFailure)
+	// HAVE_ADDR -> INIT
+	check(injectFailure)
+	// INIT -> HAVE_CONN
+	assert.NoError(t, protoForLater.Close())
+	// HAVE_CONN -> HAVE_CONN
+	check(expectShared)
+	// HAVE_CONN -> INIT
+	check(expectDiscard, injectFailure)
 }
 
 // The network connection can't be established within the specified number of
@@ -47,7 +141,7 @@ func TestConnector_LimitRetries(t *testing.T) {
 		RetryLimit: 2,
 	}
 	log, check := newLogFunc(t)
-	connector := protocol.NewConnector(0, store, config, log)
+	connector := protocol.NewLeaderConnector(store, config, log)
 
 	_, err := connector.Connect(context.Background())
 	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
@@ -67,7 +161,7 @@ func TestConnector_DialTimeout(t *testing.T) {
 		DialTimeout: 50 * time.Millisecond,
 		RetryLimit:  1,
 	}
-	connector := protocol.NewConnector(0, store, config, log)
+	connector := protocol.NewLeaderConnector(store, config, log)
 
 	_, err := connector.Connect(context.Background())
 	assert.Equal(t, protocol.ErrNoAvailableLeader, err)
@@ -82,7 +176,7 @@ func TestConnector_DialTimeout(t *testing.T) {
 func TestConnector_EmptyNodeStore(t *testing.T) {
 	store := newStore(t, []string{})
 	log, check := newLogFunc(t)
-	connector := protocol.NewConnector(0, store, protocol.Config{}, log)
+	connector := protocol.NewLeaderConnector(store, protocol.Config{}, log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 	defer cancel()
@@ -98,7 +192,7 @@ func TestConnector_ContextCanceled(t *testing.T) {
 	store := newStore(t, []string{"1.2.3.4:666"})
 
 	log, check := newLogFunc(t)
-	connector := protocol.NewConnector(0, store, protocol.Config{}, log)
+	connector := protocol.NewLeaderConnector(store, protocol.Config{}, log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
@@ -122,7 +216,7 @@ func TestConnector_AttemptTimeout(t *testing.T) {
 		AttemptTimeout: 100 * time.Millisecond,
 		RetryLimit:     1,
 	}
-	connector := protocol.NewConnector(0, store, config, logging.Test(t))
+	connector := protocol.NewLeaderConnector(store, config, logging.Test(t))
 	var conn net.Conn
 	go func() {
 		conn, err = listener.Accept()
@@ -304,6 +398,7 @@ func newLogFunc(t *testing.T) (logging.Func, func([]string)) {
 	}
 	check := func(expected []string) {
 		assert.Equal(t, expected, messages)
+		messages = messages[:0]
 	}
 	return log, check
 }

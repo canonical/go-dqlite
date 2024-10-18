@@ -12,30 +12,14 @@ import (
 )
 
 func TestMembership(t *testing.T) {
-	n := 3
-	nodes := make([]*dqlite.Node, n)
-	infos := make([]client.NodeInfo, n)
+	infos, cleanup := setup(t)
+	defer cleanup()
 
-	for i := range nodes {
-		id := uint64(i + 1)
-		address := fmt.Sprintf("@test-%d", id)
-		dir, cleanup := newDir(t)
-		defer cleanup()
-		node, err := dqlite.New(id, address, dir, dqlite.WithBindAddress(address))
-		require.NoError(t, err)
-		nodes[i] = node
-		infos[i].ID = id
-		infos[i].Address = address
-		err = node.Start()
-		require.NoError(t, err)
-		defer node.Close()
-	}
+	store := client.NewInmemNodeStore()
+	store.Set(context.Background(), infos[:1])
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-
-	store := client.NewInmemNodeStore()
-	store.Set(context.Background(), []client.NodeInfo{infos[0]})
 
 	client, err := client.FindLeader(ctx, store)
 	require.NoError(t, err)
@@ -43,4 +27,32 @@ func TestMembership(t *testing.T) {
 
 	err = client.Add(ctx, infos[1])
 	require.NoError(t, err)
+}
+
+func setup(t *testing.T) ([]client.NodeInfo, func()) {
+	n := 3
+	nodes := make([]*dqlite.Node, n)
+	infos := make([]client.NodeInfo, n)
+	var cleanups []func()
+
+	for i := range nodes {
+		id := uint64(i + 1)
+		address := fmt.Sprintf("@test-%d", id)
+		dir, cleanup := newDir(t)
+		cleanups = append(cleanups, cleanup)
+		node, err := dqlite.New(id, address, dir, dqlite.WithBindAddress(address))
+		require.NoError(t, err)
+		nodes[i] = node
+		infos[i].ID = id
+		infos[i].Address = address
+		err = node.Start()
+		require.NoError(t, err)
+		cleanups = append(cleanups, func() { node.Close() })
+	}
+
+	return infos, func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
 }

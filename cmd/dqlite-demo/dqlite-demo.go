@@ -49,8 +49,12 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 				log.Printf(fmt.Sprintf("%s: %s: %s\n", api, l.String(), format), a...)
 			}
 
-			options := []app.Option{app.WithAddress(db), app.WithCluster(*join), app.WithLogFunc(logFunc),
-				app.WithDiskMode(diskMode)}
+			options := []app.Option{
+				app.WithAddress(db),
+				app.WithCluster(*join),
+				app.WithLogFunc(logFunc),
+				app.WithDiskMode(diskMode),
+			}
 
 			// Set TLS options
 			if (crt != "" && key == "") || (key != "" && crt == "") {

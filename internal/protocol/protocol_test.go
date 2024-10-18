@@ -151,21 +151,21 @@ func newProtocol(t *testing.T) (*protocol.Protocol, func()) {
 		AttemptTimeout: 100 * time.Millisecond,
 		BackoffFactor:  time.Millisecond,
 	}
-	connector := protocol.NewConnector(0, store, config, logging.Test(t))
+	connector := protocol.NewLeaderConnector(store, config, logging.Test(t))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
 
-	client, err := connector.Connect(ctx)
+	proto, err := connector.Connect(ctx)
 
 	require.NoError(t, err)
 
 	cleanup := func() {
-		client.Close()
+		proto.Close()
 		serverCleanup()
 	}
 
-	return client, cleanup
+	return proto, cleanup
 }
 
 // Perform a client call.

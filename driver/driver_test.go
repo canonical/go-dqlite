@@ -22,6 +22,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	dqlite "github.com/canonical/go-dqlite"
 	"github.com/canonical/go-dqlite/client"
@@ -619,7 +620,7 @@ func Test_DescribeLastEntry(t *testing.T) {
 	dir, dirCleanup := newDir(t)
 	defer dirCleanup()
 	_, cleanup := newNode(t, dir)
-	store := newStore(t, "@1")
+	store := newStore(t, bindAddress)
 	log := logging.Test(t)
 	drv, err := dqlitedriver.New(store, dqlitedriver.WithLogFunc(log))
 	require.NoError(t, err)
@@ -649,13 +650,43 @@ func Test_DescribeLastEntry(t *testing.T) {
 	assert.Equal(t, info.Term, uint64(1))
 }
 
+func Test_Dump(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+
+	_, err = conn.(driver.ExecerContext).ExecContext(context.Background(), `CREATE TABLE foo (n INT)`, nil)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	client, err := client.New(ctx, bindAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	files, err := client.Dump(ctx, "test.db")
+	require.NoError(t, err)
+
+	require.Len(t, files, 2)
+	assert.Equal(t, "test.db", files[0].Name)
+	assert.Equal(t, 4096, len(files[0].Data))
+
+	assert.Equal(t, "test.db-wal", files[1].Name)
+	assert.Equal(t, 8272, len(files[1].Data))
+}
+
+const bindAddress = "@1"
+
 func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 	t.Helper()
 
 	dir, dirCleanup := newDir(t)
 	_, nodeCleanup := newNode(t, dir)
 
-	store := newStore(t, "@1")
+	store := newStore(t, bindAddress)
 
 	log := logging.Test(t)
 
@@ -684,7 +715,7 @@ func newStore(t *testing.T, address string) client.NodeStore {
 func newNode(t *testing.T, dir string) (*dqlite.Node, func()) {
 	t.Helper()
 
-	server, err := dqlite.New(uint64(1), "@1", dir, dqlite.WithBindAddress("@1"))
+	server, err := dqlite.New(uint64(1), bindAddress, dir, dqlite.WithBindAddress(bindAddress))
 	require.NoError(t, err)
 
 	err = server.Start()

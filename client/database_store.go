@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	_ "github.com/mattn/go-sqlite3" // Go SQLite bindings
+	"github.com/pkg/errors"
 )
 
 // Option that can be used to tweak node store parameters.
@@ -154,4 +154,3 @@ func (d *DatabaseNodeStore) Set(ctx context.Context, servers []NodeInfo) error {
 
 	return nil
 }
-

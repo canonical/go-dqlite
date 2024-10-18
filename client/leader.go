@@ -2,8 +2,6 @@ package client
 
 import (
 	"context"
-
-	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
 // FindLeader returns a Client connected to the current cluster leader.
@@ -13,23 +11,5 @@ import (
 // function will keep retrying (with a capped exponential backoff) until the
 // given context is canceled.
 func FindLeader(ctx context.Context, store NodeStore, options ...Option) (*Client, error) {
-	o := defaultOptions()
-
-	for _, option := range options {
-		option(o)
-	}
-
-	config := protocol.Config{
-		Dial:                  o.DialFunc,
-		ConcurrentLeaderConns: o.ConcurrentLeaderConns,
-	}
-	connector := protocol.NewConnector(0, store, config, o.LogFunc)
-	protocol, err := connector.Connect(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	client := &Client{protocol: protocol}
-
-	return client, nil
+	return NewLeaderConnector(store, options...).Connect(ctx)
 }
