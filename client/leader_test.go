@@ -3,7 +3,6 @@ package client_test
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 

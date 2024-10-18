@@ -1,4 +1,3 @@
-//go:build !nosqlite3
 // +build !nosqlite3
 
 package client

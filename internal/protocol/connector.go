@@ -22,6 +22,8 @@ const MaxConcurrentLeaderConns int64 = 10
 // DialFunc is a function that can be used to establish a network connection.
 type DialFunc func(context.Context, string) (net.Conn, error)
 
+// LeaderTracker remembers the address of the cluster leader, and possibly
+// holds a reusable connection to it.
 type LeaderTracker struct {
 	mu                  sync.RWMutex
 	lastKnownLeaderAddr string
@@ -80,8 +82,8 @@ type Connector struct {
 	log         logging.Func // Logging function.
 }
 
-// NewConnector returns a new connector that can be used by a dqlite driver to
-// create new clients connected to a leader dqlite server.
+// NewConnector returns a Connector that will connect to the current cluster
+// leader.
 func NewLeaderConnector(store NodeStore, config Config, log logging.Func) *Connector {
 	if config.Dial == nil {
 		config.Dial = Dial
@@ -110,6 +112,8 @@ func NewLeaderConnector(store NodeStore, config Config, log logging.Func) *Conne
 	}
 }
 
+// NewDirectConnector returns a Connector that will connect to the node with
+// the given ID and address.
 func NewDirectConnector(id uint64, address string, config Config, log logging.Func) *Connector {
 	if config.Dial == nil {
 		config.Dial = Dial
@@ -139,6 +143,7 @@ func NewDirectConnector(id uint64, address string, config Config, log logging.Fu
 	}
 }
 
+// Connect opens a new Protocol based on the Connector's configuration.
 func (c *Connector) Connect(ctx context.Context) (*Protocol, error) {
 	if c.nodeID != 0 {
 		ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
