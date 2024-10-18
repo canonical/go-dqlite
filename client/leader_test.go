@@ -12,54 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// LeaderConnector recycles connections intelligently.
-func TestLeaderConnector(t *testing.T) {
-	infos, cleanup := setup(t)
-	defer cleanup()
-
-	store := client.NewInmemNodeStore()
-	store.Set(context.Background(), infos[:1])
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	connector := client.NewLeaderConnector(store, client.WithPermitShared(true))
-
-	cli, err := connector.Connect(ctx)
-	require.NoError(t, err)
-	firstProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
-	require.NoError(t, cli.Close())
-
-	cli, err = connector.Connect(ctx)
-	require.NoError(t, err)
-	secondProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
-
-	// The first leader connection was returned to the leader tracker
-	// when we closed the client, and is returned by the second call
-	// to Connect.
-	require.Equal(t, firstProto, secondProto)
-
-	// The reused connection is good to go.
-	err = cli.Add(ctx, infos[1])
-	require.NoError(t, err)
-
-	// Trigger an unsuccessful Protocol operation that will cause the
-	// client's connection to be marked as unsuitable for reuse.
-	shortCtx, cancel := context.WithDeadline(context.Background(), time.Unix(1, 0))
-	cancel()
-	_, err = cli.Cluster(shortCtx)
-	require.Error(t, err)
-	require.NoError(t, cli.Close())
-
-	cli, err = connector.Connect(ctx)
-	require.NoError(t, err)
-	thirdProto := reflect.ValueOf(cli).Elem().FieldByName("protocol").Pointer()
-	require.NoError(t, cli.Close())
-
-	// The previous connection was not reused.
-	require.NotEqual(t, secondProto, thirdProto)
-}
-
 func TestMembership(t *testing.T) {
 	infos, cleanup := setup(t)
 	defer cleanup()

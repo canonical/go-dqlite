@@ -51,12 +51,6 @@ func WithConcurrentLeaderConns(maxConns int64) Option {
 	}
 }
 
-func WithPermitShared(permit bool) Option {
-	return func(o *options) {
-		o.PermitShared = permit
-	}
-}
-
 // New creates a new client connected to the dqlite node with the given
 // address.
 func New(ctx context.Context, address string, options ...Option) (*Client, error) {

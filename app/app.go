@@ -245,7 +245,6 @@ func New(dir string, options ...Option) (app *App, err error) {
 		client.WithDialFunc(driverDial),
 		client.WithLogFunc(o.Log),
 		client.WithConcurrentLeaderConns(*o.ConcurrentLeaderConns),
-		client.WithPermitShared(true),
 	)
 
 	app = &App{
