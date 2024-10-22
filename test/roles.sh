@@ -26,8 +26,8 @@ import (
     "time"
     "path/filepath"
     "strconv"
-    "github.com/canonical/go-dqlite/client"
-    "github.com/canonical/go-dqlite/app"
+    "github.com/canonical/go-dqlite/v2/client"
+    "github.com/canonical/go-dqlite/v2/app"
     "golang.org/x/sys/unix"
 )
 
