@@ -9,8 +9,8 @@ package app_test
 // 	"net"
 // 	"testing"
 
-// 	"github.com/canonical/go-dqlite/app"
-// 	"github.com/canonical/go-dqlite/client"
+// 	"github.com/canonical/go-dqlite/v2/app"
+// 	"github.com/canonical/go-dqlite/v2/client"
 // 	"github.com/quic-go/quic-go"
 // 	"github.com/stretchr/testify/assert"
 // 	"github.com/stretchr/testify/require"

@@ -13,10 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/canonical/go-dqlite"
-	"github.com/canonical/go-dqlite/client"
-	"github.com/canonical/go-dqlite/driver"
-	"github.com/canonical/go-dqlite/internal/protocol"
+	"github.com/canonical/go-dqlite/v2"
+	"github.com/canonical/go-dqlite/v2/client"
+	"github.com/canonical/go-dqlite/v2/driver"
+	"github.com/canonical/go-dqlite/v2/internal/protocol"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 )

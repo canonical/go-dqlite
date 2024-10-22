@@ -1,4 +1,4 @@
-module github.com/canonical/go-dqlite
+module github.com/canonical/go-dqlite/v2
 
 // This is to maintain the ppa package on focal
 go 1.13

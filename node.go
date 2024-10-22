@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/canonical/go-dqlite/client"
-	"github.com/canonical/go-dqlite/internal/bindings"
+	"github.com/canonical/go-dqlite/v2/client"
+	"github.com/canonical/go-dqlite/v2/internal/bindings"
 	"github.com/pkg/errors"
 )
 

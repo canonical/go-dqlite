@@ -55,7 +55,7 @@ jobs:
       env:
         GO_DQLITE_MULTITHREAD: 1
       run: |
-        go install -tags libsqlite3 github.com/canonical/go-dqlite/cmd/dqlite-benchmark
+        go install -tags libsqlite3 github.com/canonical/go-dqlite/v2/cmd/dqlite-benchmark
         dqlite-benchmark --db 127.0.0.1:9001 --driver --cluster 127.0.0.1:9001,127.0.0.1:9002,127.0.0.1:9003 --workload kvreadwrite &
         masterpid=$!
         dqlite-benchmark --db 127.0.0.1:9002 --join 127.0.0.1:9001 &

@@ -3,7 +3,7 @@ package app
 import (
 	"sort"
 
-	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/go-dqlite/v2/client"
 )
 
 const minVoters = 3

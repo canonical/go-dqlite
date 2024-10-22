@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/internal/bindings"
-	"github.com/canonical/go-dqlite/internal/protocol"
+	"github.com/canonical/go-dqlite/v2/internal/bindings"
+	"github.com/canonical/go-dqlite/v2/internal/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
