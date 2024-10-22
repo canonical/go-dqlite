@@ -24,10 +24,10 @@ import (
 	"testing"
 	"time"
 
-	dqlite "github.com/canonical/go-dqlite"
-	"github.com/canonical/go-dqlite/client"
-	dqlitedriver "github.com/canonical/go-dqlite/driver"
-	"github.com/canonical/go-dqlite/logging"
+	dqlite "github.com/canonical/go-dqlite/v2"
+	"github.com/canonical/go-dqlite/v2/client"
+	dqlitedriver "github.com/canonical/go-dqlite/v2/driver"
+	"github.com/canonical/go-dqlite/v2/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

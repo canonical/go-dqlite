@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/canonical/go-dqlite/app"
-	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/go-dqlite/v2/app"
+	"github.com/canonical/go-dqlite/v2/client"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -36,7 +36,7 @@ func main() {
 		Short: "Demo application using dqlite",
 		Long: `This demo shows how to integrate a Go application with dqlite.
 
-Complete documentation is available at https://github.com/canonical/go-dqlite`,
+Complete documentation is available at https://github.com/canonical/go-dqlite/v2`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := filepath.Join(dir, db)
 			if err := os.MkdirAll(dir, 0755); err != nil {

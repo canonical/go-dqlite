@@ -1,6 +1,6 @@
 package shell
 
-import "github.com/canonical/go-dqlite/client"
+import "github.com/canonical/go-dqlite/v2/client"
 
 // Option that can be used to tweak shell parameters.
 type Option func(*options)
