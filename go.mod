@@ -3,6 +3,10 @@ module github.com/canonical/go-dqlite
 // This is to maintain the ppa package on focal
 go 1.13
 
+// Dependents of go-dqlite should switch to either the v2 series (LTS) or the
+// v3 series (ongoing development).
+retract [v1.0.0,v1.99.99]
+
 require (
 	github.com/Rican7/retry v0.3.1
 	github.com/davecgh/go-spew v1.1.1 // indirect
