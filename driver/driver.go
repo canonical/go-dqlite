@@ -27,9 +27,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/canonical/go-dqlite/v2/client"
-	"github.com/canonical/go-dqlite/v2/internal/protocol"
-	"github.com/canonical/go-dqlite/v2/tracing"
+	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/go-dqlite/internal/protocol"
+	"github.com/canonical/go-dqlite/tracing"
 )
 
 // Driver perform queries against a dqlite server.

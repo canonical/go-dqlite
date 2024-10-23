@@ -9,7 +9,7 @@ import (
 	"github.com/google/renameio"
 	"gopkg.in/yaml.v2"
 
-	"github.com/canonical/go-dqlite/v2/internal/protocol"
+	"github.com/canonical/go-dqlite/internal/protocol"
 )
 
 // NodeStore is used by a dqlite client to get an initial list of candidate

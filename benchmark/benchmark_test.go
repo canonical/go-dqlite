@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/v2/app"
-	"github.com/canonical/go-dqlite/v2/benchmark"
+	"github.com/canonical/go-dqlite/app"
+	"github.com/canonical/go-dqlite/benchmark"
 	"github.com/stretchr/testify/require"
 )
 

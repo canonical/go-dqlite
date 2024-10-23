@@ -1,7 +1,7 @@
 package client
 
 import (
-	"github.com/canonical/go-dqlite/v2/logging"
+	"github.com/canonical/go-dqlite/logging"
 )
 
 // LogFunc is a function that can be used for logging.
