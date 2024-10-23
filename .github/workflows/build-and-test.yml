@@ -37,6 +37,7 @@ jobs:
 
     - name: Test
       env:
+        LIBDQLITE_TRACE: 1
         GO_DQLITE_MULTITHREAD: 1
       run: |
         go test -v -tags libsqlite3 -race -coverprofile=coverage.out github.com/canonical/go-dqlite/client -run TestMembership
