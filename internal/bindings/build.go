@@ -7,4 +7,4 @@ import "C"
 
 // required dqlite version
 var dqliteMajorVersion int = 1
-var dqliteMinorVersion int = 14
+var dqliteMinorVersion int = 17
