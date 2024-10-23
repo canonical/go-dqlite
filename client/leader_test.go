@@ -21,7 +21,11 @@ func TestMembership(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	client, err := client.FindLeader(ctx, store)
+	logger := func(l client.LogLevel, format string, a ...interface{}) {
+		t.Logf(format, a...)
+	}
+
+	client, err := client.FindLeader(ctx, store, client.WithLogFunc(logger))
 	require.NoError(t, err)
 	defer client.Close()
 
