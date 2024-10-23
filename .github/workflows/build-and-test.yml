@@ -9,7 +9,7 @@ jobs:
       fail-fast: false
       matrix:
         go:
-          - '1.13'
+          - '1.16'
           - stable
         os:
           - ubuntu-20.04
