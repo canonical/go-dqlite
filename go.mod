@@ -1,7 +1,6 @@
 module github.com/canonical/go-dqlite
 
-// This is to maintain the ppa package on focal
-go 1.13
+go 1.16
 
 // Dependents of go-dqlite should switch to either the v2 series (LTS) or the
 // v3 series (ongoing development).
