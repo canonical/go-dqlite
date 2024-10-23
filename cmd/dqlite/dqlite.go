@@ -14,9 +14,9 @@ import (
 	"github.com/peterh/liner"
 	"github.com/spf13/cobra"
 
-	"github.com/canonical/go-dqlite/v2/app"
-	"github.com/canonical/go-dqlite/v2/client"
-	"github.com/canonical/go-dqlite/v2/internal/shell"
+	"github.com/canonical/go-dqlite/app"
+	"github.com/canonical/go-dqlite/client"
+	"github.com/canonical/go-dqlite/internal/shell"
 )
 
 func main() {

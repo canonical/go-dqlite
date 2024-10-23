@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/canonical/go-dqlite/v2/internal/bindings"
-	"github.com/canonical/go-dqlite/v2/internal/protocol"
+	"github.com/canonical/go-dqlite/internal/bindings"
+	"github.com/canonical/go-dqlite/internal/protocol"
 	"github.com/pkg/errors"
 )
 
