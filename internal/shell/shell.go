@@ -13,9 +13,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/canonical/go-dqlite/v2"
-	"github.com/canonical/go-dqlite/v2/client"
-	"github.com/canonical/go-dqlite/v2/driver"
+	"github.com/canonical/go-dqlite/v3"
+	"github.com/canonical/go-dqlite/v3/client"
+	"github.com/canonical/go-dqlite/v3/driver"
 )
 
 // Shell can be used to implement interactive prompts for inspecting a dqlite

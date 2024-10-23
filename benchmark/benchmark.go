@@ -9,8 +9,8 @@ import (
 	"path"
 	"time"
 
-	"github.com/canonical/go-dqlite/v2/app"
-	"github.com/canonical/go-dqlite/v2/client"
+	"github.com/canonical/go-dqlite/v3/app"
+	"github.com/canonical/go-dqlite/v3/client"
 )
 
 const (

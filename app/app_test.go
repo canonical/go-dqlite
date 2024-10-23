@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/go-dqlite/v2"
-	"github.com/canonical/go-dqlite/v2/app"
-	"github.com/canonical/go-dqlite/v2/client"
+	"github.com/canonical/go-dqlite/v3"
+	"github.com/canonical/go-dqlite/v3/app"
+	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

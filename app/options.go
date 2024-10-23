@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/canonical/go-dqlite/v2"
-	"github.com/canonical/go-dqlite/v2/client"
-	"github.com/canonical/go-dqlite/v2/internal/protocol"
+	"github.com/canonical/go-dqlite/v3"
+	"github.com/canonical/go-dqlite/v3/client"
+	"github.com/canonical/go-dqlite/v3/internal/protocol"
 )
 
 // Option can be used to tweak app parameters.

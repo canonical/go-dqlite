@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/Rican7/retry"
-	"github.com/canonical/go-dqlite/v2/logging"
+	"github.com/canonical/go-dqlite/v3/logging"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 )

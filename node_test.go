@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	dqlite "github.com/canonical/go-dqlite/v2"
+	dqlite "github.com/canonical/go-dqlite/v3"
 )
 
 type infoSorter []dqlite.LastEntryInfo
