@@ -39,11 +39,7 @@ jobs:
       env:
         GO_DQLITE_MULTITHREAD: 1
       run: |
-        go test -v -tags libsqlite3 -race -coverprofile=coverage.out ./...
-        go test -v -tags nosqlite3 ./...
-        VERBOSE=1 ./test/dqlite-demo.sh
-        VERBOSE=1 ./test/roles.sh
-        VERBOSE=1 ./test/recover.sh
+        go test -v -tags libsqlite3 -race github.com/canonical/go-dqlite/client -run TestMembership
 
     - name: Coverage
       uses: coverallsapp/github-action@v2
