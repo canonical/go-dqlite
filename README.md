@@ -1,22 +1,25 @@
 go-dqlite [![CI tests][cibadge]][ciyml] [![Coverage Status][coverallsbadge]][coveralls] [![Go Report Card][reportcardbadge]][reportcard] [![GoDoc][godocbadge]][godoc]
 ======
 
-This repository provides the `go-dqlite` Go package, containing bindings for
+This repository provides the go-dqlite Go package, containing bindings for
 the [dqlite][dqlite] C library and a pure-Go client for the dqlite wire
 [protocol][protocol].
 
 Usage
 -----
 
-The current version of the package is `v3`:
+The current major version of the package is `v3`:
 
 ```
 $ go get github.com/canonical/go-dqlite/v3
 ```
 
-The best way to understand how to use the `go-dqlite` package is probably by
-looking at the source code of the [demo program][demo] and using it as an
-example.
+The `v2` major version is used for an LTS series that gets fixes but no new
+features. Major version 1 is no longer receiving updates of any kind and should
+not be used.
+
+The best way to understand how to use the package is probably by looking at the
+source code of the [demo program][demo] and using it as an example.
 
 In general your application will use code such as:
 
