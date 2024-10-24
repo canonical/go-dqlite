@@ -14,7 +14,7 @@ The current major version of the package is `v3`:
 $ go get github.com/canonical/go-dqlite/v3
 ```
 
-The `v2` major version is used for an LTS series that gets fixes but no new
+The [`v2`][v2] major version is used for an LTS series that gets fixes but no new
 features. Major version 1 is no longer receiving updates of any kind and should
 not be used.
 
@@ -162,3 +162,4 @@ commands to inspect the cluster members and the current leader.
 [protocol]: https://dqlite.io/docs/reference/wire-protocol
 [reportcard]: https://goreportcard.com/report/github.com/canonical/go-dqlite/v3
 [reportcardbadge]: https://goreportcard.com/badge/github.com/canonical/go-dqlite/v3
+[v2]: https://github.com/canonical/go-dqlite/tree/v2
