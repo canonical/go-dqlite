@@ -15,7 +15,7 @@ $ go get github.com/canonical/go-dqlite/v3
 ```
 
 The best way to understand how to use the `go-dqlite` package is probably by
-looking at the source code of the [demo program](demo) and using it as an
+looking at the source code of the [demo program][demo] and using it as an
 example.
 
 In general your application will use code such as:
@@ -150,6 +150,7 @@ commands to inspect the cluster members and the current leader.
 [ciyml]: https://github.com/canonical/go-dqlite/actions/workflows/build-and-test.yml
 [coveralls]: https://coveralls.io/github/canonical/go-dqlite?branch=v3
 [coverallsbadge]: https://coveralls.io/repos/github/canonical/go-dqlite/badge.svg?branch=v3
+[demo]: https://github.com/canonical/go-dqlite/blob/v3/cmd/dqlite-demo/dqlite-demo.go
 [dqlite]: https://github.com/canonical/dqlite
 [dqlitebuild]: https://github.com/canonical/dqlite#build
 [go-sqlite3]: https://github.com/mattn/go-sqlite3
