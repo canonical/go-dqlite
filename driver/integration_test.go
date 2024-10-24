@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	dqlite "github.com/canonical/go-dqlite/v2"
-	"github.com/canonical/go-dqlite/v2/client"
-	"github.com/canonical/go-dqlite/v2/driver"
-	"github.com/canonical/go-dqlite/v2/logging"
+	dqlite "github.com/canonical/go-dqlite/v3"
+	"github.com/canonical/go-dqlite/v3/client"
+	"github.com/canonical/go-dqlite/v3/driver"
+	"github.com/canonical/go-dqlite/v3/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

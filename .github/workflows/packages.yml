@@ -2,7 +2,7 @@ name: Build PPA source packages
 on:
   push:
     branches:
-      - v2
+      - v3
 jobs:
   build:
     if: github.repository == 'canonical/go-dqlite'
@@ -26,7 +26,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: canonical/dqlite-ppa
-        ref: go-dqlite-v2
+        ref: go-dqlite-v3
         path: dqlite-ppa
 
     - name: Setup dependencies
@@ -57,7 +57,7 @@ jobs:
           VERSION="$(git describe --tags | sed -e "s/^v//" -e "s/-/+git/")"
           dch --create \
             --distribution ${TARGET} \
-            --package go-dqlite-v2 \
+            --package go-dqlite-v3 \
             --newversion ${VERSION}~${TARGET}1 \
             "Automatic build from Github"
           debuild -S -sa -d -k${{ vars.PPA_PUBLIC_KEY }}

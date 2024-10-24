@@ -83,7 +83,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/canonical/go-dqlite/v2/internal/protocol"
+	"github.com/canonical/go-dqlite/v3/internal/protocol"
 )
 
 type Node struct {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/canonical/go-dqlite/v2/client"
+	"github.com/canonical/go-dqlite/v3/client"
 )
 
 // Like client.DialFuncWithTLS but also starts the proxy, since the raft
