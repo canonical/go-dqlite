@@ -65,28 +65,25 @@ func New(database string, store client.NodeStore, options ...Option) (*Shell, er
 
 // Process a single input line.
 func (s *Shell) Process(ctx context.Context, line string) (string, error) {
-	switch line {
+	parts := strings.Split(strings.TrimLeft(line, " "), " ")
+	cmd := parts[0]
+	switch cmd {
 	case ".cluster":
-		return s.processCluster(ctx, line)
+		return s.processCluster(ctx)
 	case ".leader":
-		return s.processLeader(ctx, line)
+		return s.processLeader(ctx)
 	case ".help":
 		return s.processHelp(), nil
-	}
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".remove") {
-		return s.processRemove(ctx, line)
-	}
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".describe") {
-		return s.processDescribe(ctx, line)
-	}
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".weight") {
-		return s.processWeight(ctx, line)
-	}
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".dump") {
-		return s.processDump(ctx, line)
-	}
-	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".reconfigure") {
-		return s.processReconfigure(ctx, line)
+	case ".remove":
+		return s.processRemove(ctx, parts)
+	case ".describe":
+		return s.processDescribe(ctx, parts)
+	case ".weight":
+		return s.processWeight(ctx, parts)
+	case ".dump":
+		return s.processDump(ctx, parts)
+	case ".reconfigure":
+		return s.processReconfigure(ctx, parts)
 	}
 	return s.processQuery(ctx, line)
 }
@@ -106,7 +103,7 @@ Enter a SQL statement to execute it, or one of the following built-in commands:
 `[1:]
 }
 
-func (s *Shell) processCluster(ctx context.Context, line string) (string, error) {
+func (s *Shell) processCluster(ctx context.Context) (string, error) {
 	cli, err := client.FindLeader(ctx, s.store, client.WithDialFunc(s.dial))
 	if err != nil {
 		return "", err
@@ -137,7 +134,7 @@ func (s *Shell) processCluster(ctx context.Context, line string) (string, error)
 	return result, nil
 }
 
-func (s *Shell) processLeader(ctx context.Context, line string) (string, error) {
+func (s *Shell) processLeader(ctx context.Context) (string, error) {
 	cli, err := client.FindLeader(ctx, s.store, client.WithDialFunc(s.dial))
 	if err != nil {
 		return "", err
@@ -152,8 +149,7 @@ func (s *Shell) processLeader(ctx context.Context, line string) (string, error) 
 	return leader.Address, nil
 }
 
-func (s *Shell) processRemove(ctx context.Context, line string) (string, error) {
-	parts := strings.Split(line, " ")
+func (s *Shell) processRemove(ctx context.Context, parts []string) (string, error) {
 	if len(parts) != 2 {
 		return "", fmt.Errorf("bad command format, should be: .remove <address>")
 	}
@@ -179,8 +175,7 @@ func (s *Shell) processRemove(ctx context.Context, line string) (string, error) 
 	return "", fmt.Errorf("no node has address %q", address)
 }
 
-func (s *Shell) processDescribe(ctx context.Context, line string) (string, error) {
-	parts := strings.Split(line, " ")
+func (s *Shell) processDescribe(ctx context.Context, parts []string) (string, error) {
 	if len(parts) != 2 {
 		return "", fmt.Errorf("bad command format, should be: .describe <address>")
 	}
@@ -211,8 +206,7 @@ func (s *Shell) processDescribe(ctx context.Context, line string) (string, error
 	return result, nil
 }
 
-func (s *Shell) processDump(ctx context.Context, line string) (string, error) {
-	parts := strings.Split(line, " ")
+func (s *Shell) processDump(ctx context.Context, parts []string) (string, error) {
 	if len(parts) < 2 || len(parts) > 3 {
 		return "NOK", fmt.Errorf("bad command format, should be: .dump <address> [<database>]")
 	}
@@ -247,8 +241,7 @@ func (s *Shell) processDump(ctx context.Context, line string) (string, error) {
 	return "OK", nil
 }
 
-func (s *Shell) processReconfigure(ctx context.Context, line string) (string, error) {
-	parts := strings.Split(line, " ")
+func (s *Shell) processReconfigure(ctx context.Context, parts []string) (string, error) {
 	if len(parts) != 3 {
 		//lint:ignore ST1005 intentional long prosy error message
 		return "NOK", fmt.Errorf("bad command format, should be: .reconfigure <dir> <clusteryaml>\n" +
@@ -293,8 +286,7 @@ func (s *Shell) processReconfigure(ctx context.Context, line string) (string, er
 	return "OK", nil
 }
 
-func (s *Shell) processWeight(ctx context.Context, line string) (string, error) {
-	parts := strings.Split(line, " ")
+func (s *Shell) processWeight(ctx context.Context, parts []string) (string, error) {
 	if len(parts) != 3 {
 		return "", fmt.Errorf("bad command format, should be: .weight <address> <n>")
 	}
