@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/pkg/errors"
@@ -137,6 +138,13 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 
 			app.Handover(context.Background())
 			app.Close()
+
+			lastEntry, err := dqlite.ReadLastEntryInfo(dir)
+			if err != nil {
+				return nil
+			}
+
+			fmt.Printf("dqlite-demo: last entry had term=%d index=%d", lastEntry.Term, lastEntry.Index)
 
 			return nil
 		},
