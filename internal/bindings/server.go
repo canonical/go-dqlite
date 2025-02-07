@@ -72,6 +72,18 @@ static int setAutoRecovery(dqlite_node *t, bool on) {
 	return dqlite_node_set_auto_recovery(t, on);
 }
 
+__attribute__((weak))
+int dqlite_node_set_snapshot_params_v2(dqlite_node *n, unsigned snapshot_threshold, unsigned snapshot_trailing, int trailing_strategy);
+
+static int setSnapshotParameters(dqlite_node *n, unsigned snapshot_threshold, unsigned snapshot_trailing, int trailing_strategy) {
+	if (dqlite_node_set_snapshot_params_v2) {
+		return dqlite_node_set_snapshot_params_v2(n, snapshot_threshold, snapshot_trailing, trailing_strategy);
+	} else if (trailing_strategy == DQLITE_SNAPSHOT_TRAILING_STATIC) {
+	 	return dqlite_node_set_snapshot_params(n, snapshot_threshold, snapshot_trailing);
+	} else {
+	 	return DQLITE_ERROR;
+	}
+}
 */
 import "C"
 import (
@@ -92,9 +104,17 @@ type Node struct {
 	cancel context.CancelFunc
 }
 
+type TrailingStrategy int
+
+const (
+	TrailingStrategyStatic  TrailingStrategy = C.DQLITE_SNAPSHOT_TRAILING_STATIC
+	TrailingStrategyDynamic TrailingStrategy = C.DQLITE_SNAPSHOT_TRAILING_DYNAMIC
+)
+
 type SnapshotParams struct {
 	Threshold uint64
 	Trailing  uint64
+	Strategy  TrailingStrategy
 }
 
 // Initializes state.
@@ -170,7 +190,8 @@ func (s *Node) SetSnapshotParams(params SnapshotParams) error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	cthreshold := C.unsigned(params.Threshold)
 	ctrailing := C.unsigned(params.Trailing)
-	if rc := C.dqlite_node_set_snapshot_params(server, cthreshold, ctrailing); rc != 0 {
+	cstrategy := C.int(params.Strategy)
+	if rc := C.setSnapshotParameters(server, cthreshold, ctrailing, cstrategy); rc != 0 {
 		return fmt.Errorf("failed to set snapshot params")
 	}
 	return nil
