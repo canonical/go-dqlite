@@ -22,13 +22,24 @@ type Node struct {
 // NodeInfo is a convenience alias for client.NodeInfo.
 type NodeInfo = client.NodeInfo
 
+type TrailingStrategy = bindings.TrailingStrategy
+
+const (
+	TrailingStrategyStatic  = bindings.TrailingStrategyStatic
+	TrailingStrategyDynamic = bindings.TrailingStrategyDynamic
+)
+
 // SnapshotParams exposes bindings.SnapshotParams. Used for setting dqlite's
 // snapshot parameters.
 // SnapshotParams.Threshold controls after how many raft log entries a snapshot is
 // taken. The higher this number, the lower the frequency of the snapshots.
 // SnapshotParams.Trailing controls how many raft log entries are retained after
 // taking a snapshot.
-type SnapshotParams = bindings.SnapshotParams
+type SnapshotParams struct {
+	Threshold uint64
+	Trailing  uint64
+	Strategy  TrailingStrategy
+}
 
 // Option can be used to tweak node parameters.
 type Option func(*options)
@@ -64,7 +75,11 @@ func WithFailureDomain(code uint64) Option {
 // WithSnapshotParams sets the snapshot parameters of the node.
 func WithSnapshotParams(params SnapshotParams) Option {
 	return func(options *options) {
-		options.SnapshotParams = params
+		options.SnapshotParams = bindings.SnapshotParams{
+			Threshold: params.Threshold,
+			Trailing:  params.Trailing,
+			Strategy:  params.Strategy,
+		}
 	}
 }
 
@@ -237,18 +252,18 @@ func ReconfigureMembership(dir string, cluster []NodeInfo) error {
 // configuration is unsafe, and you should follow these steps to avoid data
 // loss and inconsistency:
 //
-// 1. Make sure no dqlite node in the cluster is running.
-// 2. Identify all dqlite nodes that have survived and that you want to be part
-//    of the recovered cluster. Call this the "new member list".
-// 3. Call ReadLastEntryInfo on each node in the member list, and find which
-//    node has the most recent entry according to LastEntryInfo.Before. Call this
-//    the "template node".
-// 4. Invoke ReconfigureMembershipExt exactly one time, on the template node.
-//    The arguments are the data directory of the template node and the new
-//    member list.
-// 5. Copy the data directory of the template node to all other nodes in the
-//    new member list, replacing their previous data directories.
-// 6. Restart all nodes in the new member list.
+//  1. Make sure no dqlite node in the cluster is running.
+//  2. Identify all dqlite nodes that have survived and that you want to be part
+//     of the recovered cluster. Call this the "new member list".
+//  3. Call ReadLastEntryInfo on each node in the member list, and find which
+//     node has the most recent entry according to LastEntryInfo.Before. Call this
+//     the "template node".
+//  4. Invoke ReconfigureMembershipExt exactly one time, on the template node.
+//     The arguments are the data directory of the template node and the new
+//     member list.
+//  5. Copy the data directory of the template node to all other nodes in the
+//     new member list, replacing their previous data directories.
+//  6. Restart all nodes in the new member list.
 func ReconfigureMembershipExt(dir string, cluster []NodeInfo) error {
 	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
 	if err != nil {
@@ -303,8 +318,8 @@ func ReadLastEntryInfo(dir string) (LastEntryInfo, error) {
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	return &options{
-		DialFunc: client.DefaultDialFunc,
-		DiskMode: false, // Be explicit about not enabling disk-mode by default.
+		DialFunc:     client.DefaultDialFunc,
+		DiskMode:     false, // Be explicit about not enabling disk-mode by default.
 		AutoRecovery: true,
 	}
 }
