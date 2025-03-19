@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -65,7 +65,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 				if err != nil {
 					return err
 				}
-				data, err := ioutil.ReadFile(crt)
+				data, err := os.ReadFile(crt)
 				if err != nil {
 					return err
 				}
@@ -104,7 +104,7 @@ Complete documentation is available at https://github.com/canonical/go-dqlite`,
 					err = row.Scan(&result)
 				case "PUT":
 					result = "done"
-					value, _ := ioutil.ReadAll(r.Body)
+					value, _ := io.ReadAll(r.Body)
 					_, err = db.Exec(update, key, string(value[:]))
 				default:
 					err = fmt.Errorf("unsupported method")
