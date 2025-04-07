@@ -4,7 +4,7 @@ go 1.16
 
 // Dependents of go-dqlite should switch to either the v2 series (LTS) or the
 // v3 series (ongoing development).
-retract [v1.0.0,v1.99.99]
+retract [v1.0.0, v1.99.99]
 
 require (
 	github.com/Rican7/retry v0.3.1
@@ -12,7 +12,7 @@ require (
 	github.com/google/renameio v1.0.1
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
-	github.com/mattn/go-sqlite3 v1.14.7
+	github.com/mattn/go-sqlite3 v1.14.27
 	github.com/peterh/liner v1.2.2
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.8.1
