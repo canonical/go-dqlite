@@ -229,7 +229,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 	if addr := c.lt.GetLeaderAddr(); addr != "" {
 		// TODO In the event of failure, we could still use the second
 		// return value to guide the next stage of the search.
-		if proto, _, _ := c.connectAttemptOne(ctx, ctx, addr, log); proto != nil {
+		if proto, _, _ := c.connectAttemptOne(ctx, addr, log); proto != nil {
 			log(logging.Debug, "server %s: connected on fast path", addr)
 			return proto, nil
 		}
@@ -248,11 +248,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 	})
 
 	// The new context will be cancelled when we successfully connect
-	// to the leader. The original context will be used only for net.Dial.
-	// Motivation: threading the cancellation through to net.Dial results
-	// in lots of warnings being logged on remote nodes when our probing
-	// goroutines disconnect during a TLS handshake.
-	origCtx := ctx
+	// to the leader.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -274,7 +270,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 			}
 			defer sem.Release(1)
 
-			protocol, leader, err := c.connectAttemptOne(origCtx, ctx, server.Address, log)
+			protocol, leader, err := c.connectAttemptOne(ctx, server.Address, log)
 			if err != nil {
 				log(logging.Warn, "server %s: %v", server.Address, err)
 				return
@@ -288,7 +284,7 @@ func (c *Connector) connectAttemptAll(ctx context.Context, log logging.Func) (*P
 
 			// Try the server that the original server thinks is the leader.
 			log(logging.Debug, "server %s: connect to reported leader %s", server.Address, leader)
-			protocol, _, err = c.connectAttemptOne(origCtx, ctx, leader, log)
+			protocol, _, err = c.connectAttemptOne(ctx, leader, log)
 			if err != nil {
 				log(logging.Warn, "server %s: %v", leader, err)
 				return
@@ -338,8 +334,6 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64, addr string) 
 
 // Connect to the given dqlite server and check if it's the leader.
 //
-// dialCtx is used for net.Dial; ctx is used for all other requests.
-//
 // Return values:
 //
 // - Any failure is hit:                     -> nil, "", err
@@ -347,7 +341,6 @@ func Handshake(ctx context.Context, conn net.Conn, version uint64, addr string) 
 // - Target not leader and leader known:     -> nil, leader, nil
 // - Target is the leader:                   -> server, "", nil
 func (c *Connector) connectAttemptOne(
-	dialCtx context.Context,
 	ctx context.Context,
 	address string,
 	origLog logging.Func,
@@ -364,7 +357,7 @@ func (c *Connector) connectAttemptOne(
 	ctx, cancel := context.WithTimeout(ctx, c.config.AttemptTimeout)
 	defer cancel()
 
-	dialCtx, cancel = context.WithTimeout(dialCtx, c.config.DialTimeout)
+	dialCtx, cancel := context.WithTimeout(ctx, c.config.DialTimeout)
 	defer cancel()
 
 	// Establish the connection.
