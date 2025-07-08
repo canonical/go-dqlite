@@ -1,0 +1,85 @@
+name: Tiobe TICS
+on:
+  # Running on pull_request_target instead of pull_request because this workflow
+  # uses secrets, and thus we need to ensure it runs under this project's code base.
+  pull_request_target:
+    branches: 
+      - v*
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # Test TICS daily
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  tics:
+    name: Tiobe TICS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.head_ref || '' }}
+          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || '' }}
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+
+      - name: Setup dependencies
+        run: |
+          sudo add-apt-repository ppa:dqlite/dev -y
+          sudo apt update
+          sudo apt install -y libsqlite3-dev libuv1-dev liblz4-dev libdqlite-dev
+          go install github.com/axw/gocov/gocov@latest
+          go install github.com/AlekSi/gocov-xml@latest
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Download deps
+        run: |
+          go get -t -tags libsqlite3 ./...
+
+      - name: Test
+        env:
+          GO_DQLITE_MULTITHREAD: 1
+        run: |
+          go test -v -tags libsqlite3 -race -coverprofile=coverage.out ./...
+
+      - name: Coverage
+        uses: coverallsapp/github-action@v2
+        with:
+          file: coverage.out
+          parallel: true
+      
+      - name: Convert coverage files
+        run: |
+          mkdir -p cover
+          gocov convert coverage.out > cover/coverage.json
+          gocov-xml < cover/coverage.json > cover/coverage-go.xml
+
+      - name: Run TiCS client analysis
+        uses: tiobe/tics-github-action@v3
+        if: github.event_name == 'pull_request_target'
+        with:
+          mode: client
+          project: go-dqlite
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=GoProjects
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
+          calc: ALL
+
+      - name: Run TiCS server analysis
+        uses: tiobe/tics-github-action@v3
+        if: github.event_name != 'pull_request_target'
+        with:
+          mode: qserver
+          project: go-dqlite
+          viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=GoProjects
+          branchdir: ${{ github.workspace }}
+          ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+          installTics: true
+          calc: ALL
