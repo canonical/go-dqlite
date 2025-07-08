@@ -1,0 +1,45 @@
+name: TICS scan
+
+on:
+  pull_request_target:
+    branches: [v3]
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  build:
+
+    runs-on: [self-hosted, amd64, tiobe, noble]
+
+    steps:
+
+    - name: Checkout the project
+      uses: actions/checkout@v4
+
+    - uses: actions/setup-go@v4
+      with:
+        go-version-file: 'go.mod'
+
+    - name: Install dependencies
+      run: |
+        go install honnef.co/go/tools/cmd/staticcheck@v0.5.1
+        go install github.com/axw/gocov/gocov@v1.1.0
+        go install github.com/AlekSi/gocov-xml@v1.1.0
+
+    - name: Test and generate coverage report
+      run: |
+        go test -coverprofile=coverage.out ./...
+        gocov convert coverage.out > coverage.json
+        # The coverage.xml file needs to be in a .coverage folder.
+        mkdir .coverage
+        gocov-xml < coverage.json > .coverage/coverage.xml
+
+    - name: Run TICS analysis with github-action
+      uses: tiobe/tics-github-action@v3
+      with:
+        mode: qserver
+        project: go-dqlite
+        branchdir: .
+        branchname: v3
+        viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+        ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+        installTics: true
