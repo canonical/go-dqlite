@@ -15,6 +15,9 @@ jobs:
           - ubuntu-20.04
           - ubuntu-22.04
           - ubuntu-24.04
+        version:
+          - libdqlite1.17
+          - libdqlite
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout code
@@ -29,7 +32,7 @@ jobs:
       run: |
         sudo add-apt-repository ppa:dqlite/dev -y
         sudo apt update
-        sudo apt install -y libsqlite3-dev libuv1-dev liblz4-dev libdqlite-dev
+        sudo apt install -y libsqlite3-dev libuv1-dev liblz4-dev ${{ matrix.version }}-dev
 
     - name: Download deps
       run: |

@@ -72,6 +72,13 @@ static int setAutoRecovery(dqlite_node *t, bool on) {
 	return dqlite_node_set_auto_recovery(t, on);
 }
 
+#if (DQLITE_VERSION_NUMBER < 11800)
+enum {
+	DQLITE_SNAPSHOT_TRAILING_STATIC = 0,
+	DQLITE_SNAPSHOT_TRAILING_DYNAMIC = 1,
+};
+#endif
+
 __attribute__((weak))
 int dqlite_node_set_snapshot_params_v2(dqlite_node *n, unsigned snapshot_threshold, unsigned snapshot_trailing, int trailing_strategy);
 
