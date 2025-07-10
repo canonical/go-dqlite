@@ -85,7 +85,7 @@ int dqlite_node_set_snapshot_params_v2(dqlite_node *n, unsigned snapshot_thresho
 static int setSnapshotParameters(dqlite_node *n, unsigned snapshot_threshold, unsigned snapshot_trailing, int trailing_strategy) {
 	if (dqlite_node_set_snapshot_params_v2) {
 		return dqlite_node_set_snapshot_params_v2(n, snapshot_threshold, snapshot_trailing, trailing_strategy);
-	} else if (trailing_strategy == 0) {
+	} else if (trailing_strategy == DQLITE_SNAPSHOT_TRAILING_STATIC) {
 	 	return dqlite_node_set_snapshot_params(n, snapshot_threshold, snapshot_trailing);
 	} else {
 	 	return DQLITE_ERROR;
