@@ -72,7 +72,7 @@ static int setAutoRecovery(dqlite_node *t, bool on) {
 	return dqlite_node_set_auto_recovery(t, on);
 }
 
-#if (DQLITE_VERSION_NUMBER < 11801)
+#if (DQLITE_VERSION_NUMBER < 11800)
 enum {
 	DQLITE_SNAPSHOT_TRAILING_STATIC = 0,
 	DQLITE_SNAPSHOT_TRAILING_DYNAMIC = 1,
