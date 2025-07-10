@@ -114,8 +114,8 @@ type Node struct {
 type TrailingStrategy int
 
 const (
-	TrailingStrategyStatic  TrailingStrategy = 0
-	TrailingStrategyDynamic TrailingStrategy = 1
+	TrailingStrategyStatic  TrailingStrategy = C.DQLITE_SNAPSHOT_TRAILING_STATIC
+	TrailingStrategyDynamic TrailingStrategy = C.DQLITE_SNAPSHOT_TRAILING_DYNAMIC
 )
 
 type SnapshotParams struct {
