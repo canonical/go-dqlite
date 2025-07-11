@@ -1,0 +1,111 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  trivy:
+    name: Trivy scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: CheckouSecurityt code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run Trivy scan
+        id: trivy
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          scan-type: 'fs'
+          scanners: 'vuln,secret'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          format: 'template'
+          template: '@.github/workflows/trivy-template.md.tpl'
+          output: 'trivy-report.md'
+          timeout: '5m'
+
+      - name: Comment Trivy scan on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: trivy-report.md
+          header: trivy-scan
+
+      - name: Fail if Trivy found high/critical issues
+        if: steps.trivy.outcome != 'success'
+        run: |
+          echo "High or critical vulnerabilities found by Trivy."
+          exit 1
+
+  security-scan:
+    name: Gosec scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec
+        id: gosec
+        continue-on-error: true
+        run: |
+          gosec -severity medium -fmt json -out gosec-report.json ./...
+
+      - name: Format report
+        run: |
+          total=$(jq '.Issues | length' gosec-report.json)
+          high=$(jq '.Issues | map(select(.severity == "HIGH")) | length' gosec-report.json)
+          medium=$(jq '.Issues | map(select(.severity == "MEDIUM")) | length' gosec-report.json)
+
+          echo "## Gosec scan" > gosec-report.md
+          echo "<details><summary>" >> gosec-report.md
+          echo "Total issues found: $total ($high HIGH | $medium MEDIUM)" >> gosec-report.md
+          echo "</summary>" >> gosec-report.md
+          echo "" >> gosec-report.md
+          echo "## Details" >> gosec-report.md
+          jq -r '.Issues[] | 
+            "\n\nIn `\(.file):\(.line)`
+          | Severity | Confidence | Rule |
+          |-|-|-|
+          |\(.severity)|\(.confidence)|\(.rule_id)|
+
+          *\(.details)*\n
+          ```go\n\(.code)```\n---\n\n"' gosec-report.json >> gosec-report.md
+
+          echo "</details>" >> gosec-report.md
+
+      - name: Comment gosec scan on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: gosec-report.md
+          header: gosec-scan
+
+      - name: Fail if gosec found high/critical issues
+        if: steps.gosec.outcome != 'success'
+        run: |
+          echo "High or critical vulnerabilities found by gosec."
+          exit 1
