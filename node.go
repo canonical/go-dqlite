@@ -84,10 +84,8 @@ func WithSnapshotParams(params SnapshotParams) Option {
 }
 
 // WithDiskMode enables dqlite disk-mode on the node.
-// WARNING: This is experimental API, use with caution
-// and prepare for data loss.
-// UNSTABLE: Behavior can change in future.
-// NOT RECOMMENDED for production use-cases, use at own risk.
+// DEPRECATED: this API will always fail on dqlite 1.18.3+ as support for
+// disk mode has been dropped.
 func WithDiskMode(disk bool) Option {
 	return func(options *options) {
 		options.DiskMode = disk
