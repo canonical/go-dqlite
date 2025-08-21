@@ -12,9 +12,10 @@ jobs:
           - '1.13'
           - stable
         os:
-          - ubuntu-20.04
           - ubuntu-22.04
           - ubuntu-24.04
+          - ubuntu-22.04-arm
+          - ubuntu-24.04-arm
         version:
           - libdqlite1.17
           - libdqlite
@@ -73,7 +74,7 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}
+        name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}-${{ matrix.version }}
         path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
 
   finish:
