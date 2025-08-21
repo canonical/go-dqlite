@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -238,7 +237,7 @@ func (s *Shell) processDump(ctx context.Context, line string) (string, error) {
 
 	for _, file := range files {
 		path := filepath.Join(dir, file.Name)
-		err := ioutil.WriteFile(path, file.Data, 0600)
+		err := os.WriteFile(path, file.Data, 0600)
 		if err != nil {
 			return "NOK", fmt.Errorf("WriteFile failed on path %s", path)
 		}
