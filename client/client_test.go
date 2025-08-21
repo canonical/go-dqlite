@@ -3,7 +3,6 @@ package client_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -167,7 +166,7 @@ func addNode(t *testing.T, cli *client.Client, id uint64) (*dqlite.Node, func())
 func newDir(t *testing.T) (string, func()) {
 	t.Helper()
 
-	dir, err := ioutil.TempDir("", "dqlite-replication-test-")
+	dir, err := os.MkdirTemp("", "dqlite-replication-test-")
 	assert.NoError(t, err)
 
 	cleanup := func() {
