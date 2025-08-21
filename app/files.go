@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -64,7 +63,7 @@ func fileMarshal(dir, file string, object interface{}) error {
 func fileUnmarshal(dir, file string, object interface{}) error {
 	path := filepath.Join(dir, file)
 
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", file, err)
 	}

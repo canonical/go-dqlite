@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -1271,7 +1270,7 @@ func loadCert(t *testing.T) (tls.Certificate, *x509.CertPool) {
 	keypair, err := tls.LoadX509KeyPair(crt, key)
 	require.NoError(t, err)
 
-	data, err := ioutil.ReadFile(crt)
+	data, err := os.ReadFile(crt)
 	require.NoError(t, err)
 
 	pool := x509.NewCertPool()
@@ -1288,7 +1287,7 @@ var appIndex int
 func newDir(t *testing.T) (string, func()) {
 	t.Helper()
 
-	dir, err := ioutil.TempDir("", "dqlite-app-test-")
+	dir, err := os.MkdirTemp("", "dqlite-app-test-")
 	assert.NoError(t, err)
 
 	cleanup := func() {
