@@ -1,7 +1,6 @@
 module github.com/canonical/go-dqlite/v3
 
-// This is to maintain the ppa package on focal
-go 1.13
+go 1.23
 
 require (
 	github.com/Rican7/retry v0.3.1
