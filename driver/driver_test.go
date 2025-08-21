@@ -18,7 +18,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -732,7 +731,7 @@ func newNode(t *testing.T, dir string) (*dqlite.Node, func()) {
 func newDir(t *testing.T) (string, func()) {
 	t.Helper()
 
-	dir, err := ioutil.TempDir("", "dqlite-replication-test-")
+	dir, err := os.MkdirTemp("", "dqlite-replication-test-")
 	assert.NoError(t, err)
 
 	cleanup := func() {
