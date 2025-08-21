@@ -265,7 +265,7 @@ func (c *RolesChanges) list(role client.NodeRole, online bool, domains map[uint6
 	nodes := []client.NodeInfo{}
 	for node, metadata := range c.State {
 		if node.Role == role && metadata != nil == online {
-			if domains == nil || (domains != nil && domains[metadata.FailureDomain]) {
+			if domains == nil || domains[metadata.FailureDomain] {
 				nodes = append(nodes, node)
 			}
 		}
