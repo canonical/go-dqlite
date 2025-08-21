@@ -32,7 +32,7 @@ func (config Config) RetryStrategies() (strategies []strategy.Strategy) {
 			if attempt > 0 {
 				duration := backoffFunc(attempt)
 				// Duration might be negative in case of integer overflow.
-				if !(0 < duration && duration <= cap) {
+				if 0 >= duration || duration > cap {
 					duration = cap
 				}
 				time.Sleep(duration)
