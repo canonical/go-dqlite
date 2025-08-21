@@ -66,9 +66,9 @@ func New(database string, store client.NodeStore, options ...Option) (*Shell, er
 func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 	switch line {
 	case ".cluster":
-		return s.processCluster(ctx, line)
+		return s.processCluster(ctx)
 	case ".leader":
-		return s.processLeader(ctx, line)
+		return s.processLeader(ctx)
 	case ".help":
 		return s.processHelp(), nil
 	}
@@ -105,7 +105,7 @@ Enter a SQL statement to execute it, or one of the following built-in commands:
 `[1:]
 }
 
-func (s *Shell) processCluster(ctx context.Context, line string) (string, error) {
+func (s *Shell) processCluster(ctx context.Context) (string, error) {
 	cli, err := client.FindLeader(ctx, s.store, client.WithDialFunc(s.dial))
 	if err != nil {
 		return "", err
@@ -136,7 +136,7 @@ func (s *Shell) processCluster(ctx context.Context, line string) (string, error)
 	return result, nil
 }
 
-func (s *Shell) processLeader(ctx context.Context, line string) (string, error) {
+func (s *Shell) processLeader(ctx context.Context) (string, error) {
 	cli, err := client.FindLeader(ctx, s.store, client.WithDialFunc(s.dial))
 	if err != nil {
 		return "", err
