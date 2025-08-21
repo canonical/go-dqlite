@@ -12,7 +12,6 @@ jobs:
         target:
           - jammy
           - noble
-          - oracular
     runs-on: ubuntu-22.04
     environment:
       name: ppa
