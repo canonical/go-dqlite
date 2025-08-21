@@ -73,7 +73,7 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}
+        name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}-${{ matrix.version }}
         path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
 
   finish:
