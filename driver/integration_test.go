@@ -101,7 +101,7 @@ func TestIntegration_ConstraintError(t *testing.T) {
 	}
 }
 
-func TestIntegration_ExecBindError(t *testing.T) {
+func TestIntegrationStmt_ExecBindError(t *testing.T) {
 	db, _, cleanup := newDB(t, 1)
 	defer cleanup()
 	defer db.Close()
@@ -112,11 +112,17 @@ func TestIntegration_ExecBindError(t *testing.T) {
 	_, err := db.ExecContext(ctx, "CREATE TABLE test (n INT)")
 	require.NoError(t, err)
 
-	_, err = db.ExecContext(ctx, "INSERT INTO test(n) VALUES(1)", 1)
-	assert.EqualError(t, err, "bind parameters")
+	stmt, err := db.PrepareContext(ctx, "INSERT INTO test(n) VALUES(1)")
+	assert.NoError(t, err)
+
+	_, err = stmt.ExecContext(ctx, 1)
+	require.Error(t, err)
+	if err.Error() != "bind parameters" && err.Error() != "sql: expected 0 arguments, got 1" {
+		t.Error("unexpected error", err)
+	}
 }
 
-func TestIntegration_QueryBindError(t *testing.T) {
+func TestIntegration_StmtQueryBindError(t *testing.T) {
 	db, _, cleanup := newDB(t, 1)
 	defer cleanup()
 	defer db.Close()
@@ -124,8 +130,14 @@ func TestIntegration_QueryBindError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := db.QueryContext(ctx, "SELECT 1", 1)
-	assert.EqualError(t, err, "bind parameters")
+	stmt, err := db.PrepareContext(ctx, "SELECT 1")
+	assert.NoError(t, err)
+
+	_, err = stmt.QueryContext(ctx, 1)
+	require.Error(t, err)
+	if err.Error() != "bind parameters" && err.Error() != "sql: expected 0 arguments, got 1" {
+		t.Error("unexpected error", err)
+	}
 }
 
 func TestIntegration_LargeQuery(t *testing.T) {

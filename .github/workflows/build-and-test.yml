@@ -12,14 +12,24 @@ jobs:
           - '1.13'
           - stable
         os:
-          - ubuntu-20.04
           - ubuntu-22.04
           - ubuntu-24.04
+          - ubuntu-22.04-arm
+          - ubuntu-24.04-arm
         version:
           - libdqlite1.17
           - libdqlite
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ (matrix.os == 'ubuntu-20.04' && 'ubuntu-22.04') || matrix.os }}
+    container: ${{ (matrix.os == 'ubuntu-20.04' && 'ubuntu:20.04') || '' }}
     steps:
+    - name: Setup container
+      if: ${{ matrix.os == 'ubuntu-20.04' }}
+      env:
+          DEBIAN_FRONTEND: noninteractive
+      run: |
+          apt-get update
+          apt-get install -y sudo tzdata build-essential autoconf clang automake libtool pkg-config software-properties-common
+
     - name: Checkout code
       uses: actions/checkout@v4
 
@@ -73,7 +83,7 @@ jobs:
 
     - uses: actions/upload-artifact@v4
       with:
-        name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}
+        name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}-${{ matrix.version }}
         path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
 
   finish:
