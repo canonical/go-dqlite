@@ -37,13 +37,7 @@ jobs:
       env:
           PPA_SECRET_KEY: ${{ secrets.PPA_SECRET_KEY }}
       run: |
-          echo "$PPA_SECRET_KEY" > private-key.asc
-          gpg --import --batch private-key.asc
-
-    - name: Delete GPG signing key file
-      if: always()
-      run: |
-          rm -f private-key.asc
+          echo "${PPA_SECRET_KEY}" | gpg --import --batch -
 
     - name: Build source package
       env:
