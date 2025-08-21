@@ -3,7 +3,6 @@ package benchmark_test
 import (
 	"context"
 	"database/sql"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -22,7 +21,7 @@ const (
 func bmSetup(t *testing.T, addr string, join []string) (string, *app.App, *sql.DB, func()) {
 	t.Helper()
 
-	dir, err := ioutil.TempDir("", "dqlite-app-test-")
+	dir, err := os.MkdirTemp("", "dqlite-app-test-")
 	require.NoError(t, err)
 
 	app, err := app.New(dir, app.WithAddress(addr), app.WithCluster(join))
