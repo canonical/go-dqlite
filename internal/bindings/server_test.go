@@ -3,7 +3,6 @@ package bindings_test
 import (
 	"context"
 	"encoding/binary"
-	"io/ioutil"
 	"net"
 	"os"
 	"strings"
@@ -250,7 +249,7 @@ func makeClientRequest(t *testing.T, conn net.Conn, kind byte) []byte {
 func newDir(t *testing.T) (string, func()) {
 	t.Helper()
 
-	dir, err := ioutil.TempDir("", "dqlite-replication-test-")
+	dir, err := os.MkdirTemp("", "dqlite-replication-test-")
 	assert.NoError(t, err)
 
 	cleanup := func() {
