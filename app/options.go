@@ -224,6 +224,20 @@ func WithAutoRecovery(recovery bool) Option {
 	}
 }
 
+// WithBusyTimeout sets the timeout for how long a database operation will
+// wait for a lock to be released before returning an error (SQLITE_BUSY),
+// that is the amount of time a writer will wait for others to finish writing
+// on the same database.
+//
+// Readers never wait writers nor readers.
+//
+// The default behavior is to fail immediately.
+func WithBusyTimeout(timeout time.Duration) Option {
+	return func(options *options) {
+		options.BusyTimeout = timeout
+	}
+}
+
 type tlsSetup struct {
 	Listen *tls.Config
 	Dial   *tls.Config
@@ -247,6 +261,7 @@ type options struct {
 	OnRolesAdjustment        func(client.NodeInfo, []client.NodeInfo) error
 	FailureDomain            uint64
 	NetworkLatency           time.Duration
+	BusyTimeout              time.Duration
 	ConcurrentLeaderConns    *int64
 	UnixSocket               string
 	SnapshotParams           dqlite.SnapshotParams

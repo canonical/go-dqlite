@@ -115,6 +115,31 @@ func TestNode_Autorecovery(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestNode_SetBusyTimeout(t *testing.T) {
+	const firstBusyTimeoutVersion = 1_18_02
+
+	dir, cleanup := newDir(t)
+	defer cleanup()
+
+	server, err := bindings.NewNode(context.Background(), 1, "1", dir)
+	require.NoError(t, err)
+	defer server.Close()
+
+	t.Run("no-timeout", func(t *testing.T) {
+		err := server.SetBusyTimeout(0)
+		require.NoError(t, err)
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		err := server.SetBusyTimeout(10)
+		if bindings.DqliteVersion >= firstBusyTimeoutVersion {
+			require.NoError(t, err)
+		} else {
+			require.Error(t, err)
+		}
+	})
+}
+
 // func TestNode_Heartbeat(t *testing.T) {
 // 	server, cleanup := newNode(t)
 // 	defer cleanup()
