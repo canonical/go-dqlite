@@ -146,12 +146,12 @@ func init() {
 
 // NewNode creates a new Node instance.
 func NewNode(ctx context.Context, id uint64, address string, dir string) (*Node, error) {
-	requiredVersion := dqliteMajorVersion*100 + dqliteMinorVersion
 	// Remove the patch version, as patch versions should be compatible.
-	runtimeVersion := int(C.dqlite_version_number()) / 100
-	if requiredVersion > runtimeVersion {
+	if DqliteVersion < DqliteMinSupportedVersion {
+		requiredMajor, requiredMinor, _ := versionComponents(DqliteMinSupportedVersion)
+		runtimeMajor, runtimeMinor, _ := versionComponents(DqliteMinSupportedVersion)
 		return nil, fmt.Errorf("version mismatch: required version(%d.%d.x) current version(%d.%d.x)",
-			dqliteMajorVersion, dqliteMinorVersion, runtimeVersion/100, runtimeVersion%100)
+			requiredMajor, requiredMinor, runtimeMajor, runtimeMinor)
 	}
 
 	var server *C.dqlite_node

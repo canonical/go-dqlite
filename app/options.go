@@ -224,8 +224,12 @@ func WithAutoRecovery(recovery bool) Option {
 	}
 }
 
-// WithBusyTimeout sets the timeout for how long a database operation
-// will wait for a lock to be released before returning an error (SQLITE_BUSY).
+// WithBusyTimeout sets the timeout for how long a database operation will
+// wait for a lock to be released before returning an error (SQLITE_BUSY),
+// that is the amount of time a writer will wait for others to finish writing
+// on the same database.
+//
+// Readers never wait writers nor readers.
 //
 // The default behavior is to fail immediately.
 func WithBusyTimeout(timeout time.Duration) Option {
