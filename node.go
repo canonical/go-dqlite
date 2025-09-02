@@ -106,6 +106,20 @@ func WithAutoRecovery(recovery bool) Option {
 	}
 }
 
+// WithBusyTimeout sets the timeout for how long a database operation will
+// wait for a lock to be released before returning an error (SQLITE_BUSY),
+// that is the amount of time a writer will wait for others to finish writing
+// on the same database.
+//
+// Readers never wait writers nor readers.
+//
+// The default behavior is to fail immediately.
+func WithBusyTimeout(msecs int64) Option {
+	return func(options *options) {
+		options.BusyTimeout = uint64(msecs)
+	}
+}
+
 // New creates a new Node instance.
 func New(id uint64, address string, dir string, options ...Option) (*Node, error) {
 	o := defaultOptions()
@@ -163,6 +177,12 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 			return nil, err
 		}
 	}
+	if o.BusyTimeout != 0 {
+		if err := server.SetBusyTimeout(o.BusyTimeout); err != nil {
+			cancel()
+			return nil, err
+		}
+	}
 
 	s := &Node{
 		server:      server,
@@ -200,6 +220,7 @@ type options struct {
 	DialFunc       client.DialFunc
 	BindAddress    string
 	NetworkLatency uint64
+	BusyTimeout    uint64
 	FailureDomain  uint64
 	SnapshotParams bindings.SnapshotParams
 	DiskMode       bool

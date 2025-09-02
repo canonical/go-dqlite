@@ -197,6 +197,7 @@ func New(dir string, options ...Option) (app *App, err error) {
 		dqlite.WithSnapshotParams(o.SnapshotParams),
 		dqlite.WithDiskMode(o.DiskMode),
 		dqlite.WithAutoRecovery(o.AutoRecovery),
+		dqlite.WithBusyTimeout(o.BusyTimeout.Milliseconds()),
 	)
 	if err != nil {
 		stop()

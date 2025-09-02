@@ -10,11 +10,11 @@ updates:
     labels: []
     schedule:
       interval: "weekly"
-    target-branch: "master"
+    target-branch: "v3"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     labels: []
     schedule:
       interval: "weekly"
-    target-branch: "master"
+    target-branch: "v3"
