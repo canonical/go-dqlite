@@ -93,6 +93,16 @@ static int setSnapshotParameters(dqlite_node *n, unsigned snapshot_threshold, un
 }
 
 __attribute__((weak))
+int dqlite_node_enable_disk_mode(dqlite_node *n);
+
+static int dqliteNodeEnableDiskMode(dqlite_node *n) {
+	if (dqlite_node_enable_disk_mode) {
+		return dqlite_node_enable_disk_mode(n);
+	}
+	return DQLITE_ERROR;
+}
+
+__attribute__((weak))
 int dqlite_node_set_busy_timeout(dqlite_node *n, unsigned msecs);
 
 static int setBusyTimeout(dqlite_node *n, unsigned msecs) {
@@ -238,7 +248,7 @@ func (s *Node) SetBusyTimeout(milliseconds uint64) error {
 
 func (s *Node) EnableDiskMode() error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
-	if rc := C.dqlite_node_enable_disk_mode(server); rc != 0 {
+	if rc := C.dqliteNodeEnableDiskMode(server); rc != 0 {
 		return fmt.Errorf("failed to set disk mode")
 	}
 	return nil

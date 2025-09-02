@@ -200,10 +200,8 @@ func WithSnapshotParams(params dqlite.SnapshotParams) Option {
 }
 
 // WithDiskMode enables or disables disk-mode.
-// WARNING: This is experimental API, use with caution
-// and prepare for data loss.
-// UNSTABLE: Behavior can change in future.
-// NOT RECOMMENDED for production use-cases, use at own risk.
+// DEPRECATED: this API will always fail on dqlite 1.18.3+ as support for
+// disk mode has been dropped.
 func WithDiskMode(disk bool) Option {
 	return func(options *options) {
 		options.DiskMode = disk
@@ -292,18 +290,18 @@ func isLoopback(iface *net.Interface) bool {
 // see https://stackoverflow.com/a/48519490/3613657
 // Valid IPv4 notations:
 //
-//    "192.168.0.1": basic
-//    "192.168.0.1:80": with port info
+//	"192.168.0.1": basic
+//	"192.168.0.1:80": with port info
 //
 // Valid IPv6 notations:
 //
-//    "::FFFF:C0A8:1": basic
-//    "::FFFF:C0A8:0001": leading zeros
-//    "0000:0000:0000:0000:0000:FFFF:C0A8:1": double colon expanded
-//    "::FFFF:C0A8:1%1": with zone info
-//    "::FFFF:192.168.0.1": IPv4 literal
-//    "[::FFFF:C0A8:1]:80": with port info
-//    "[::FFFF:C0A8:1%1]:80": with zone and port info
+//	"::FFFF:C0A8:1": basic
+//	"::FFFF:C0A8:0001": leading zeros
+//	"0000:0000:0000:0000:0000:FFFF:C0A8:1": double colon expanded
+//	"::FFFF:C0A8:1%1": with zone info
+//	"::FFFF:192.168.0.1": IPv4 literal
+//	"[::FFFF:C0A8:1]:80": with port info
+//	"[::FFFF:C0A8:1%1]:80": with zone and port info
 func isIpV4(ip string) bool {
 	return strings.Count(ip, ":") < 2
 }
