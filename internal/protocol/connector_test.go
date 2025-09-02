@@ -3,7 +3,6 @@ package protocol_test
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"testing"
@@ -447,7 +446,7 @@ func newNode(t *testing.T, index int) (string, func()) {
 func newDir(t *testing.T) (string, func()) {
 	t.Helper()
 
-	dir, err := ioutil.TempDir("", "dqlite-connector-test-")
+	dir, err := os.MkdirTemp("", "dqlite-connector-test-")
 	assert.NoError(t, err)
 
 	cleanup := func() {
