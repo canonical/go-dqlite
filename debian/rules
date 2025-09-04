@@ -1,0 +1,17 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+include /usr/share/dpkg/default.mk
+
+PKGDIR=debian/tmp
+
+export LIBRAFT_TRACE=1
+export LIBDQLITE_TRACE=1
+
+%:
+	dh $@ --buildsystem=golang --with=golang
+
+override_dh_install:
+	rm -rf debian/tmp/usr/share/gocode/src/github.com/canonical/go-dqlite/v3/vendor/
+
+	dh_install
