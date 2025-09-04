@@ -83,6 +83,13 @@ func WithSnapshotParams(params SnapshotParams) Option {
 	}
 }
 
+// WithBlockSize sets the block size of the node.
+func WithBlockSize(size uint) Option {
+	return func(options *options) {
+		options.BlockSize = size
+	}
+}
+
 // WithDiskMode enables dqlite disk-mode on the node.
 // DEPRECATED: this API will always fail on dqlite 1.18.3+ as support for
 // disk mode has been dropped.
@@ -183,6 +190,12 @@ func New(id uint64, address string, dir string, options ...Option) (*Node, error
 			return nil, err
 		}
 	}
+	if o.BlockSize != 0 {
+		if err := server.SetBlockSize(o.BlockSize); err != nil {
+			cancel()
+			return nil, err
+		}
+	}
 
 	s := &Node{
 		server:      server,
@@ -225,6 +238,7 @@ type options struct {
 	SnapshotParams bindings.SnapshotParams
 	DiskMode       bool
 	AutoRecovery   bool
+	BlockSize      uint
 }
 
 // Close the server, releasing all resources it created.

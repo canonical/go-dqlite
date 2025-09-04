@@ -968,10 +968,26 @@ func TestOptions(t *testing.T) {
 		app.WithNetworkLatency(20 * time.Millisecond),
 		app.WithSnapshotParams(dqlite.SnapshotParams{Threshold: 1024, Trailing: 1024}),
 		app.WithTracing(client.LogDebug),
+		app.WithBlockSize(64 * 1024),
 	}
 	app, cleanup := newApp(t, options...)
 	defer cleanup()
 	require.NotNil(t, app)
+}
+
+// Test failing setup option
+func TestFailingOptions(t *testing.T) {
+	options := []app.Option{
+		app.WithNetworkLatency(20 * time.Millisecond),
+		app.WithBlockSize(512 * 1024), // This will cause an error
+	}
+
+	dir, dirCleanup := newDir(t)
+	defer dirCleanup()
+
+	app, err := app.New(dir, options...)
+	require.Error(t, err)
+	require.Nil(t, app)
 }
 
 // Test client connections dropping uncleanly.

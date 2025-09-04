@@ -246,6 +246,15 @@ func (s *Node) SetBusyTimeout(milliseconds uint64) error {
 	return nil
 }
 
+func (s *Node) SetBlockSize(size uint) error {
+	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
+	csize := C.size_t(size)
+	if rc := C.dqlite_node_set_block_size(server, csize); rc != 0 {
+		return fmt.Errorf("set block size: %d", rc)
+	}
+	return nil
+}
+
 func (s *Node) EnableDiskMode() error {
 	server := (*C.dqlite_node)(unsafe.Pointer(s.node))
 	if rc := C.dqliteNodeEnableDiskMode(server); rc != 0 {
