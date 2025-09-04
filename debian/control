@@ -1,0 +1,33 @@
+Source: go-dqlite-v3
+Section: devel
+Priority: optional
+Maintainer: Marco Manino <marco.manino@canonical.com>
+Build-Depends: debhelper (>= 10),
+               dh-golang,
+               golang-go,
+               pkg-config,
+               libdqlite-dev
+Homepage: https://github.com/canonical/go-dqlite
+Standards-Version: 4.5.1
+Rules-Requires-Root: no
+XS-Go-Import-Path: github.com/canonical/go-dqlite/v3
+
+Package: dqlite-tools-v3
+Section: database
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Description: Distributed sqlite database using Raft - tools
+ Dqlite is a sqlite and Raft based distributed database.
+ .
+ This package contains some benchmarking and demo tools.
+
+Package: golang-canonical-go-dqlite-v3-dev
+Architecture: all
+Depends: libdqlite-dev,
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: Distributed sqlite database using Raft - go binding
+ Dqlite is a sqlite and Raft based distributed database.
+ .
+ This package contains the Go source code.

@@ -1,11 +1,13 @@
 name: Build PPA source packages
 on:
-  push:
-    branches:
-      - v3
+  release:
+    types: [published]
+    branches: [v3]
 jobs:
   build:
-    if: github.repository == 'canonical/go-dqlite'
+    runs-on: ubuntu-20.04
+    environment:
+      name: ppa
     strategy:
       fail-fast: false
       matrix:
@@ -14,20 +16,11 @@ jobs:
           - jammy
           - noble
           - oracular
-    runs-on: ubuntu-20.04
-    environment:
-      name: ppa
     steps:
     - uses: actions/checkout@v5
       with:
         fetch-depth: 0
         fetch-tags: true
-
-    - uses: actions/checkout@v5
-      with:
-        repository: canonical/dqlite-ppa
-        ref: go-dqlite-v3
-        path: dqlite-ppa
 
     - name: Setup dependencies
       run: |
@@ -40,10 +33,6 @@ jobs:
       run: |
           echo "$PPA_SECRET_KEY" > private-key.asc
           gpg --import --batch private-key.asc
-
-    - name: Delete GPG signing key file
-      if: always()
-      run: |
           rm -f private-key.asc
 
     - name: Build source package
@@ -52,7 +41,6 @@ jobs:
         DEBEMAIL: "dqlitebot@lists.canonical.com"
         TARGET: ${{ matrix.target }}
       run: |
-          cp -R dqlite-ppa/debian .
           go mod vendor
           VERSION="$(git describe --tags | sed -e "s/^v//" -e "s/-/+git/")"
           dch --create \
