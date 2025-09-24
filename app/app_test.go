@@ -21,6 +21,7 @@ import (
 	"github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/app"
 	"github.com/canonical/go-dqlite/v3/client"
+	"github.com/canonical/go-dqlite/v3/internal/bindings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -950,6 +951,10 @@ func TestOpen(t *testing.T) {
 
 // Open a database with disk-mode on a fresh one-node cluster.
 func TestOpenDisk(t *testing.T) {
+	if bindings.DqliteVersion >= 1_18_02 {
+		t.Skipf("disk mode is not supported anymore.")
+	}
+
 	app, cleanup := newApp(t, app.WithAddress("127.0.0.1:9000"), app.WithDiskMode(true))
 	defer cleanup()
 
