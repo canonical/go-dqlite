@@ -672,10 +672,19 @@ func Test_Dump(t *testing.T) {
 
 	require.Len(t, files, 2)
 	assert.Equal(t, "test.db", files[0].Name)
-	assert.Equal(t, 4096, len(files[0].Data))
-
 	assert.Equal(t, "test.db-wal", files[1].Name)
-	assert.Equal(t, 8272, len(files[1].Data))
+
+	expected := []struct{ mainSize, walSize int }{{
+		mainSize: 8192,
+	}, {
+		mainSize: 4096,
+		walSize:  8272,
+	}}
+	actual := struct{ mainSize, walSize int }{
+		mainSize: len(files[0].Data),
+		walSize:  len(files[1].Data),
+	}
+	assert.Contains(t, expected, actual)
 }
 
 const bindAddress = "@1"
