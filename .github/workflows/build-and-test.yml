@@ -82,7 +82,7 @@ jobs:
         echo "Read results:"
         head -n 5 /tmp/dqlite-benchmark/127.0.0.1:9001/results/0-query-*
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v5
       with:
         name: dqlite-benchmark-${{ matrix.os }}-${{ matrix.go }}-${{ matrix.version }}
         path: /tmp/dqlite-benchmark/127.0.0.1:9001/results/*
