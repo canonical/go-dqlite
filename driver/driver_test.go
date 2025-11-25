@@ -187,22 +187,18 @@ func TestConn_QueryBlob(t *testing.T) {
 	conn, err := drv.Open("test.db")
 	require.NoError(t, err)
 
-	_, err = conn.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
-	require.NoError(t, err)
-
 	execer := conn.(driver.ExecerContext)
-
-	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (data BLOB)", nil)
-	require.NoError(t, err)
-
-	values := []driver.NamedValue{
+	_, err = execer.ExecContext(context.Background(), `
+		BEGIN;
+		CREATE TABLE test (data BLOB);
+		INSERT INTO test(data) VALUES (?);
+		COMMIT;
+	`, []driver.NamedValue{
 		{Ordinal: 1, Value: []byte{'a', 'b', 'c'}},
-	}
-	_, err = execer.ExecContext(context.Background(), "INSERT INTO test(data) VALUES(?)", values)
+	})
 	require.NoError(t, err)
 
 	queryer := conn.(driver.QueryerContext)
-
 	rows, err := queryer.QueryContext(context.Background(), "SELECT data FROM test", nil)
 	require.NoError(t, err)
 
@@ -212,6 +208,7 @@ func TestConn_QueryBlob(t *testing.T) {
 	require.NoError(t, rows.Next(rowValues))
 
 	assert.Equal(t, []byte{'a', 'b', 'c'}, rowValues[0])
+	assert.NoError(t, rows.Close())
 
 	assert.NoError(t, conn.Close())
 }

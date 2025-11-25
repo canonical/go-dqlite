@@ -39,13 +39,13 @@ func EncodeOpen(request *Message, name string, flags uint64, vfs string) {
 	request.putHeader(RequestOpen, 0)
 }
 
-// EncodePrepare encodes a Prepare request.
-func EncodePrepare(request *Message, db uint64, sql string) {
+// EncodePrepareV1 encodes a Prepare request.
+func EncodePrepareV1(request *Message, db uint64, sql string) {
 	request.reset()
 	request.putUint64(db)
 	request.putString(sql)
 
-	request.putHeader(RequestPrepare, 0)
+	request.putHeader(RequestPrepare, 1)
 }
 
 // EncodeExecV0 encodes a Exec request.
@@ -95,46 +95,6 @@ func EncodeFinalize(request *Message, db uint32, stmt uint32) {
 	request.putUint32(stmt)
 
 	request.putHeader(RequestFinalize, 0)
-}
-
-// EncodeExecSQLV0 encodes a ExecSQL request.
-func EncodeExecSQLV0(request *Message, db uint64, sql string, values NamedValues) {
-	request.reset()
-	request.putUint64(db)
-	request.putString(sql)
-	request.putNamedValues(values)
-
-	request.putHeader(RequestExecSQL, 0)
-}
-
-// EncodeExecSQLV1 encodes a ExecSQL request.
-func EncodeExecSQLV1(request *Message, db uint64, sql string, values NamedValues32) {
-	request.reset()
-	request.putUint64(db)
-	request.putString(sql)
-	request.putNamedValues32(values)
-
-	request.putHeader(RequestExecSQL, 1)
-}
-
-// EncodeQuerySQLV0 encodes a QuerySQL request.
-func EncodeQuerySQLV0(request *Message, db uint64, sql string, values NamedValues) {
-	request.reset()
-	request.putUint64(db)
-	request.putString(sql)
-	request.putNamedValues(values)
-
-	request.putHeader(RequestQuerySQL, 0)
-}
-
-// EncodeQuerySQLV1 encodes a QuerySQL request.
-func EncodeQuerySQLV1(request *Message, db uint64, sql string, values NamedValues32) {
-	request.reset()
-	request.putUint64(db)
-	request.putString(sql)
-	request.putNamedValues32(values)
-
-	request.putHeader(RequestQuerySQL, 1)
 }
 
 // EncodeInterrupt encodes a Interrupt request.

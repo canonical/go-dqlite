@@ -46,12 +46,18 @@ func TestProtocol_RequestWithDynamicBuffer(t *testing.T) {
 	require.NoError(t, err)
 
 	sql := `
-CREATE TABLE foo (n INT);
-CREATE TABLE bar (n INT);
-CREATE TABLE egg (n INT);
-CREATE TABLE baz (n INT);
+CREATE TABLE foo (
+	a INT,
+	b TEXT,
+	c BLOB,
+	d REAL,
+	e NUMERIC,
+	f BOOLEAN,
+	g DATE,
+	h DATETIME
+);
 `
-	protocol.EncodeExecSQLV0(&request, uint64(id), sql, nil)
+	protocol.EncodePrepareV1(&request, uint64(id), sql)
 
 	makeCall(t, p, &request, &response)
 }
@@ -69,15 +75,16 @@ func TestProtocol_Prepare(t *testing.T) {
 	db, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
 
-	protocol.EncodePrepare(&request, uint64(db), "CREATE TABLE test (n INT)")
+	protocol.EncodePrepareV1(&request, uint64(db), "CREATE TABLE test (n INT)")
 
 	makeCall(t, c, &request, &response)
 
-	_, stmt, params, err := protocol.DecodeStmt(&response)
+	_, stmt, params, offset, err := protocol.DecodeStmtWithOffset(&response)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint32(0), stmt)
 	assert.Equal(t, uint64(0), params)
+	assert.Equal(t, uint64(len("CREATE TABLE test (n INT)")), offset)
 }
 
 /*

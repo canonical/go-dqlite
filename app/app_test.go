@@ -1198,6 +1198,7 @@ func TestExternalConnWithPipe(t *testing.T) {
 
 func TestParallelNewApp(t *testing.T) {
 	t.Parallel()
+	dqlite.ConfigMultiThread()
 	for i := 0; i < 100; i++ {
 		i := i
 		t.Run(fmt.Sprintf("run-%d", i), func(tt *testing.T) {

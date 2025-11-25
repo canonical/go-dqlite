@@ -22,6 +22,7 @@ import (
 	"math"
 	"net"
 	"reflect"
+	"strings"
 	"syscall"
 	"time"
 
@@ -268,6 +269,7 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 		log:            c.driver.log,
 		contextTimeout: c.driver.contextTimeout,
 		tracing:        c.driver.tracing,
+		stmtCache:      NewStmtCache(50),
 	}
 
 	proto, err := c.protocol.Connect(ctx)
@@ -351,13 +353,14 @@ type Conn struct {
 	id             uint32 // Database ID.
 	contextTimeout time.Duration
 	tracing        client.LogLevel
+	stmtCache      *StmtCache
 }
 
 // PrepareContext returns a prepared statement, bound to this connection.
 // context is for the preparation of the statement, it must not store the
 // context within the statement itself.
-func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
-	ctx, span := tracing.Start(ctx, "dqlite.driver.PrepareContext", query)
+func (c *Conn) PrepareOne(ctx context.Context, query string) (*Stmt, int, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.PrepareOne", query)
 	defer span.End()
 
 	stmt := &Stmt{
@@ -366,9 +369,10 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 		response: &c.response,
 		log:      c.log,
 		tracing:  c.tracing,
+		refcount: 1,
 	}
 
-	protocol.EncodePrepare(&c.request, uint64(c.id), query)
+	protocol.EncodePrepareV1(&c.request, uint64(c.id), query)
 
 	var start time.Time
 	if c.tracing != client.LogNone {
@@ -379,19 +383,50 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 		c.log(c.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), query)
 	}
 	if err != nil {
-		return nil, driverError(c.log, err)
+		return nil, 0, driverError(c.log, err)
 	}
 
-	stmt.db, stmt.id, stmt.params, err = protocol.DecodeStmt(&c.response)
+	var offset uint64
+	stmt.db, stmt.id, stmt.params, offset, err = protocol.DecodeStmtWithOffset(&c.response)
 	if err != nil {
-		return nil, driverError(c.log, err)
+		return nil, 0, driverError(c.log, err)
 	}
 
 	if c.tracing != client.LogNone {
 		stmt.sql = query
 	}
 
-	return stmt, nil
+	return stmt, int(offset), nil
+}
+
+func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.PrepareContext", query)
+	defer span.End()
+
+	stmts := make([]*Stmt, 0, 1)
+	for len(query) > 0 {
+		stmt, offset := c.stmtCache.TryGet(query)
+		if stmt == nil {
+			var err error
+			stmt, offset, err = c.PrepareOne(ctx, query)
+			if err != nil {
+				return nil, err
+			}
+			c.stmtCache.Put(query[:offset], stmt)
+		}
+		stmts = append(stmts, stmt)
+		query = strings.TrimLeft(query[offset:], " \t\n\r")
+	}
+
+	if len(stmts) == 0 {
+		return nil, nil
+	}
+
+	if len(stmts) == 1 {
+		return stmts[0], nil
+	}
+
+	return CompoundStmt(stmts), nil
 }
 
 // Prepare returns a prepared statement, bound to this connection.
@@ -399,38 +434,44 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 	return c.PrepareContext(context.Background(), query)
 }
 
+func (c *Conn) ExecOne(ctx context.Context, query string, args *[]driver.NamedValue) (protocol.Result, int, error) {
+	stmt, offset := c.stmtCache.TryGet(query)
+	if stmt == nil {
+		var err error
+		stmt, offset, err = c.PrepareOne(ctx, query)
+		if err != nil {
+			return protocol.Result{}, 0, err
+		}
+		c.stmtCache.Put(query[:offset], stmt)
+	}
+	defer stmt.Close()
+
+	result, err := stmt.exec(ctx, (*args)[:stmt.params])
+	if err != nil {
+		return protocol.Result{}, 0, err
+	}
+	*args = (*args)[stmt.params:]
+	return result, offset, nil
+}
+
 // ExecContext is an optional interface that may be implemented by a Conn.
 func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	ctx, span := tracing.Start(ctx, "dqlite.driver.ExecContext", query)
 	defer span.End()
 
-	if int64(len(args)) > math.MaxUint32 {
-		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
-	} else if len(args) > math.MaxUint8 {
-		protocol.EncodeExecSQLV1(&c.request, uint64(c.id), query, args)
-	} else {
-		protocol.EncodeExecSQLV0(&c.request, uint64(c.id), query, args)
-	}
-
-	var start time.Time
-	if c.tracing != client.LogNone {
-		start = time.Now()
-	}
-	err := c.protocol.Call(ctx, &c.request, &c.response)
-	if c.tracing != client.LogNone {
-		c.log(c.tracing, "%.3fs request exec: %q", time.Since(start).Seconds(), query)
-	}
-	if err != nil {
-		return nil, driverError(c.log, err)
-	}
-
 	var result protocol.Result
-	result, err = protocol.DecodeResult(&c.response)
-	if err != nil {
-		return nil, driverError(c.log, err)
+
+	for len(query) > 0 {
+		res, offset, err := c.ExecOne(ctx, query, &args)
+		if err != nil {
+			return nil, err
+		}
+		result.LastInsertID = res.LastInsertID
+		result.RowsAffected += res.RowsAffected
+		query = strings.TrimLeft(query[offset:], " \t\n\r")
 	}
 
-	return &Result{result: result}, nil
+	return &Result{result}, nil
 }
 
 // Query is an optional interface that may be implemented by a Conn.
@@ -443,40 +484,17 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 	ctx, span := tracing.Start(ctx, "dqlite.driver.QueryContext", query)
 	defer span.End()
 
-	if int64(len(args)) > math.MaxUint32 {
-		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
-	} else if len(args) > math.MaxUint8 {
-		protocol.EncodeQuerySQLV1(&c.request, uint64(c.id), query, args)
-	} else {
-		protocol.EncodeQuerySQLV0(&c.request, uint64(c.id), query, args)
-	}
-
-	var start time.Time
-	if c.tracing != client.LogNone {
-		start = time.Now()
-	}
-	err := c.protocol.Call(ctx, &c.request, &c.response)
-	if c.tracing != client.LogNone {
-		c.log(c.tracing, "%.3fs request query: %q", time.Since(start).Seconds(), query)
-	}
+	stmt, err := c.PrepareContext(ctx, query)
 	if err != nil {
-		return nil, driverError(c.log, err)
+		return nil, err
+	}
+	defer stmt.Close()
+
+	if stmt.NumInput() != len(args) {
+		return nil, driverError(c.log, fmt.Errorf("expected %d arguments, got %d", stmt.NumInput(), len(args)))
 	}
 
-	var rows protocol.Rows
-	rows, err = protocol.DecodeRows(&c.response)
-	if err != nil {
-		return nil, driverError(c.log, err)
-	}
-
-	return &Rows{
-		ctx:      ctx,
-		request:  &c.request,
-		response: &c.response,
-		protocol: c.protocol,
-		rows:     rows,
-		log:      c.log,
-	}, nil
+	return stmt.(driver.StmtQueryContext).QueryContext(ctx, args)
 }
 
 // Exec is an optional interface that may be implemented by a Conn.
@@ -491,6 +509,7 @@ func (c *Conn) Exec(query string, args []driver.Value) (driver.Result, error) {
 // Close when there's a surplus of idle connections, it shouldn't be necessary
 // for drivers to do their own connection caching.
 func (c *Conn) Close() error {
+	c.stmtCache.Close()
 	return c.protocol.Close()
 }
 
@@ -574,10 +593,24 @@ type Stmt struct {
 	log      client.LogFunc
 	sql      string // Prepared SQL, only set when tracing
 	tracing  client.LogLevel
+	refcount int32
 }
 
 // Close closes the statement.
 func (s *Stmt) Close() error {
+	s.refcount -= 1
+	if s.refcount > 0 {
+		// Still being used
+		return nil
+	} else if s.refcount < 0 {
+		panic("dqlite: refcount below zero")
+	}
+
+	if s.request == nil || s.response == nil || s.protocol == nil {
+		// Already closed
+		return nil
+	}
+
 	protocol.EncodeFinalize(s.request, s.db, s.id)
 
 	ctx := context.Background()
@@ -598,16 +631,9 @@ func (s *Stmt) NumInput() int {
 	return int(s.params)
 }
 
-// ExecContext executes a query that doesn't return rows, such
-// as an INSERT or UPDATE.
-//
-// ExecContext must honor the context timeout and return when it is canceled.
-func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
-	ctx, span := tracing.Start(ctx, "dqlite.driver.Stmt.ExecContext", s.sql)
-	defer span.End()
-
+func (s *Stmt) exec(ctx context.Context, args []driver.NamedValue) (protocol.Result, error) {
 	if int64(len(args)) > math.MaxUint32 {
-		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
+		return protocol.Result{}, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
 	} else if len(args) > math.MaxUint8 {
 		protocol.EncodeExecV1(s.request, s.db, s.id, args)
 	} else {
@@ -623,15 +649,30 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
 	}
 	if err != nil {
-		return nil, driverError(s.log, err)
+		return protocol.Result{}, driverError(s.log, err)
 	}
 
 	var result protocol.Result
 	result, err = protocol.DecodeResult(s.response)
 	if err != nil {
-		return nil, driverError(s.log, err)
+		return protocol.Result{}, driverError(s.log, err)
 	}
 
+	return result, nil
+}
+
+// ExecContext executes a query that doesn't return rows, such
+// as an INSERT or UPDATE.
+//
+// ExecContext must honor the context timeout and return when it is canceled.
+func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.Stmt.ExecContext", s.sql)
+	defer span.End()
+
+	result, err := s.exec(ctx, args)
+	if err != nil {
+		return nil, err
+	}
 	return &Result{result: result}, nil
 }
 
@@ -674,19 +715,73 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 		return nil, driverError(s.log, err)
 	}
 
+	s.refcount += 1
 	return &Rows{
-		ctx:      ctx,
-		request:  s.request,
-		response: s.response,
-		protocol: s.protocol,
-		rows:     rows,
-		log:      s.log,
+		ctx:  ctx,
+		stmt: s,
+		rows: rows,
+		log:  s.log,
 	}, nil
 }
 
 // Query executes a query that may return rows, such as a
 func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 	return s.QueryContext(context.Background(), valuesToNamedValues(args))
+}
+
+type CompoundStmt []*Stmt
+
+var _ driver.Stmt = (CompoundStmt)(nil)
+var _ driver.StmtExecContext = (CompoundStmt)(nil)
+var _ driver.StmtQueryContext = (CompoundStmt)(nil)
+
+func (c CompoundStmt) Close() error {
+	for _, stmt := range c {
+		if err := stmt.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c CompoundStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.CompoundStmt.ExecContext", "<compound statement>")
+	defer span.End()
+
+	result := &Result{}
+
+	for _, stmt := range c {
+		params := args[:stmt.params]
+		if res, err := stmt.ExecContext(ctx, params); err != nil {
+			return nil, err
+		} else {
+			result.result.LastInsertID = res.(*Result).result.LastInsertID
+			result.result.RowsAffected += res.(*Result).result.RowsAffected
+		}
+		args = args[stmt.params:]
+	}
+	return result, nil
+}
+
+func (c CompoundStmt) Exec(args []driver.Value) (driver.Result, error) {
+	return c.ExecContext(context.Background(), valuesToNamedValues(args))
+}
+
+func (c CompoundStmt) NumInput() int {
+	total := 0
+	for _, stmt := range c {
+		total += int(stmt.params)
+	}
+
+	return total
+}
+
+func (c CompoundStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	return nil, fmt.Errorf("dqlite: compound statements do not support QueryContext")
+}
+
+func (c CompoundStmt) Query(args []driver.Value) (driver.Rows, error) {
+	return nil, fmt.Errorf("dqlite: compound statements do not support Query")
 }
 
 // Result is the result of a query execution.
@@ -710,9 +805,7 @@ func (r *Result) RowsAffected() (int64, error) {
 // Rows is an iterator over an executed query's results.
 type Rows struct {
 	ctx      context.Context
-	protocol *protocol.Protocol
-	request  *protocol.Message
-	response *protocol.Message
+	stmt     *Stmt
 	rows     protocol.Rows
 	consumed bool
 	types    []string
@@ -730,6 +823,7 @@ func (r *Rows) Columns() []string {
 // Close closes the rows iterator.
 func (r *Rows) Close() error {
 	err := r.rows.Close()
+	defer r.stmt.Close()
 
 	// If we consumed the whole result set, there's nothing to do as
 	// there's no pending response from the server.
@@ -744,7 +838,7 @@ func (r *Rows) Close() error {
 
 	// Let's issue an interrupt request and wait until we get an empty
 	// response, signalling that the query was interrupted.
-	if err := r.protocol.Interrupt(r.ctx, r.request, r.response); err != nil {
+	if err := r.stmt.protocol.Interrupt(r.ctx, r.stmt.request, r.stmt.response); err != nil {
 		return driverError(r.log, err)
 	}
 
@@ -761,10 +855,10 @@ func (r *Rows) Next(dest []driver.Value) error {
 
 	if err == protocol.ErrRowsPart {
 		r.rows.Close()
-		if err := r.protocol.More(r.ctx, r.response); err != nil {
+		if err := r.stmt.protocol.More(r.ctx, r.stmt.response); err != nil {
 			return driverError(r.log, err)
 		}
-		rows, err := protocol.DecodeRows(r.response)
+		rows, err := protocol.DecodeRows(r.stmt.response)
 		if err != nil {
 			return driverError(r.log, err)
 		}

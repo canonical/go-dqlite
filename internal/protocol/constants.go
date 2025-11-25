@@ -65,18 +65,19 @@ const (
 
 // Response types.
 const (
-	ResponseFailure    = 0
-	ResponseNode       = 1
-	ResponseNodeLegacy = 1
-	ResponseWelcome    = 2
-	ResponseNodes      = 3
-	ResponseDb         = 4
-	ResponseStmt       = 5
-	ResponseResult     = 6
-	ResponseRows       = 7
-	ResponseEmpty      = 8
-	ResponseFiles      = 9
-	ResponseMetadata   = 10
+	ResponseFailure        = 0
+	ResponseNode           = 1
+	ResponseNodeLegacy     = 1
+	ResponseWelcome        = 2
+	ResponseNodes          = 3
+	ResponseDb             = 4
+	ResponseStmt           = 5
+	ResponseStmtWithOffset = ResponseStmt
+	ResponseResult         = 6
+	ResponseRows           = 7
+	ResponseEmpty          = 8
+	ResponseFiles          = 9
+	ResponseMetadata       = 10
 )
 
 // Human-readable description of a request type.
