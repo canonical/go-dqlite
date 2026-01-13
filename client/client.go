@@ -267,6 +267,10 @@ func (c *Client) Remove(ctx context.Context, id uint64) error {
 type NodeMetadata struct {
 	FailureDomain uint64
 	Weight        uint64
+	// AllowedRoles controls which roles the node can assume.
+	// Nil means the value wasn't provided. A zero value means all roles allowed.
+	// libdqlite does not populate this via Describe; callers can supply it when constructing metadata locally.
+	AllowedRoles *RoleMask
 }
 
 // Describe returns metadata about the node we're connected with.
@@ -282,7 +286,7 @@ func (c *Client) Describe(ctx context.Context) (*NodeMetadata, error) {
 		return nil, err
 	}
 
-	domain, weight, err := protocol.DecodeMetadata(&response)
+	domain, weight, allowedRoles, err := protocol.DecodeMetadata(&response)
 	if err != nil {
 		return nil, err
 	}
@@ -290,6 +294,10 @@ func (c *Client) Describe(ctx context.Context) (*NodeMetadata, error) {
 	metadata := &NodeMetadata{
 		FailureDomain: domain,
 		Weight:        weight,
+	}
+	if allowedRoles != nil {
+		mask := RoleMask(*allowedRoles)
+		metadata.AllowedRoles = &mask
 	}
 
 	return metadata, nil
