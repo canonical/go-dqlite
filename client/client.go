@@ -265,8 +265,10 @@ func (c *Client) Remove(ctx context.Context, id uint64) error {
 
 // NodeMetadata user-defined node-level metadata.
 type NodeMetadata struct {
+	// FailureDomain identifies a failure domain used during role assignment.
 	FailureDomain uint64
-	Weight        uint64
+	// Weight is used to order candidates within a failure domain (lower is preferred).
+	Weight uint64
 	// AllowedRoles controls which roles the node can assume.
 	// Nil means the value wasn't provided. A zero value means all roles allowed.
 	// libdqlite does not populate this via Describe; callers can supply it when constructing metadata locally.
