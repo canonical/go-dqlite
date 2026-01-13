@@ -147,6 +147,37 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 	offlineVoters := c.list(client.Voter, false, nil)
 	offlineStandbys := c.list(client.StandBy, false, nil)
 
+	for _, node := range onlineVoters {
+		// Don't demote the leader here; callers should handle leader handover separately.
+		// AllowedRoles are intentionally not enforced on the current leader to avoid
+		// destabilizing leadership; handover should be used to move leadership first.
+		if node.ID == leader {
+			continue
+		}
+		if c.roleAllowed(node, client.Voter) {
+			continue
+		}
+		if c.roleAllowed(node, client.StandBy) {
+			return client.StandBy, []client.NodeInfo{node}
+		}
+
+		return client.Spare, []client.NodeInfo{node}
+	}
+
+	for _, node := range onlineStandbys {
+		if c.roleAllowed(node, client.StandBy) {
+			continue
+		}
+		if c.roleAllowed(node, client.Spare) {
+			return client.Spare, []client.NodeInfo{node}
+		}
+		if c.roleAllowed(node, client.Voter) {
+			return client.Voter, []client.NodeInfo{node}
+		}
+
+		return -1, nil
+	}
+
 	domainsWithVoters := c.failureDomains(onlineVoters)
 	allDomains := c.allFailureDomains()
 
@@ -158,6 +189,7 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 		// Find nodes in the domains we need to populate
 		candidates := c.list(client.StandBy, true, domainsWithoutVoters)
 		candidates = append(candidates, c.list(client.Spare, true, domainsWithoutVoters)...)
+		candidates = c.filterCandidatesByRole(candidates, client.Voter)
 
 		if len(candidates) > 0 {
 			c.sortCandidates(candidates, domainsWithoutVoters)
@@ -176,6 +208,7 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 	if n := len(onlineVoters); n < c.Config.Voters {
 		candidates := c.list(client.StandBy, true, nil)
 		candidates = append(candidates, c.list(client.Spare, true, nil)...)
+		candidates = c.filterCandidatesByRole(candidates, client.Voter)
 
 		if len(candidates) == 0 {
 			return -1, nil
@@ -198,18 +231,29 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 			nodes = append(nodes, node)
 		}
 
+		nodes = c.filterCandidatesByRole(nodes, client.Spare)
+		if len(nodes) == 0 {
+			return -1, nil
+		}
+
 		return client.Spare, c.sortVoterCandidatesToDemote(nodes)
 	}
 
 	// If we have offline voters, let's demote one of them.
 	if n := len(offlineVoters); n > 0 {
-		return client.Spare, offlineVoters
+		candidates := c.filterCandidatesByRole(offlineVoters, client.Spare)
+		if len(candidates) == 0 {
+			return -1, nil
+		}
+
+		return client.Spare, candidates
 	}
 
 	// If we have less online stand-bys than desired, let's try to promote
 	// some other node.
 	if n := len(onlineStandbys); n < c.Config.StandBys {
 		candidates := c.list(client.Spare, true, nil)
+		candidates = c.filterCandidatesByRole(candidates, client.StandBy)
 
 		if len(candidates) == 0 {
 			return -1, nil
@@ -233,12 +277,22 @@ func (c *RolesChanges) Adjust(leader uint64) (client.NodeRole, []client.NodeInfo
 			nodes = append(nodes, node)
 		}
 
+		nodes = c.filterCandidatesByRole(nodes, client.Spare)
+		if len(nodes) == 0 {
+			return -1, nil
+		}
+
 		return client.Spare, nodes
 	}
 
 	// If we have offline stand-bys, let's demote one of them.
 	if n := len(offlineStandbys); n > 0 {
-		return client.Spare, offlineStandbys
+		candidates := c.filterCandidatesByRole(offlineStandbys, client.Spare)
+		if len(candidates) == 0 {
+			return -1, nil
+		}
+
+		return client.Spare, candidates
 	}
 
 	return -1, nil
@@ -388,4 +442,24 @@ func (c *RolesChanges) sortVoterCandidatesToDemote(candidates []client.NodeInfo)
 // Return the metadata of the given node, if any.
 func (c *RolesChanges) metadata(node client.NodeInfo) *client.NodeMetadata {
 	return c.State[node]
+}
+
+func (c *RolesChanges) roleAllowed(node client.NodeInfo, role client.NodeRole) bool {
+	metadata := c.metadata(node)
+	if metadata == nil || metadata.AllowedRoles == nil || *metadata.AllowedRoles == 0 {
+		return true
+	}
+
+	return *metadata.AllowedRoles&client.RoleMaskFor(role) != 0
+}
+
+func (c *RolesChanges) filterCandidatesByRole(candidates []client.NodeInfo, role client.NodeRole) []client.NodeInfo {
+	filtered := make([]client.NodeInfo, 0, len(candidates))
+	for _, node := range candidates {
+		if c.roleAllowed(node, role) {
+			filtered = append(filtered, node)
+		}
+	}
+
+	return filtered
 }
