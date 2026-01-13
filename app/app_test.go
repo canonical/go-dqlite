@@ -32,6 +32,28 @@ func TestNew_PristineDefault(t *testing.T) {
 	defer cleanup()
 }
 
+func TestNew_InvalidAllowedRolesMask(t *testing.T) {
+	dir, cleanup := newDir(t)
+	defer cleanup()
+
+	_, err := app.New(dir,
+		app.WithAddress("127.0.0.1:9000"),
+		app.WithAllowedRoles(client.RoleMask(1<<7)),
+	)
+	require.Error(t, err)
+}
+
+func TestNew_DisallowSpareRoleMask(t *testing.T) {
+	dir, cleanup := newDir(t)
+	defer cleanup()
+
+	_, err := app.New(dir,
+		app.WithAddress("127.0.0.1:9000"),
+		app.WithAllowedRoles(client.RoleMaskVoter|client.RoleMaskStandBy),
+	)
+	require.Error(t, err)
+}
+
 // Create a pristine joining node.
 func TestNew_PristineJoiner(t *testing.T) {
 	addr1 := "127.0.0.1:9001"
