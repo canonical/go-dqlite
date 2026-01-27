@@ -38,4 +38,5 @@ package protocol
 //go:generate ./schema.sh --response Result   result:Result
 //go:generate ./schema.sh --response Rows     rows:Rows
 //go:generate ./schema.sh --response Files    files:Files
-//go:generate ./schema.sh --response Metadata failureDomain:uint64 weight:uint64
+// allowedRoles is optional and currently not emitted by libdqlite.
+//go:generate ./schema.sh --response Metadata failureDomain:uint64 weight:uint64 allowedRoles:uint64?
