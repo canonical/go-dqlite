@@ -255,7 +255,7 @@ func DecodeFiles(response *Message) (files Files, err error) {
 }
 
 // DecodeMetadata decodes a Metadata response.
-func DecodeMetadata(response *Message) (failureDomain uint64, weight uint64, err error) {
+func DecodeMetadata(response *Message) (failureDomain uint64, weight uint64, allowedRoles *uint64, err error) {
 	mtype, _ := response.getHeader()
 
 	if mtype == ResponseFailure {
@@ -273,6 +273,10 @@ func DecodeMetadata(response *Message) (failureDomain uint64, weight uint64, err
 
 	failureDomain = response.getUint64()
 	weight = response.getUint64()
+	if remaining := int(response.words*messageWordSize) - response.body.Offset; remaining >= messageWordSize {
+		value := response.getUint64()
+		allowedRoles = &value
+	}
 
 	return
 }
