@@ -174,6 +174,21 @@ func WithFailureDomain(code uint64) Option {
 	}
 }
 
+// WithAllowedRoles constrains which roles this node is eligible to assume.
+//
+// This is optional opt-in behavior. If unset (or set to 0), all roles remain allowed.
+//
+// Note: this is enforced locally by go-dqlite during role decisions. libdqlite
+// does not currently emit allowed roles via Describe, so other nodes will not
+// see this mask unless they are similarly configured.
+//
+// A zero mask means "no restriction" (all roles allowed).
+func WithAllowedRoles(mask client.RoleMask) Option {
+	return func(options *options) {
+		options.AllowedRoles = mask
+	}
+}
+
 // WithNetworkLatency sets the average one-way network latency.
 func WithNetworkLatency(latency time.Duration) Option {
 	return func(options *options) {
@@ -265,6 +280,7 @@ type options struct {
 	RolesAdjustmentFrequency time.Duration
 	OnRolesAdjustment        func(client.NodeInfo, []client.NodeInfo) error
 	FailureDomain            uint64
+	AllowedRoles             client.RoleMask
 	NetworkLatency           time.Duration
 	BusyTimeout              time.Duration
 	ConcurrentLeaderConns    *int64
