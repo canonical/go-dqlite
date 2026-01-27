@@ -120,6 +120,9 @@ func (c *RolesChanges) Handover(id uint64) (client.NodeRole, []client.NodeInfo) 
 		candidates = append(c.list(client.StandBy, true, nil), candidates...)
 	}
 
+	// Enforce role eligibility for the role being handed over.
+	candidates = c.filterCandidatesByRole(candidates, node.Role)
+
 	if len(candidates) == 0 {
 		// No online node available to be promoted.
 		return -1, nil
