@@ -102,6 +102,7 @@ func TestClient_Describe(t *testing.T) {
 
 	assert.Equal(t, uint64(0), metadata.FailureDomain)
 	assert.Equal(t, uint64(0), metadata.Weight)
+	assert.Nil(t, metadata.AllowedRoles)
 
 	require.NoError(t, cli.Weight(context.Background(), 123))
 
@@ -110,6 +111,7 @@ func TestClient_Describe(t *testing.T) {
 
 	assert.Equal(t, uint64(0), metadata.FailureDomain)
 	assert.Equal(t, uint64(123), metadata.Weight)
+	assert.Nil(t, metadata.AllowedRoles)
 }
 
 func newNode(t *testing.T) (*dqlite.Node, func()) {
