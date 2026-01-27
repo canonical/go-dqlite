@@ -71,6 +71,14 @@ func (c *RolesChanges) Assume(id uint64) client.NodeRole {
 		role = client.Voter
 	}
 
+	// Respect role eligibility for this node.
+	if !c.roleAllowed(*node, role) {
+		if role == client.Voter && c.roleAllowed(*node, client.StandBy) {
+			return client.StandBy
+		}
+		return -1
+	}
+
 	return role
 }
 
