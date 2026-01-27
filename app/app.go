@@ -763,6 +763,23 @@ func (a *App) makeRolesChanges(nodes []client.NodeInfo) RolesChanges {
 	}
 
 	wg.Wait()
+
+	// libdqlite currently does not emit allowed roles via Describe, so we
+	// inject the local node's configured mask into the probed metadata.
+	if a.options != nil && a.options.AllowedRoles != 0 {
+		mask := a.options.AllowedRoles
+		for node := range state {
+			if node.ID != a.id {
+				continue
+			}
+			if state[node] == nil {
+				state[node] = &client.NodeMetadata{}
+			}
+			state[node].AllowedRoles = &mask
+			break
+		}
+	}
+
 	return RolesChanges{Config: a.roles, State: state}
 }
 
