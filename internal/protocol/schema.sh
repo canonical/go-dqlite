@@ -101,12 +101,21 @@ if [ "$entity" = "--response" ]; then
 	do
 		name=$(echo "$i" | cut -f 1 -d :)
 		type=$(echo "$i" | cut -f 2 -d :)
+		optional="0"
+		if [[ "$type" == *\? ]]; then
+			type=${type%\?}
+			optional="1"
+		fi
 
 		if [ "$name" = "unused" ]; then
 			continue
 		fi
 
-		returns=$(echo "${returns}${name} ${type}, ")
+		if [ "$optional" = "1" ]; then
+			returns=$(echo "${returns}${name} *${type}, ")
+		else
+			returns=$(echo "${returns}${name} ${type}, ")
+		fi
 	done
 
 	cat >> response.go <<EOF
@@ -134,16 +143,31 @@ EOF
 	do
 		name=$(echo "$i" | cut -f 1 -d :)
 		type=$(echo "$i" | cut -f 2 -d :)
-
-		assign=$(echo "${name} = ")
-
-		if [ "$name" = "unused" ]; then
-			assign=$(echo "")
+		optional="0"
+		if [[ "$type" == *\? ]]; then
+			type=${type%\?}
+			optional="1"
 		fi
 
-		cat >> response.go <<EOF
-	${assign}response.get${type^}()
+		if [ "$name" = "unused" ]; then
+			cat >> response.go <<EOF
+	response.get${type^}()
 EOF
+			continue
+		fi
+
+		if [ "$optional" = "1" ]; then
+			cat >> response.go <<EOF
+	if remaining := int(response.words*messageWordSize) - response.body.Offset; remaining >= messageWordSize {
+		value := response.get${type^}()
+		${name} = &value
+	}
+EOF
+		else
+			cat >> response.go <<EOF
+	${name} = response.get${type^}()
+EOF
+		fi
 	done
 
 	cat >> response.go <<EOF
