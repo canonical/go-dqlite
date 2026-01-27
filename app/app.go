@@ -236,6 +236,14 @@ func New(dir string, options ...Option) (app *App, err error) {
 		stop()
 		return nil, fmt.Errorf("invalid voters %d: must be an odd number greater than 1", o.Voters)
 	}
+	if o.AllowedRoles != 0 && o.AllowedRoles&client.RoleMaskAll != o.AllowedRoles {
+		stop()
+		return nil, fmt.Errorf("invalid allowed roles mask %d: must be subset of RoleMaskAll", o.AllowedRoles)
+	}
+	if o.AllowedRoles != 0 && o.AllowedRoles&client.RoleMaskSpare == 0 {
+		stop()
+		return nil, fmt.Errorf("invalid allowed roles mask %d: must include RoleMaskSpare", o.AllowedRoles)
+	}
 
 	if runtime.GOOS != "linux" && nodeBindAddress[0] == '@' {
 		// Do not use abstract socket on other platforms and left trim "@"
