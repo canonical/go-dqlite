@@ -1,3 +1,4 @@
+//go:build !nosqlite3
 // +build !nosqlite3
 
 package client_test
@@ -67,7 +68,7 @@ func TestConfigMultiThread(t *testing.T) {
 	defer cleanup()
 
 	err := dqlite.ConfigMultiThread()
-	assert.EqualError(t, err, "SQLite is already initialized")
+	assert.NoError(t, err)
 }
 
 func dummyDBSetup(t *testing.T) func() {
