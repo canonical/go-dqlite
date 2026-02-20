@@ -68,7 +68,6 @@ func SimpleListenTLSConfig(cert tls.Certificate, pool *x509.CertPool) *tls.Confi
 		ClientCAs:    pool,
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 	}
-	config.BuildNameToCertificate()
 
 	return config
 }
