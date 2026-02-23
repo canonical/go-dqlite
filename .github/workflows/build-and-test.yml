@@ -32,7 +32,7 @@ jobs:
           apt-get install -y sudo tzdata build-essential autoconf clang automake libtool pkg-config software-properties-common
 
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Go
       uses: actions/setup-go@v5
