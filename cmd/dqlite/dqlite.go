@@ -124,6 +124,9 @@ func main() {
 				if err != nil {
 					fmt.Println("Error: ", err)
 				} else {
+					if result == "exit" {
+						break
+					}
 					line.AppendHistory(input)
 					if result != "" {
 						fmt.Println(result)

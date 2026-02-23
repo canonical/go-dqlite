@@ -72,6 +72,8 @@ func (s *Shell) Process(ctx context.Context, line string) (string, error) {
 		return s.processLeader(ctx, line)
 	case ".help":
 		return s.processHelp(), nil
+	case ".exit":
+		return "exit", nil
 	}
 	if strings.HasPrefix(strings.ToLower(strings.TrimLeft(line, " ")), ".remove") {
 		return s.processRemove(ctx, line)
@@ -101,6 +103,7 @@ Enter a SQL statement to execute it, or one of the following built-in commands:
   .remove <address>                 Remove a node from the cluster
   .describe <address>               Show the details of a node
   .weight <address> <weight>        Set the weight of a node
+  .exit                             Quit shell
   .dump <address> [<database>]      Dump the database
   .reconfigure <dir> <clusteryaml>  Reconfigure the cluster
 `[1:]
