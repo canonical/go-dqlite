@@ -507,6 +507,10 @@ func (c *Conn) Close() error {
 // true to either set the read-only transaction property if supported or return
 // an error if it is not supported.
 func (c *Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+	if err := validateTxOptions(opts); err != nil {
+		return nil, err
+	}
+
 	if _, err := c.ExecContext(ctx, "BEGIN", nil); err != nil {
 		return nil, err
 	}
