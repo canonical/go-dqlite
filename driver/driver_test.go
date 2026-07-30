@@ -88,6 +88,121 @@ func TestConn_Exec(t *testing.T) {
 	assert.NoError(t, conn.Close())
 }
 
+func TestConn_ExecMultipleStatements(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+	execer := conn.(driver.ExecerContext)
+
+	result, err := execer.ExecContext(context.Background(), `
+		; -- Empty statements and comments are separators.
+		CREATE TABLE test (value TEXT);
+		INSERT INTO test(value) VALUES (?);
+		INSERT INTO test(value) VALUES ('semi;colon'); -- trailing comment
+	`, []driver.NamedValue{{Ordinal: 1, Value: "first"}})
+	require.NoError(t, err)
+	rowsAffected, err := result.RowsAffected()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), rowsAffected, "the result is from the final statement")
+
+	compound := "INSERT INTO test(value) VALUES (?); /* separator */ INSERT INTO test(value) VALUES (?)"
+	args := []driver.NamedValue{{Ordinal: 1, Value: "second"}, {Ordinal: 2, Value: "third"}}
+	_, err = execer.ExecContext(context.Background(), compound, args)
+	require.NoError(t, err)
+	// Execute the same text again to exercise both cached statement segments.
+	_, err = execer.ExecContext(context.Background(), compound, args)
+	require.NoError(t, err)
+
+	queryer := conn.(driver.QueryerContext)
+	rows, err := queryer.QueryContext(context.Background(), "SELECT count(*) FROM test", nil)
+	require.NoError(t, err)
+	values := make([]driver.Value, 1)
+	require.NoError(t, rows.Next(values))
+	assert.Equal(t, int64(6), values[0])
+	require.NoError(t, rows.Close())
+	require.NoError(t, conn.Close())
+}
+
+func TestConn_EmptyQueriesAreNoOps(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+	execer := conn.(driver.ExecerContext)
+
+	queries := []string{
+		"",
+		" \t\n\r\f",
+		";;;;",
+		"-- line comment",
+		"/* block comment */",
+		"; -- first\n /* second */ ;",
+		"/* unterminated comment",
+	}
+	for _, query := range queries {
+		t.Run(query, func(t *testing.T) {
+			result, err := execer.ExecContext(context.Background(), query, nil)
+			require.NoError(t, err)
+			rowsAffected, err := result.RowsAffected()
+			require.NoError(t, err)
+			assert.Equal(t, int64(0), rowsAffected)
+		})
+	}
+
+	_, err = execer.ExecContext(context.Background(), "-- no statement", []driver.NamedValue{{Ordinal: 1, Value: 1}})
+	assert.EqualError(t, err, "bind parameters")
+
+	stmt, err := conn.Prepare("; /* no statement */")
+	require.NoError(t, err)
+	assert.Equal(t, 0, stmt.NumInput())
+	_, err = stmt.Exec(nil)
+	require.NoError(t, err)
+	require.NoError(t, stmt.Close())
+
+	rows, err := conn.(driver.QueryerContext).QueryContext(context.Background(), "; -- no statement", nil)
+	require.NoError(t, err)
+	assert.Empty(t, rows.Columns())
+	assert.ErrorIs(t, rows.Next(nil), io.EOF)
+	require.NoError(t, rows.Close())
+	require.NoError(t, conn.Close())
+}
+
+func TestConn_PrepareMultipleStatements(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+	execer := conn.(driver.ExecerContext)
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE test (value TEXT)", nil)
+	require.NoError(t, err)
+
+	stmt, err := conn.Prepare("INSERT INTO test VALUES (?); INSERT INTO test VALUES (?)")
+	require.NoError(t, err)
+	assert.Equal(t, 2, stmt.NumInput())
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), []driver.NamedValue{
+		{Ordinal: 1, Value: "one"},
+		{Ordinal: 2, Value: "two"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, stmt.Close())
+	require.NoError(t, conn.Close())
+}
+
+func TestConn_QueryRejectsMultipleStatements(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+	_, err = conn.(driver.QueryerContext).QueryContext(context.Background(), "SELECT 1; SELECT 2", nil)
+	assert.EqualError(t, err, "dqlite: query contains multiple statements")
+	require.NoError(t, conn.Close())
+}
+
 func TestConn_Query(t *testing.T) {
 	drv, cleanup := newDriver(t)
 	defer cleanup()
