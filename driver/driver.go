@@ -29,19 +29,21 @@ import (
 
 	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/canonical/go-dqlite/v3/internal/protocol"
+	"github.com/canonical/go-dqlite/v3/metrics"
 	"github.com/canonical/go-dqlite/v3/tracing"
 )
 
 // Driver perform queries against a dqlite server.
 type Driver struct {
-	log                   client.LogFunc   // Log function to use
-	store                 client.NodeStore // Holds addresses of dqlite servers
-	context               context.Context  // Global cancellation context
-	connectionTimeout     time.Duration    // Max time to wait for a new connection
-	contextTimeout        time.Duration    // Default client context timeout.
-	clientConfig          protocol.Config  // Configuration for dqlite client instances
-	tracing               client.LogLevel  // Whether to trace statements
-	concurrentLeaderConns *int64           // Maximum number of concurrent connections to other cluster members while probing for leadership.
+	log                    client.LogFunc   // Log function to use
+	store                  client.NodeStore // Holds addresses of dqlite servers
+	context                context.Context  // Global cancellation context
+	connectionTimeout      time.Duration    // Max time to wait for a new connection
+	contextTimeout         time.Duration    // Default client context timeout.
+	clientConfig           protocol.Config  // Configuration for dqlite client instances
+	concurrentLeaderConns  *int64           // Maximum number of concurrent connections to other cluster members while probing for leadership.
+	statementCacheCapacity int              // Maximum cached prepared statements per connection.
+	metrics                metrics.Recorder // Metrics recorder shared by all connections.
 }
 
 // Error is returned in case of database errors.
@@ -181,11 +183,29 @@ func WithContextTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithTracing will emit a log message at the given level every time a
-// statement gets executed.
+// WithTracing emits a log message at the given level for each statement
+// command. Logging is implemented as a metrics recorder and can be enabled
+// alongside WithMetrics.
 func WithTracing(level client.LogLevel) Option {
 	return func(options *options) {
 		options.Tracing = level
+	}
+}
+
+// WithStatementCacheCapacity sets the maximum number of prepared statements
+// retained by each connection. The default is 50. A capacity of zero disables
+// caching; negative capacities are rejected by New.
+func WithStatementCacheCapacity(capacity int) Option {
+	return func(options *options) {
+		options.StatementCacheCapacity = capacity
+	}
+}
+
+// WithMetrics sets the recorder used for statement cache and command metrics.
+// The recorder must be safe for concurrent use by multiple connections.
+func WithMetrics(recorder metrics.Recorder) Option {
+	return func(options *options) {
+		options.Metrics = recorder
 	}
 }
 
@@ -197,15 +217,23 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 	for _, option := range options {
 		option(o)
 	}
+	if o.StatementCacheCapacity < 0 {
+		return nil, fmt.Errorf("statement cache capacity must not be negative")
+	}
+	recorder := o.Metrics
+	if o.Tracing != client.LogNone {
+		recorder = metrics.Combine(recorder, metrics.NewLogRecorder(o.Log, o.Tracing))
+	}
 
 	driver := &Driver{
-		log:                   o.Log,
-		store:                 store,
-		context:               o.Context,
-		connectionTimeout:     o.ConnectionTimeout,
-		contextTimeout:        o.ContextTimeout,
-		tracing:               o.Tracing,
-		concurrentLeaderConns: o.ConcurrentLeaderConns,
+		log:                    o.Log,
+		store:                  store,
+		context:                o.Context,
+		connectionTimeout:      o.ConnectionTimeout,
+		contextTimeout:         o.ContextTimeout,
+		concurrentLeaderConns:  o.ConcurrentLeaderConns,
+		statementCacheCapacity: o.StatementCacheCapacity,
+		metrics:                recorder,
 		clientConfig: protocol.Config{
 			Dial:           o.Dial,
 			AttemptTimeout: o.AttemptTimeout,
@@ -231,16 +259,19 @@ type options struct {
 	RetryLimit              uint
 	Context                 context.Context
 	Tracing                 client.LogLevel
+	StatementCacheCapacity  int
+	Metrics                 metrics.Recorder
 }
 
 // Create a options object with sane defaults.
 func defaultOptions() *options {
 	maxConns := protocol.MaxConcurrentLeaderConns
 	return &options{
-		Log:                   client.DefaultLogFunc,
-		Dial:                  client.DefaultDialFunc,
-		Tracing:               client.LogNone,
-		ConcurrentLeaderConns: &maxConns,
+		Log:                    client.DefaultLogFunc,
+		Dial:                   client.DefaultDialFunc,
+		Tracing:                client.LogNone,
+		ConcurrentLeaderConns:  &maxConns,
+		StatementCacheCapacity: 100,
 	}
 }
 
@@ -267,7 +298,8 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn := &Conn{
 		log:            c.driver.log,
 		contextTimeout: c.driver.contextTimeout,
-		tracing:        c.driver.tracing,
+		stmtCache:      newStmtCache(c.driver.statementCacheCapacity, c.driver.metrics),
+		metrics:        c.driver.metrics,
 	}
 
 	proto, err := c.protocol.Connect(ctx)
@@ -350,14 +382,14 @@ type Conn struct {
 	response       protocol.Message
 	id             uint32 // Database ID.
 	contextTimeout time.Duration
-	tracing        client.LogLevel
+	stmtCache      stmtCache
+	metrics        metrics.Recorder
 }
 
-// PrepareContext returns a prepared statement, bound to this connection.
-// context is for the preparation of the statement, it must not store the
-// context within the statement itself.
-func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
-	ctx, span := tracing.Start(ctx, "dqlite.driver.PrepareContext", query)
+// prepareOne asks SQLite to prepare the first statement in query. The returned
+// offset is the exact statement boundary reported by SQLite.
+func (c *Conn) prepareOne(ctx context.Context, query string) (_ *stmtRef, _ int, retErr error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.prepareOne", query)
 	defer span.End()
 
 	stmt := &Stmt{
@@ -365,33 +397,94 @@ func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, e
 		request:  &c.request,
 		response: &c.response,
 		log:      c.log,
-		tracing:  c.tracing,
+		metrics:  c.metrics,
+		sql:      query,
 	}
 
-	protocol.EncodePrepare(&c.request, uint64(c.id), query)
+	protocol.EncodePrepareV1(&c.request, uint64(c.id), query)
 
-	var start time.Time
-	if c.tracing != client.LogNone {
-		start = time.Now()
+	if c.metrics != nil {
+		metricStart := time.Now()
+		defer func() {
+			metrics.ObserveCommand(c.metrics, metrics.CommandPrepare, time.Since(metricStart), stmt.sql, retErr)
+		}()
 	}
 	err := c.protocol.Call(ctx, &c.request, &c.response)
-	if c.tracing != client.LogNone {
-		c.log(c.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), query)
-	}
 	if err != nil {
-		return nil, driverError(c.log, err)
+		return nil, 0, driverError(c.log, err)
 	}
 
-	stmt.db, stmt.id, stmt.params, err = protocol.DecodeStmt(&c.response)
+	var offset uint64
+	stmt.db, stmt.id, stmt.params, offset, err = protocol.DecodeStmtWithOffset(&c.response)
 	if err != nil {
-		return nil, driverError(c.log, err)
+		return nil, 0, driverError(c.log, err)
+	}
+	if offset == 0 || offset > uint64(len(query)) {
+		stmt.finalize()
+		return nil, 0, driverError(c.log, fmt.Errorf("invalid prepared statement offset %d for query of length %d", offset, len(query)))
 	}
 
-	if c.tracing != client.LogNone {
-		stmt.sql = query
+	stmt.sql = query[:offset]
+
+	return &stmtRef{stmt: stmt}, int(offset), nil
+}
+
+// prepareNextStatement returns a lease for the first statement in query and
+// the remaining SQL. It is the single place that handles separator trimming,
+// cache lookup, preparation, and cache insertion. A nil lease means query
+// contains no statement.
+func (c *Conn) prepareNextStatement(ctx context.Context, query string) (*stmtLease, string, error) {
+	query = trimSQLSeparators(query)
+	if len(query) == 0 {
+		return nil, "", nil
 	}
 
-	return stmt, nil
+	ref, offset := c.stmtCache.get(query)
+	if ref == nil {
+		var err error
+		ref, offset, err = c.prepareOne(ctx, query)
+		if err != nil {
+			return nil, "", err
+		}
+
+		tail := trimSQLSeparators(query[offset:])
+		ref, err = c.stmtCache.put(query[:offset], len(tail) > 0, ref)
+		if err != nil {
+			return nil, "", err
+		}
+		return ref.acquire(), tail, nil
+	}
+	return ref.acquire(), trimSQLSeparators(query[offset:]), nil
+}
+
+// PrepareContext returns one or more prepared statements, bound to this
+// connection. Statement boundaries come from SQLite rather than a client-side
+// SQL splitter, which is essential for semicolons in strings and comments.
+func (c *Conn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	ctx, span := tracing.Start(ctx, "dqlite.driver.PrepareContext", query)
+	defer span.End()
+
+	var stmts []*stmtLease
+	for {
+		stmt, tail, err := c.prepareNextStatement(ctx, query)
+		if err != nil {
+			closeStmtLeases(stmts)
+			return nil, err
+		}
+		if stmt == nil {
+			break
+		}
+		stmts = append(stmts, stmt)
+		query = tail
+	}
+
+	if len(stmts) == 0 {
+		return emptyStmt{}, nil
+	}
+	if len(stmts) == 1 {
+		return stmts[0], nil
+	}
+	return compoundStmt(stmts), nil
 }
 
 // Prepare returns a prepared statement, bound to this connection.
@@ -404,33 +497,39 @@ func (c *Conn) ExecContext(ctx context.Context, query string, args []driver.Name
 	ctx, span := tracing.Start(ctx, "dqlite.driver.ExecContext", query)
 	defer span.End()
 
-	if int64(len(args)) > math.MaxUint32 {
-		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
-	} else if len(args) > math.MaxUint8 {
-		protocol.EncodeExecSQLV1(&c.request, uint64(c.id), query, args)
-	} else {
-		protocol.EncodeExecSQLV0(&c.request, uint64(c.id), query, args)
-	}
+	// Prepare and execute incrementally. Besides matching ExecSQL semantics,
+	// this permits later statements to depend on earlier DDL in the same SQL
+	// string (for example, CREATE TABLE followed by INSERT).
+	var result driver.Result = &Result{}
+	for {
+		stmt, tail, err := c.prepareNextStatement(ctx, query)
+		if err != nil {
+			return nil, err
+		}
+		if stmt == nil {
+			break
+		}
+		n := stmt.NumInput()
+		if n > len(args) {
+			stmt.Close()
+			return nil, driverError(c.log, fmt.Errorf("bind parameters"))
+		}
+		result, err = stmt.ExecContext(ctx, args[:n])
+		closeErr := stmt.Close()
+		if err != nil {
+			return nil, err
+		}
+		if closeErr != nil {
+			return nil, closeErr
+		}
 
-	var start time.Time
-	if c.tracing != client.LogNone {
-		start = time.Now()
+		args = args[n:]
+		query = tail
 	}
-	err := c.protocol.Call(ctx, &c.request, &c.response)
-	if c.tracing != client.LogNone {
-		c.log(c.tracing, "%.3fs request exec: %q", time.Since(start).Seconds(), query)
+	if len(args) != 0 {
+		return nil, driverError(c.log, fmt.Errorf("bind parameters"))
 	}
-	if err != nil {
-		return nil, driverError(c.log, err)
-	}
-
-	var result protocol.Result
-	result, err = protocol.DecodeResult(&c.response)
-	if err != nil {
-		return nil, driverError(c.log, err)
-	}
-
-	return &Result{result: result}, nil
+	return result, nil
 }
 
 // Query is an optional interface that may be implemented by a Conn.
@@ -443,40 +542,16 @@ func (c *Conn) QueryContext(ctx context.Context, query string, args []driver.Nam
 	ctx, span := tracing.Start(ctx, "dqlite.driver.QueryContext", query)
 	defer span.End()
 
-	if int64(len(args)) > math.MaxUint32 {
-		return nil, driverError(c.log, fmt.Errorf("too many parameters (%d)", len(args)))
-	} else if len(args) > math.MaxUint8 {
-		protocol.EncodeQuerySQLV1(&c.request, uint64(c.id), query, args)
-	} else {
-		protocol.EncodeQuerySQLV0(&c.request, uint64(c.id), query, args)
-	}
-
-	var start time.Time
-	if c.tracing != client.LogNone {
-		start = time.Now()
-	}
-	err := c.protocol.Call(ctx, &c.request, &c.response)
-	if c.tracing != client.LogNone {
-		c.log(c.tracing, "%.3fs request query: %q", time.Since(start).Seconds(), query)
-	}
+	stmt, err := c.PrepareContext(ctx, query)
 	if err != nil {
-		return nil, driverError(c.log, err)
+		return nil, err
 	}
+	defer stmt.Close()
 
-	var rows protocol.Rows
-	rows, err = protocol.DecodeRows(&c.response)
-	if err != nil {
-		return nil, driverError(c.log, err)
+	if stmt.NumInput() != len(args) {
+		return nil, driverError(c.log, fmt.Errorf("bind parameters"))
 	}
-
-	return &Rows{
-		ctx:      ctx,
-		request:  &c.request,
-		response: &c.response,
-		protocol: c.protocol,
-		rows:     rows,
-		log:      c.log,
-	}, nil
+	return stmt.(driver.StmtQueryContext).QueryContext(ctx, args)
 }
 
 // Exec is an optional interface that may be implemented by a Conn.
@@ -491,7 +566,12 @@ func (c *Conn) Exec(query string, args []driver.Value) (driver.Result, error) {
 // Close when there's a surplus of idle connections, it shouldn't be necessary
 // for drivers to do their own connection caching.
 func (c *Conn) Close() error {
-	return c.protocol.Close()
+	cacheErr := c.stmtCache.close()
+	protocolErr := c.protocol.Close()
+	if cacheErr != nil {
+		return cacheErr
+	}
+	return protocolErr
 }
 
 // BeginTx starts and returns a new transaction.  If the context is canceled by
@@ -565,19 +645,23 @@ func (tx *Tx) Rollback() error {
 // Stmt is a prepared statement. It is bound to a Conn and not
 // used by multiple goroutines concurrently.
 type Stmt struct {
-	protocol *protocol.Protocol
-	request  *protocol.Message
-	response *protocol.Message
-	db       uint32
-	id       uint32
-	params   uint64
-	log      client.LogFunc
-	sql      string // Prepared SQL, only set when tracing
-	tracing  client.LogLevel
+	protocol  *protocol.Protocol
+	request   *protocol.Message
+	response  *protocol.Message
+	db        uint32
+	id        uint32
+	params    uint64
+	log       client.LogFunc
+	sql       string
+	metrics   metrics.Recorder
+	finalized bool
 }
 
-// Close closes the statement.
-func (s *Stmt) Close() error {
+func (s *Stmt) finalize() error {
+	if s.finalized {
+		return nil
+	}
+	s.finalized = true
 	protocol.EncodeFinalize(s.request, s.db, s.id)
 
 	ctx := context.Background()
@@ -593,6 +677,10 @@ func (s *Stmt) Close() error {
 	return nil
 }
 
+// Close closes an uncached physical statement. Cached statements are exposed
+// to callers through stmtLease below.
+func (s *Stmt) Close() error { return s.finalize() }
+
 // NumInput returns the number of placeholder parameters.
 func (s *Stmt) NumInput() int {
 	return int(s.params)
@@ -602,9 +690,10 @@ func (s *Stmt) NumInput() int {
 // as an INSERT or UPDATE.
 //
 // ExecContext must honor the context timeout and return when it is canceled.
-func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (_ driver.Result, retErr error) {
 	ctx, span := tracing.Start(ctx, "dqlite.driver.Stmt.ExecContext", s.sql)
 	defer span.End()
+	args = statementNamedValues(args)
 
 	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
@@ -614,14 +703,13 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 		protocol.EncodeExecV0(s.request, s.db, s.id, args)
 	}
 
-	var start time.Time
-	if s.tracing != client.LogNone {
-		start = time.Now()
+	if s.metrics != nil {
+		metricStart := time.Now()
+		defer func() {
+			metrics.ObserveCommand(s.metrics, metrics.CommandExec, time.Since(metricStart), s.sql, retErr)
+		}()
 	}
 	err := s.protocol.Call(ctx, s.request, s.response)
-	if s.tracing != client.LogNone {
-		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
-	}
 	if err != nil {
 		return nil, driverError(s.log, err)
 	}
@@ -645,8 +733,14 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 //
 // QueryContext must honor the context timeout and return when it is canceled.
 func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	return s.queryContext(ctx, args, nil)
+}
+
+func (s *Stmt) queryContext(ctx context.Context, args []driver.NamedValue, lease *stmtLease) (_ driver.Rows, retErr error) {
 	ctx, span := tracing.Start(ctx, "dqlite.driver.Stmt.QueryContext", s.sql)
 	defer span.End()
+
+	args = statementNamedValues(args)
 
 	if int64(len(args)) > math.MaxUint32 {
 		return nil, driverError(s.log, fmt.Errorf("too many parameters (%d)", len(args)))
@@ -656,14 +750,13 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 		protocol.EncodeQueryV0(s.request, s.db, s.id, args)
 	}
 
-	var start time.Time
-	if s.tracing != client.LogNone {
-		start = time.Now()
+	if s.metrics != nil {
+		metricStart := time.Now()
+		defer func() {
+			metrics.ObserveCommand(s.metrics, metrics.CommandQuery, time.Since(metricStart), s.sql, retErr)
+		}()
 	}
 	err := s.protocol.Call(ctx, s.request, s.response)
-	if s.tracing != client.LogNone {
-		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
-	}
 	if err != nil {
 		return nil, driverError(s.log, err)
 	}
@@ -675,12 +768,13 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 	}
 
 	return &Rows{
-		ctx:      ctx,
-		request:  s.request,
-		response: s.response,
-		protocol: s.protocol,
-		rows:     rows,
-		log:      s.log,
+		ctx:       ctx,
+		request:   s.request,
+		response:  s.response,
+		protocol:  s.protocol,
+		rows:      rows,
+		log:       s.log,
+		stmtLease: lease,
 	}, nil
 }
 
@@ -688,6 +782,147 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 	return s.QueryContext(context.Background(), valuesToNamedValues(args))
 }
+
+// stmtLease is a caller's reference to a cached physical statement. Closing a
+// lease never finalizes a statement that is still cached or in use by Rows.
+type stmtLease struct {
+	ref    *stmtRef
+	closed bool
+}
+
+var _ driver.Stmt = (*stmtLease)(nil)
+var _ driver.StmtExecContext = (*stmtLease)(nil)
+var _ driver.StmtQueryContext = (*stmtLease)(nil)
+
+func (s *stmtLease) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	return s.ref.release()
+}
+
+func (s *stmtLease) NumInput() int { return s.ref.stmt.NumInput() }
+
+func (s *stmtLease) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+	return s.ref.stmt.ExecContext(ctx, args)
+}
+
+func (s *stmtLease) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), valuesToNamedValues(args))
+}
+
+func (s *stmtLease) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	rowsLease := s.ref.acquire()
+	rows, err := s.ref.stmt.queryContext(ctx, args, rowsLease)
+	if err != nil {
+		rowsLease.Close()
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (s *stmtLease) Query(args []driver.Value) (driver.Rows, error) {
+	return s.QueryContext(context.Background(), valuesToNamedValues(args))
+}
+
+type compoundStmt []*stmtLease
+
+var _ driver.Stmt = compoundStmt(nil)
+var _ driver.StmtExecContext = compoundStmt(nil)
+var _ driver.StmtQueryContext = compoundStmt(nil)
+
+func closeStmtLeases(stmts []*stmtLease) error {
+	var firstErr error
+	for _, stmt := range stmts {
+		if err := stmt.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func (s compoundStmt) Close() error { return closeStmtLeases(s) }
+
+func (s compoundStmt) NumInput() int {
+	total := 0
+	for _, stmt := range s {
+		total += stmt.NumInput()
+	}
+	return total
+}
+
+func (s compoundStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+	// Conn.ExecContext and database/sql validate NumInput before reaching this
+	// point, but keep the driver-level method panic-free for direct callers.
+	if s.NumInput() != len(args) {
+		return nil, fmt.Errorf("dqlite: expected %d arguments, got %d", s.NumInput(), len(args))
+	}
+
+	var result driver.Result = &Result{}
+	for _, stmt := range s {
+		n := stmt.NumInput()
+		var err error
+		result, err = stmt.ExecContext(ctx, args[:n])
+		if err != nil {
+			return nil, err
+		}
+		args = args[n:]
+	}
+	return result, nil
+}
+
+func (s compoundStmt) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), valuesToNamedValues(args))
+}
+
+func (s compoundStmt) QueryContext(context.Context, []driver.NamedValue) (driver.Rows, error) {
+	return nil, fmt.Errorf("dqlite: query contains multiple statements")
+}
+
+func (s compoundStmt) Query([]driver.Value) (driver.Rows, error) {
+	return nil, fmt.Errorf("dqlite: query contains multiple statements")
+}
+
+// emptyStmt represents SQL containing only whitespace, separators, or
+// comments. SQLite treats such input as a no-op, so it never reaches the
+// server and owns no prepared-statement resources.
+type emptyStmt struct{}
+
+var _ driver.Stmt = emptyStmt{}
+var _ driver.StmtExecContext = emptyStmt{}
+var _ driver.StmtQueryContext = emptyStmt{}
+
+func (emptyStmt) Close() error  { return nil }
+func (emptyStmt) NumInput() int { return 0 }
+
+func (emptyStmt) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("bind parameters")
+	}
+	return &Result{}, nil
+}
+
+func (s emptyStmt) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), valuesToNamedValues(args))
+}
+
+func (emptyStmt) QueryContext(_ context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("bind parameters")
+	}
+	return emptyRows{}, nil
+}
+
+func (s emptyStmt) Query(args []driver.Value) (driver.Rows, error) {
+	return s.QueryContext(context.Background(), valuesToNamedValues(args))
+}
+
+type emptyRows struct{}
+
+func (emptyRows) Columns() []string         { return nil }
+func (emptyRows) Close() error              { return nil }
+func (emptyRows) Next([]driver.Value) error { return io.EOF }
 
 // Result is the result of a query execution.
 type Result struct {
@@ -709,14 +944,16 @@ func (r *Result) RowsAffected() (int64, error) {
 
 // Rows is an iterator over an executed query's results.
 type Rows struct {
-	ctx      context.Context
-	protocol *protocol.Protocol
-	request  *protocol.Message
-	response *protocol.Message
-	rows     protocol.Rows
-	consumed bool
-	types    []string
-	log      client.LogFunc
+	ctx       context.Context
+	protocol  *protocol.Protocol
+	request   *protocol.Message
+	response  *protocol.Message
+	rows      protocol.Rows
+	consumed  bool
+	types     []string
+	log       client.LogFunc
+	stmtLease *stmtLease
+	closed    bool
 }
 
 // Columns returns the names of the columns. The number of
@@ -728,8 +965,19 @@ func (r *Rows) Columns() []string {
 }
 
 // Close closes the rows iterator.
-func (r *Rows) Close() error {
-	err := r.rows.Close()
+func (r *Rows) Close() (err error) {
+	if r.closed {
+		return nil
+	}
+	r.closed = true
+	if r.stmtLease != nil {
+		defer func() {
+			if closeErr := r.stmtLease.Close(); err == nil {
+				err = closeErr
+			}
+		}()
+	}
+	err = r.rows.Close()
 
 	// If we consumed the whole result set, there's nothing to do as
 	// there's no pending response from the server.
@@ -811,6 +1059,41 @@ func (r *Rows) ColumnTypeDatabaseTypeName(i int) string {
 	return r.types[i]
 }
 
+// trimSQLSeparators removes only tokens that SQLite treats as trivia between
+// statements. It is intentionally not a SQL splitter; statement boundaries
+// still come exclusively from sqlite3_prepare_v2 via the protocol offset.
+func trimSQLSeparators(query string) string {
+	for len(query) > 0 {
+		switch query[0] {
+		case ' ', '\t', '\n', '\r', '\f', ';':
+			query = query[1:]
+			continue
+		}
+
+		if len(query) >= 2 && query[0] == '-' && query[1] == '-' {
+			i := 2
+			for i < len(query) && query[i] != '\n' {
+				i++
+			}
+			query = query[i:]
+			continue
+		}
+		if len(query) >= 2 && query[0] == '/' && query[1] == '*' {
+			i := 2
+			for i+1 < len(query) && (query[i] != '*' || query[i+1] != '/') {
+				i++
+			}
+			if i+1 >= len(query) {
+				return ""
+			}
+			query = query[i+2:]
+			continue
+		}
+		return query
+	}
+	return ""
+}
+
 // Convert a driver.Value slice into a driver.NamedValue slice.
 func valuesToNamedValues(args []driver.Value) []driver.NamedValue {
 	namedValues := make([]driver.NamedValue, len(args))
@@ -821,6 +1104,22 @@ func valuesToNamedValues(args []driver.Value) []driver.NamedValue {
 		}
 	}
 	return namedValues
+}
+
+// statementNamedValues returns values with the statement-local ordinals
+// required by the wire encoding. Segments after the first statement in a
+// compound query retain their original global ordinals and must be rebased.
+func statementNamedValues(args []driver.NamedValue) []driver.NamedValue {
+	for i := range args {
+		if args[i].Ordinal != i+1 {
+			values := append([]driver.NamedValue(nil), args...)
+			for j := range values {
+				values[j].Ordinal = j + 1
+			}
+			return values
+		}
+	}
+	return args
 }
 
 type unwrappable interface {
