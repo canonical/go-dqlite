@@ -6,7 +6,6 @@ package protocol
 
 import "fmt"
 
-
 // DecodeFailure decodes a Failure response.
 func DecodeFailure(response *Message) (code uint64, message string, err error) {
 	mtype, _ := response.getHeader()
@@ -142,8 +141,8 @@ func DecodeDb(response *Message) (id uint32, err error) {
 	return
 }
 
-// DecodeStmt decodes a Stmt response.
-func DecodeStmt(response *Message) (db uint32, id uint32, params uint64, err error) {
+// DecodeStmtWithOffset decodes a StmtWithOffset response.
+func DecodeStmtWithOffset(response *Message) (db uint32, id uint32, params uint64, offset uint64, err error) {
 	mtype, _ := response.getHeader()
 
 	if mtype == ResponseFailure {
@@ -154,14 +153,15 @@ func DecodeStmt(response *Message) (db uint32, id uint32, params uint64, err err
 		return
 	}
 
-	if mtype != ResponseStmt {
-		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseStmt), mtype)
+	if mtype != ResponseStmtWithOffset {
+		err = fmt.Errorf("decode %s: unexpected type %d", responseDesc(ResponseStmtWithOffset), mtype)
 		return
 	}
 
 	db = response.getUint32()
 	id = response.getUint32()
 	params = response.getUint64()
+	offset = response.getUint64()
 
 	return
 }

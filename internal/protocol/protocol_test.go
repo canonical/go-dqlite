@@ -69,15 +69,17 @@ func TestProtocol_Prepare(t *testing.T) {
 	db, err := protocol.DecodeDb(&response)
 	require.NoError(t, err)
 
-	protocol.EncodePrepare(&request, uint64(db), "CREATE TABLE test (n INT)")
+	query := "CREATE TABLE test (n INT)"
+	protocol.EncodePrepareV1(&request, uint64(db), query)
 
 	makeCall(t, c, &request, &response)
 
-	_, stmt, params, err := protocol.DecodeStmt(&response)
+	_, stmt, params, offset, err := protocol.DecodeStmtWithOffset(&response)
 	require.NoError(t, err)
 
 	assert.Equal(t, uint32(0), stmt)
 	assert.Equal(t, uint64(0), params)
+	assert.Equal(t, uint64(len(query)), offset)
 }
 
 /*
