@@ -161,7 +161,7 @@ func TestConn_EmptyQueriesAreNoOps(t *testing.T) {
 	stmt, err := conn.Prepare("; /* no statement */")
 	require.NoError(t, err)
 	assert.Equal(t, 0, stmt.NumInput())
-	_, err = stmt.Exec(nil)
+	_, err = stmt.(driver.StmtExecContext).ExecContext(context.Background(), nil)
 	require.NoError(t, err)
 	require.NoError(t, stmt.Close())
 
