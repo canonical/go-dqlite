@@ -17,10 +17,12 @@ package driver_test
 import (
 	"context"
 	"database/sql/driver"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/canonical/go-dqlite/v3/client"
 	dqlitedriver "github.com/canonical/go-dqlite/v3/driver"
 	"github.com/canonical/go-dqlite/v3/logging"
+	"github.com/canonical/go-dqlite/v3/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -168,6 +171,80 @@ func TestConn_EmptyQueriesAreNoOps(t *testing.T) {
 	assert.ErrorIs(t, rows.Next(nil), io.EOF)
 	require.NoError(t, rows.Close())
 	require.NoError(t, conn.Close())
+}
+
+func TestConn_Metrics(t *testing.T) {
+	recorder := &metricsRecorder{}
+	drv, cleanup := newMetricsDriver(t, recorder, 10, dqlitedriver.WithTracing(client.LogDebug))
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+	execer := conn.(driver.ExecerContext)
+	queryer := conn.(driver.QueryerContext)
+
+	_, err = execer.ExecContext(context.Background(), "CREATE TABLE metric_test (value TEXT UNIQUE)", nil)
+	require.NoError(t, err)
+	insert := "INSERT INTO metric_test VALUES (?)"
+	_, err = execer.ExecContext(context.Background(), insert, []driver.NamedValue{{Ordinal: 1, Value: "value"}})
+	require.NoError(t, err)
+	_, err = execer.ExecContext(context.Background(), insert, []driver.NamedValue{{Ordinal: 1, Value: "value"}})
+	require.Error(t, err)
+
+	prepare := "UPDATE metric_test SET value = value WHERE 0"
+	stmt, err := conn.Prepare(prepare)
+	require.NoError(t, err)
+	require.NoError(t, stmt.Close())
+	stmt, err = conn.Prepare(prepare)
+	require.NoError(t, err)
+	require.NoError(t, stmt.Close())
+
+	query := "SELECT count(*) FROM metric_test"
+	for i := 0; i < 2; i++ {
+		rows, err := queryer.QueryContext(context.Background(), query, nil)
+		require.NoError(t, err)
+		values := make([]driver.Value, 1)
+		require.NoError(t, rows.Next(values))
+		require.NoError(t, rows.Close())
+	}
+	require.NoError(t, conn.Close())
+
+	commands, cache := recorder.snapshot()
+	assert.Equal(t, []metrics.CacheResult{
+		metrics.CacheMiss,
+		metrics.CacheMiss,
+		metrics.CacheHit,
+		metrics.CacheMiss,
+		metrics.CacheHit,
+		metrics.CacheMiss,
+		metrics.CacheHit,
+	}, cache)
+	assert.Equal(t, []commandMetric{
+		{command: metrics.CommandPrepare, result: metrics.CommandSuccess},
+		{command: metrics.CommandExec, result: metrics.CommandSuccess},
+		{command: metrics.CommandPrepare, result: metrics.CommandSuccess},
+		{command: metrics.CommandExec, result: metrics.CommandSuccess},
+		{command: metrics.CommandExec, result: metrics.CommandError},
+		{command: metrics.CommandPrepare, result: metrics.CommandSuccess},
+		{command: metrics.CommandPrepare, result: metrics.CommandSuccess},
+		{command: metrics.CommandQuery, result: metrics.CommandSuccess},
+		{command: metrics.CommandQuery, result: metrics.CommandSuccess},
+	}, commands)
+}
+
+func TestConn_MetricsCacheDisabled(t *testing.T) {
+	recorder := &metricsRecorder{}
+	drv, cleanup := newMetricsDriver(t, recorder, 0)
+	defer cleanup()
+
+	conn, err := drv.Open("test.db")
+	require.NoError(t, err)
+	_, err = conn.(driver.ExecerContext).ExecContext(context.Background(), "CREATE TABLE metric_test (value TEXT)", nil)
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
+
+	_, cache := recorder.snapshot()
+	assert.Equal(t, []metrics.CacheResult{metrics.CacheDisabled}, cache)
 }
 
 func TestConn_PrepareMultipleStatements(t *testing.T) {
@@ -802,7 +879,61 @@ func Test_Dump(t *testing.T) {
 	assert.Contains(t, expected, actual)
 }
 
+type commandMetric struct {
+	command metrics.Command
+	result  metrics.CommandResult
+}
+
+type metricsRecorder struct {
+	mu       sync.Mutex
+	commands []commandMetric
+	cache    []metrics.CacheResult
+}
+
+func (r *metricsRecorder) ObserveCommand(command metrics.Command, result metrics.CommandResult, _ time.Duration, _ string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.commands = append(r.commands, commandMetric{command: command, result: result})
+}
+
+func (r *metricsRecorder) ObserveCache(result metrics.CacheResult) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cache = append(r.cache, result)
+}
+
+func (r *metricsRecorder) snapshot() ([]commandMetric, []metrics.CacheResult) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]commandMetric(nil), r.commands...), append([]metrics.CacheResult(nil), r.cache...)
+}
+
 const bindAddress = "@1"
+
+func newMetricsDriver(t *testing.T, recorder metrics.Recorder, capacity int, options ...dqlitedriver.Option) (*dqlitedriver.Driver, func()) {
+	t.Helper()
+
+	dir, dirCleanup := newDir(t)
+	address := fmt.Sprintf("@go-dqlite-%d-%s", os.Getpid(), strings.ToLower(t.Name()))
+	server, err := dqlite.New(uint64(1), address, dir, dqlite.WithBindAddress(address))
+	require.NoError(t, err)
+	require.NoError(t, server.Start())
+
+	store := newStore(t, address)
+	options = append([]dqlitedriver.Option{
+		dqlitedriver.WithLogFunc(logging.Test(t)),
+		dqlitedriver.WithMetrics(recorder),
+		dqlitedriver.WithStatementCacheCapacity(capacity),
+	}, options...)
+	driver, err := dqlitedriver.New(store, options...)
+	require.NoError(t, err)
+
+	cleanup := func() {
+		require.NoError(t, server.Close())
+		dirCleanup()
+	}
+	return driver, cleanup
+}
 
 func newDriver(t *testing.T) (*dqlitedriver.Driver, func()) {
 	t.Helper()

@@ -112,6 +112,7 @@ func (c *stmtCache) put(query string, prefixSafe bool, ref *stmtRef) (*stmtRef, 
 
 	// Do not retain a potentially much larger compound-query backing string.
 	key := string(append([]byte(nil), query...))
+	ref.stmt.sql = key
 	ref.cached = true
 	elem := c.lru.PushFront(&cacheEntry{query: key, ref: ref, prefixSafe: prefixSafe})
 	c.entries[key] = elem

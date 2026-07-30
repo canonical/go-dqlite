@@ -29,6 +29,7 @@ import (
 
 	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/canonical/go-dqlite/v3/internal/protocol"
+	"github.com/canonical/go-dqlite/v3/metrics"
 	"github.com/canonical/go-dqlite/v3/tracing"
 )
 
@@ -40,9 +41,9 @@ type Driver struct {
 	connectionTimeout      time.Duration    // Max time to wait for a new connection
 	contextTimeout         time.Duration    // Default client context timeout.
 	clientConfig           protocol.Config  // Configuration for dqlite client instances
-	tracing                client.LogLevel  // Whether to trace statements
 	concurrentLeaderConns  *int64           // Maximum number of concurrent connections to other cluster members while probing for leadership.
 	statementCacheCapacity int              // Maximum cached prepared statements per connection.
+	metrics                metrics.Recorder // Metrics recorder shared by all connections.
 }
 
 // Error is returned in case of database errors.
@@ -182,8 +183,9 @@ func WithContextTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithTracing will emit a log message at the given level every time a
-// statement gets executed.
+// WithTracing emits a log message at the given level for each statement
+// command. Logging is implemented as a metrics recorder and can be enabled
+// alongside WithMetrics.
 func WithTracing(level client.LogLevel) Option {
 	return func(options *options) {
 		options.Tracing = level
@@ -199,6 +201,14 @@ func WithStatementCacheCapacity(capacity int) Option {
 	}
 }
 
+// WithMetrics sets the recorder used for statement cache and command metrics.
+// The recorder must be safe for concurrent use by multiple connections.
+func WithMetrics(recorder metrics.Recorder) Option {
+	return func(options *options) {
+		options.Metrics = recorder
+	}
+}
+
 // New creates a new dqlite driver, which also implements the
 // driver.Driver interface.
 func New(store client.NodeStore, options ...Option) (*Driver, error) {
@@ -210,6 +220,10 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 	if o.StatementCacheCapacity < 0 {
 		return nil, fmt.Errorf("statement cache capacity must not be negative")
 	}
+	recorder := o.Metrics
+	if o.Tracing != client.LogNone {
+		recorder = metrics.Combine(recorder, metrics.NewLogRecorder(o.Log, o.Tracing))
+	}
 
 	driver := &Driver{
 		log:                    o.Log,
@@ -217,9 +231,9 @@ func New(store client.NodeStore, options ...Option) (*Driver, error) {
 		context:                o.Context,
 		connectionTimeout:      o.ConnectionTimeout,
 		contextTimeout:         o.ContextTimeout,
-		tracing:                o.Tracing,
 		concurrentLeaderConns:  o.ConcurrentLeaderConns,
 		statementCacheCapacity: o.StatementCacheCapacity,
+		metrics:                recorder,
 		clientConfig: protocol.Config{
 			Dial:           o.Dial,
 			AttemptTimeout: o.AttemptTimeout,
@@ -246,6 +260,7 @@ type options struct {
 	Context                 context.Context
 	Tracing                 client.LogLevel
 	StatementCacheCapacity  int
+	Metrics                 metrics.Recorder
 }
 
 // Create a options object with sane defaults.
@@ -283,8 +298,8 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn := &Conn{
 		log:            c.driver.log,
 		contextTimeout: c.driver.contextTimeout,
-		tracing:        c.driver.tracing,
 		stmtCache:      newStmtCache(c.driver.statementCacheCapacity),
+		metrics:        c.driver.metrics,
 	}
 
 	proto, err := c.protocol.Connect(ctx)
@@ -367,13 +382,13 @@ type Conn struct {
 	response       protocol.Message
 	id             uint32 // Database ID.
 	contextTimeout time.Duration
-	tracing        client.LogLevel
 	stmtCache      *stmtCache
+	metrics        metrics.Recorder
 }
 
 // prepareOne asks SQLite to prepare the first statement in query. The returned
 // offset is the exact statement boundary reported by SQLite.
-func (c *Conn) prepareOne(ctx context.Context, query string) (*stmtRef, int, error) {
+func (c *Conn) prepareOne(ctx context.Context, query string) (_ *stmtRef, _ int, retErr error) {
 	ctx, span := tracing.Start(ctx, "dqlite.driver.prepareOne", query)
 	defer span.End()
 
@@ -382,19 +397,19 @@ func (c *Conn) prepareOne(ctx context.Context, query string) (*stmtRef, int, err
 		request:  &c.request,
 		response: &c.response,
 		log:      c.log,
-		tracing:  c.tracing,
+		metrics:  c.metrics,
+		sql:      query,
 	}
 
 	protocol.EncodePrepareV1(&c.request, uint64(c.id), query)
 
-	var start time.Time
-	if c.tracing != client.LogNone {
-		start = time.Now()
+	if c.metrics != nil {
+		metricStart := time.Now()
+		defer func() {
+			metrics.ObserveCommand(c.metrics, metrics.CommandPrepare, time.Since(metricStart), stmt.sql, retErr)
+		}()
 	}
 	err := c.protocol.Call(ctx, &c.request, &c.response)
-	if c.tracing != client.LogNone {
-		c.log(c.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), query)
-	}
 	if err != nil {
 		return nil, 0, driverError(c.log, err)
 	}
@@ -409,9 +424,7 @@ func (c *Conn) prepareOne(ctx context.Context, query string) (*stmtRef, int, err
 		return nil, 0, driverError(c.log, fmt.Errorf("invalid prepared statement offset %d for query of length %d", offset, len(query)))
 	}
 
-	if c.tracing != client.LogNone {
-		stmt.sql = query
-	}
+	stmt.sql = query[:offset]
 
 	return &stmtRef{stmt: stmt}, int(offset), nil
 }
@@ -428,6 +441,11 @@ func (c *Conn) prepareNextStatement(ctx context.Context, query string) (*stmtLea
 
 	ref, offset := c.stmtCache.get(query)
 	if ref == nil {
+		result := metrics.CacheMiss
+		if c.stmtCache.capacity <= 0 {
+			result = metrics.CacheDisabled
+		}
+		metrics.ObserveCache(c.metrics, result)
 		var err error
 		ref, offset, err = c.prepareOne(ctx, query)
 		if err != nil {
@@ -441,6 +459,7 @@ func (c *Conn) prepareNextStatement(ctx context.Context, query string) (*stmtLea
 		}
 		return ref.acquire(), tail, nil
 	}
+	metrics.ObserveCache(c.metrics, metrics.CacheHit)
 
 	return ref.acquire(), trimSQLSeparators(query[offset:]), nil
 }
@@ -640,8 +659,8 @@ type Stmt struct {
 	id        uint32
 	params    uint64
 	log       client.LogFunc
-	sql       string // Prepared SQL, only set when tracing
-	tracing   client.LogLevel
+	sql       string
+	metrics   metrics.Recorder
 	finalized bool
 }
 
@@ -678,7 +697,7 @@ func (s *Stmt) NumInput() int {
 // as an INSERT or UPDATE.
 //
 // ExecContext must honor the context timeout and return when it is canceled.
-func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (_ driver.Result, retErr error) {
 	ctx, span := tracing.Start(ctx, "dqlite.driver.Stmt.ExecContext", s.sql)
 	defer span.End()
 	args = statementNamedValues(args)
@@ -691,14 +710,13 @@ func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (drive
 		protocol.EncodeExecV0(s.request, s.db, s.id, args)
 	}
 
-	var start time.Time
-	if s.tracing != client.LogNone {
-		start = time.Now()
+	if s.metrics != nil {
+		metricStart := time.Now()
+		defer func() {
+			metrics.ObserveCommand(s.metrics, metrics.CommandExec, time.Since(metricStart), s.sql, retErr)
+		}()
 	}
 	err := s.protocol.Call(ctx, s.request, s.response)
-	if s.tracing != client.LogNone {
-		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
-	}
 	if err != nil {
 		return nil, driverError(s.log, err)
 	}
@@ -725,7 +743,7 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 	return s.queryContext(ctx, args, nil)
 }
 
-func (s *Stmt) queryContext(ctx context.Context, args []driver.NamedValue, lease *stmtLease) (driver.Rows, error) {
+func (s *Stmt) queryContext(ctx context.Context, args []driver.NamedValue, lease *stmtLease) (_ driver.Rows, retErr error) {
 	ctx, span := tracing.Start(ctx, "dqlite.driver.Stmt.QueryContext", s.sql)
 	defer span.End()
 
@@ -739,14 +757,13 @@ func (s *Stmt) queryContext(ctx context.Context, args []driver.NamedValue, lease
 		protocol.EncodeQueryV0(s.request, s.db, s.id, args)
 	}
 
-	var start time.Time
-	if s.tracing != client.LogNone {
-		start = time.Now()
+	if s.metrics != nil {
+		metricStart := time.Now()
+		defer func() {
+			metrics.ObserveCommand(s.metrics, metrics.CommandQuery, time.Since(metricStart), s.sql, retErr)
+		}()
 	}
 	err := s.protocol.Call(ctx, s.request, s.response)
-	if s.tracing != client.LogNone {
-		s.log(s.tracing, "%.3fs request prepared: %q", time.Since(start).Seconds(), s.sql)
-	}
 	if err != nil {
 		return nil, driverError(s.log, err)
 	}
