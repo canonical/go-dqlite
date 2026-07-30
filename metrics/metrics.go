@@ -31,9 +31,8 @@ const (
 type CacheResult string
 
 const (
-	CacheHit      CacheResult = "hit"
-	CacheMiss     CacheResult = "miss"
-	CacheDisabled CacheResult = "disabled"
+	CacheHit  CacheResult = "hit"
+	CacheMiss CacheResult = "miss"
 )
 
 // Recorder receives driver metrics. Implementations must be safe for

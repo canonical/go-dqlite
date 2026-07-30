@@ -1,18 +1,25 @@
 package driver
 
-import "container/list"
+import (
+	"container/list"
+
+	"github.com/canonical/go-dqlite/v3/metrics"
+)
 
 // stmtRef owns a server-side prepared statement. The cache and each caller
 // hold independent references to it, so evicting an in-use statement does not
 // finalize it underneath the caller.
 type stmtRef struct {
-	stmt   *Stmt
-	refs   int
-	cached bool
+	stmt *Stmt
+	refs int
+}
+
+func (r *stmtRef) retain() {
+	r.refs++
 }
 
 func (r *stmtRef) acquire() *stmtLease {
-	r.refs++
+	r.retain()
 	return &stmtLease{ref: r}
 }
 
@@ -21,22 +28,29 @@ func (r *stmtRef) release() error {
 		panic("dqlite: prepared statement reference count below zero")
 	}
 	r.refs--
-	if r.refs == 0 && !r.cached {
-		return r.stmt.finalize()
-	}
-	return nil
-}
-
-func (r *stmtRef) uncache() error {
-	if !r.cached {
-		return nil
-	}
-	r.cached = false
 	if r.refs == 0 {
 		return r.stmt.finalize()
 	}
 	return nil
 }
+
+type stmtCache interface {
+	get(string) (*stmtRef, int)
+	put(string, bool, *stmtRef) (*stmtRef, error)
+	close() error
+}
+
+type noopStmtCache struct{}
+
+func (noopStmtCache) get(string) (*stmtRef, int) {
+	return nil, 0
+}
+
+func (noopStmtCache) put(_ string, _ bool, ref *stmtRef) (*stmtRef, error) {
+	return ref, nil
+}
+
+func (noopStmtCache) close() error { return nil }
 
 type cacheEntry struct {
 	query      string
@@ -47,17 +61,22 @@ type cacheEntry struct {
 // stmtCache is a per-connection LRU cache. It deliberately uses exact SQL
 // text as its key: rewriting or normalizing SQL without SQLite's parser can
 // change statement boundaries and semantics.
-type stmtCache struct {
+type lruStmtCache struct {
 	capacity int
 	entries  map[string]*list.Element
 	lru      *list.List
+	metrics  metrics.Recorder
 }
 
-func newStmtCache(capacity int) *stmtCache {
-	return &stmtCache{
+func newStmtCache(capacity int, recorder metrics.Recorder) stmtCache {
+	if capacity <= 0 {
+		return noopStmtCache{}
+	}
+	return &lruStmtCache{
 		capacity: capacity,
 		entries:  make(map[string]*list.Element, capacity),
 		lru:      list.New(),
+		metrics:  recorder,
 	}
 }
 
@@ -65,7 +84,7 @@ func newStmtCache(capacity int) *stmtCache {
 // Prefix reuse is only safe when SQLite previously returned this key as the
 // first part of a query with a non-empty tail. Looking at the final byte is not
 // sufficient because a semicolon there might be inside a SQL comment.
-func (c *stmtCache) get(query string) (*stmtRef, int) {
+func (c *lruStmtCache) get(query string) (*stmtRef, int) {
 	var match *list.Element
 	matchLen := 0
 	for _, elem := range c.entries {
@@ -88,18 +107,17 @@ func (c *stmtCache) get(query string) (*stmtRef, int) {
 		matchLen = consumed
 	}
 	if match == nil {
+		metrics.ObserveCache(c.metrics, metrics.CacheMiss)
 		return nil, 0
 	}
 	c.lru.MoveToFront(match)
+	metrics.ObserveCache(c.metrics, metrics.CacheHit)
 	return match.Value.(*cacheEntry).ref, matchLen
 }
 
 // put transfers cache ownership of ref to c. The query must be the exact byte
 // range consumed by SQLite, including a terminating semicolon when present.
-func (c *stmtCache) put(query string, prefixSafe bool, ref *stmtRef) (*stmtRef, error) {
-	if c.capacity <= 0 {
-		return ref, nil
-	}
+func (c *lruStmtCache) put(query string, prefixSafe bool, ref *stmtRef) (*stmtRef, error) {
 	if elem, ok := c.entries[query]; ok {
 		c.lru.MoveToFront(elem)
 		entry := elem.Value.(*cacheEntry)
@@ -113,7 +131,7 @@ func (c *stmtCache) put(query string, prefixSafe bool, ref *stmtRef) (*stmtRef, 
 	// Do not retain a potentially much larger compound-query backing string.
 	key := string(append([]byte(nil), query...))
 	ref.stmt.sql = key
-	ref.cached = true
+	ref.retain()
 	elem := c.lru.PushFront(&cacheEntry{query: key, ref: ref, prefixSafe: prefixSafe})
 	c.entries[key] = elem
 
@@ -125,13 +143,13 @@ func (c *stmtCache) put(query string, prefixSafe bool, ref *stmtRef) (*stmtRef, 
 	entry := oldest.Value.(*cacheEntry)
 	delete(c.entries, entry.query)
 	c.lru.Remove(oldest)
-	return ref, entry.ref.uncache()
+	return ref, entry.ref.release()
 }
 
-func (c *stmtCache) close() error {
+func (c *lruStmtCache) close() error {
 	var firstErr error
 	for elem := c.lru.Front(); elem != nil; elem = elem.Next() {
-		if err := elem.Value.(*cacheEntry).ref.uncache(); err != nil && firstErr == nil {
+		if err := elem.Value.(*cacheEntry).ref.release(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

@@ -88,7 +88,7 @@ func TestTrimSQLSeparatorsCorpus(t *testing.T) {
 }
 
 func TestStmtCacheExactAndCompoundMatches(t *testing.T) {
-	cache := newStmtCache(10)
+	cache := newStmtCache(10, nil)
 	selectOne := &stmtRef{stmt: &Stmt{}}
 	begin := &stmtRef{stmt: &Stmt{}}
 
@@ -123,12 +123,52 @@ func TestStmtCacheExactAndCompoundMatches(t *testing.T) {
 }
 
 func TestStmtCacheDoesNotInferBoundaryFromSemicolonByte(t *testing.T) {
-	cache := newStmtCache(10)
+	cache := newStmtCache(10, nil)
 	comment := &stmtRef{stmt: &Stmt{}}
 	if _, err := cache.put("SELECT 1 -- ;", false, comment); err != nil {
 		t.Fatal(err)
 	}
 	if got, n := cache.get("SELECT 1 -- ;\nDROP TABLE t"); got != nil || n != 0 {
 		t.Fatalf("comment semicolon was treated as a statement boundary: (%p, %d)", got, n)
+	}
+}
+
+func TestNoopStmtCacheDoesNotTakeOwnership(t *testing.T) {
+	cache := newStmtCache(0, nil)
+	ref := &stmtRef{stmt: &Stmt{}}
+
+	got, err := cache.put("SELECT 1", false, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != ref || ref.refs != 0 {
+		t.Fatalf("noop put = (%p, refs %d), want (%p, refs 0)", got, ref.refs, ref)
+	}
+	if got, n := cache.get("SELECT 1"); got != nil || n != 0 {
+		t.Fatalf("noop get = (%p, %d), want (nil, 0)", got, n)
+	}
+}
+
+func TestStmtCacheOwnershipIsAReference(t *testing.T) {
+	cache := newStmtCache(1, nil)
+	first := &stmtRef{stmt: &Stmt{}}
+	second := &stmtRef{stmt: &Stmt{}}
+
+	if _, err := cache.put("SELECT 1", false, first); err != nil {
+		t.Fatal(err)
+	}
+	if first.refs != 1 {
+		t.Fatalf("cached reference count = %d, want 1", first.refs)
+	}
+	first.retain() // Keep the fake statement alive when it is evicted.
+
+	if _, err := cache.put("SELECT 2", false, second); err != nil {
+		t.Fatal(err)
+	}
+	if first.refs != 1 {
+		t.Fatalf("evicted reference count = %d, want caller's reference", first.refs)
+	}
+	if second.refs != 1 {
+		t.Fatalf("new cached reference count = %d, want 1", second.refs)
 	}
 }

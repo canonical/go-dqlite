@@ -298,7 +298,7 @@ func (c *Connector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn := &Conn{
 		log:            c.driver.log,
 		contextTimeout: c.driver.contextTimeout,
-		stmtCache:      newStmtCache(c.driver.statementCacheCapacity),
+		stmtCache:      newStmtCache(c.driver.statementCacheCapacity, c.driver.metrics),
 		metrics:        c.driver.metrics,
 	}
 
@@ -382,7 +382,7 @@ type Conn struct {
 	response       protocol.Message
 	id             uint32 // Database ID.
 	contextTimeout time.Duration
-	stmtCache      *stmtCache
+	stmtCache      stmtCache
 	metrics        metrics.Recorder
 }
 
@@ -441,11 +441,6 @@ func (c *Conn) prepareNextStatement(ctx context.Context, query string) (*stmtLea
 
 	ref, offset := c.stmtCache.get(query)
 	if ref == nil {
-		result := metrics.CacheMiss
-		if c.stmtCache.capacity <= 0 {
-			result = metrics.CacheDisabled
-		}
-		metrics.ObserveCache(c.metrics, result)
 		var err error
 		ref, offset, err = c.prepareOne(ctx, query)
 		if err != nil {
@@ -459,8 +454,6 @@ func (c *Conn) prepareNextStatement(ctx context.Context, query string) (*stmtLea
 		}
 		return ref.acquire(), tail, nil
 	}
-	metrics.ObserveCache(c.metrics, metrics.CacheHit)
-
 	return ref.acquire(), trimSQLSeparators(query[offset:]), nil
 }
 

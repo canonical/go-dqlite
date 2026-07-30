@@ -232,7 +232,7 @@ func TestConn_Metrics(t *testing.T) {
 	}, commands)
 }
 
-func TestConn_MetricsCacheDisabled(t *testing.T) {
+func TestConn_NoopCacheDoesNotEmitMetrics(t *testing.T) {
 	recorder := &metricsRecorder{}
 	drv, cleanup := newMetricsDriver(t, recorder, 0)
 	defer cleanup()
@@ -244,7 +244,7 @@ func TestConn_MetricsCacheDisabled(t *testing.T) {
 	require.NoError(t, conn.Close())
 
 	_, cache := recorder.snapshot()
-	assert.Equal(t, []metrics.CacheResult{metrics.CacheDisabled}, cache)
+	assert.Empty(t, cache)
 }
 
 func TestConn_PrepareMultipleStatements(t *testing.T) {
