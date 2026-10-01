@@ -3,6 +3,7 @@ package driver_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	dqlite "github.com/canonical/go-dqlite/v3"
 	"github.com/canonical/go-dqlite/v3/client"
 	"github.com/canonical/go-dqlite/v3/driver"
+	"github.com/canonical/go-dqlite/v3/internal/bindings"
 	"github.com/canonical/go-dqlite/v3/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -302,6 +304,94 @@ func TestIntegration_LeadershipTransfer_Tx(t *testing.T) {
 	require.NoError(t, tx.Commit())
 }
 
+func TestIntegration_BeginImmediateQueues(t *testing.T) {
+	if bindings.DqliteVersion < 1_18_02 {
+		t.Skip("the dqlite server has no write queue")
+	}
+
+	db, _, cleanup := newDB(t, 1, dqlite.WithBusyTimeout(5000))
+	defer cleanup()
+
+	_, err := db.Exec("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	ctx := driver.ContextWithBeginImmediate(context.Background())
+
+	txA, err := db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+
+	var count int
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		close(started)
+		txB, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			done <- err
+			return
+		}
+
+		err = txB.QueryRow("SELECT count(*) FROM test").Scan(&count)
+		if err != nil {
+			_ = txB.Rollback()
+			done <- err
+			return
+		}
+
+		done <- txB.Commit()
+	}()
+
+	// Wait for the goroutine to reach BeginTx, then check that it is still
+	// queued. The count assertion below is the real proof: without queueing,
+	// its snapshot would predate the insert.
+	<-started
+	select {
+	case err := <-done:
+		t.Fatalf("second immediate transaction did not wait for the first: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	_, err = txA.Exec("INSERT INTO test(n) VALUES(1)")
+	require.NoError(t, err)
+	require.NoError(t, txA.Commit())
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("second immediate transaction did not resume after the first committed")
+	}
+
+	assert.Equal(t, 1, count)
+}
+
+func TestIntegration_DeferredUpgradeStaleSnapshot(t *testing.T) {
+	db, _, cleanup := newDB(t, 1)
+	defer cleanup()
+
+	_, err := db.Exec("CREATE TABLE test (n INT)")
+	require.NoError(t, err)
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+
+	var count int
+	require.NoError(t, tx.QueryRow("SELECT count(*) FROM test").Scan(&count))
+
+	// Another connection commits after the reader took its snapshot.
+	_, err = db.Exec("INSERT INTO test(n) VALUES(1)")
+	require.NoError(t, err)
+
+	_, err = tx.Exec("INSERT INTO test(n) VALUES(2)")
+	require.Error(t, err)
+
+	var dErr driver.Error
+	require.True(t, errors.As(err, &dErr))
+	assert.Equal(t, driver.ErrBusySnapshot, dErr.Code)
+
+	require.NoError(t, tx.Rollback())
+}
+
 func TestOptions(t *testing.T) {
 	// make sure applying all options doesn't break anything
 	store := client.NewInmemNodeStore()
@@ -320,18 +410,18 @@ func TestOptions(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func newDB(t *testing.T, n int) (*sql.DB, []*nodeHelper, func()) {
+func newDB(t *testing.T, n int, options ...dqlite.Option) (*sql.DB, []*nodeHelper, func()) {
 	infos := make([]client.NodeInfo, n)
 	for i := range infos {
 		infos[i].ID = uint64(i + 1)
 		infos[i].Address = fmt.Sprintf("@%d", infos[i].ID)
 		infos[i].Role = client.Voter
 	}
-	return newDBWithInfos(t, infos)
+	return newDBWithInfos(t, infos, options...)
 }
 
-func newDBWithInfos(t *testing.T, infos []client.NodeInfo) (*sql.DB, []*nodeHelper, func()) {
-	helpers, helpersCleanup := newNodeHelpers(t, infos)
+func newDBWithInfos(t *testing.T, infos []client.NodeInfo, options ...dqlite.Option) (*sql.DB, []*nodeHelper, func()) {
+	helpers, helpersCleanup := newNodeHelpers(t, infos, options...)
 
 	store := client.NewInmemNodeStore()
 
@@ -364,13 +454,15 @@ type nodeHelper struct {
 	Address string
 	Dir     string
 	Node    *dqlite.Node
+	Options []dqlite.Option // Extra node options applied on every Create.
 }
 
-func newNodeHelper(t *testing.T, id uint64, address string) *nodeHelper {
+func newNodeHelper(t *testing.T, id uint64, address string, options ...dqlite.Option) *nodeHelper {
 	h := &nodeHelper{
 		t:       t,
 		ID:      id,
 		Address: address,
+		Options: options,
 	}
 
 	h.Dir, _ = newDir(t)
@@ -390,7 +482,8 @@ func (h *nodeHelper) Client() *client.Client {
 func (h *nodeHelper) Create() {
 	var err error
 	require.Nil(h.t, h.Node)
-	h.Node, err = dqlite.New(h.ID, h.Address, h.Dir, dqlite.WithBindAddress(h.Address))
+	options := append([]dqlite.Option{dqlite.WithBindAddress(h.Address)}, h.Options...)
+	h.Node, err = dqlite.New(h.ID, h.Address, h.Dir, options...)
 	require.NoError(h.t, err)
 }
 
@@ -412,14 +505,14 @@ func (h *nodeHelper) cleanup() {
 	require.NoError(h.t, os.RemoveAll(h.Dir))
 }
 
-func newNodeHelpers(t *testing.T, infos []client.NodeInfo) ([]*nodeHelper, func()) {
+func newNodeHelpers(t *testing.T, infos []client.NodeInfo, options ...dqlite.Option) ([]*nodeHelper, func()) {
 	t.Helper()
 
 	n := len(infos)
 	helpers := make([]*nodeHelper, n)
 
 	for i, info := range infos {
-		helpers[i] = newNodeHelper(t, info.ID, info.Address)
+		helpers[i] = newNodeHelper(t, info.ID, info.Address, options...)
 
 		if i > 0 {
 			client := helpers[0].Client()
