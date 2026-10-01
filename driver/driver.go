@@ -494,9 +494,24 @@ func (c *Conn) Close() error {
 	return c.protocol.Close()
 }
 
+// contextKey is the type of the context keys used by the driver.
+type contextKey string
+
+// beginImmediateContextKey marks a transaction to start with BEGIN IMMEDIATE.
+const beginImmediateContextKey contextKey = "begin-immediate"
+
+// ContextWithBeginImmediate returns a context that makes BeginTx start the
+// transaction with BEGIN IMMEDIATE, which takes the write lock at BEGIN.
+func ContextWithBeginImmediate(parent context.Context) context.Context {
+	return context.WithValue(parent, beginImmediateContextKey, true)
+}
+
 // BeginTx starts and returns a new transaction.  If the context is canceled by
 // the user the sql package will call Tx.Rollback before discarding and closing
 // the connection.
+//
+// The transaction starts with BEGIN IMMEDIATE if the context comes from
+// ContextWithBeginImmediate, and with BEGIN otherwise.
 //
 // This must check opts.Isolation to determine if there is a set isolation
 // level. If the driver does not support a non-default level and one is set or
@@ -507,7 +522,12 @@ func (c *Conn) Close() error {
 // true to either set the read-only transaction property if supported or return
 // an error if it is not supported.
 func (c *Conn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
-	if _, err := c.ExecContext(ctx, "BEGIN", nil); err != nil {
+	begin := "BEGIN"
+	if immediate, _ := ctx.Value(beginImmediateContextKey).(bool); immediate {
+		begin = "BEGIN IMMEDIATE"
+	}
+
+	if _, err := c.ExecContext(ctx, begin, nil); err != nil {
 		return nil, err
 	}
 

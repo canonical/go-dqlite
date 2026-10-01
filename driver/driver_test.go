@@ -17,6 +17,7 @@ package driver_test
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"io"
 	"io/ioutil"
 	"os"
@@ -146,6 +147,62 @@ func TestConn_QueryRow(t *testing.T) {
 	require.NoError(t, rows.Close())
 
 	assert.NoError(t, conn.Close())
+}
+
+func TestConn_BeginTxImmediate(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	connA, err := drv.Open("test.db")
+	require.NoError(t, err)
+	defer connA.Close()
+
+	connB, err := drv.Open("test.db")
+	require.NoError(t, err)
+	defer connB.Close()
+
+	ctx := dqlitedriver.ContextWithBeginImmediate(context.Background())
+
+	txA, err := connA.(driver.ConnBeginTx).BeginTx(ctx, driver.TxOptions{})
+	require.NoError(t, err)
+
+	// The node has no busy timeout, so a second writer fails at once.
+	_, err = connB.(driver.ConnBeginTx).BeginTx(ctx, driver.TxOptions{})
+	require.Error(t, err)
+
+	var dErr dqlitedriver.Error
+	require.True(t, errors.As(err, &dErr))
+	assert.Equal(t, dqlitedriver.ErrBusy, dErr.Code)
+
+	require.NoError(t, txA.Rollback())
+
+	txB, err := connB.(driver.ConnBeginTx).BeginTx(ctx, driver.TxOptions{})
+	require.NoError(t, err)
+	require.NoError(t, txB.Rollback())
+}
+
+func TestConn_BeginTxDeferred(t *testing.T) {
+	drv, cleanup := newDriver(t)
+	defer cleanup()
+
+	connA, err := drv.Open("test.db")
+	require.NoError(t, err)
+	defer connA.Close()
+
+	connB, err := drv.Open("test.db")
+	require.NoError(t, err)
+	defer connB.Close()
+
+	txA, err := connA.(driver.ConnBeginTx).BeginTx(context.Background(), driver.TxOptions{})
+	require.NoError(t, err)
+
+	// A plain BEGIN takes no lock, so another writer can still start.
+	ctx := dqlitedriver.ContextWithBeginImmediate(context.Background())
+	txB, err := connB.(driver.ConnBeginTx).BeginTx(ctx, driver.TxOptions{})
+	require.NoError(t, err)
+
+	require.NoError(t, txB.Rollback())
+	require.NoError(t, txA.Rollback())
 }
 
 func TestConn_InterruptQuery(t *testing.T) {
