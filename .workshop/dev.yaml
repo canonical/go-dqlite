@@ -4,12 +4,9 @@ sdks:
   - name: go
     channel: 1.24/stable
   - name: omp
-  - name: opencode
 actions:
   build: |
     go build
   test: |
     go test ./...
   omp: omp "$@"
-  opencode: |
-    opencode --yolo "$@"
