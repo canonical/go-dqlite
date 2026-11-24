@@ -15,7 +15,8 @@ jobs:
           - focal
           - jammy
           - noble
-          - plucky
+          - resolute
+          - stonking
     steps:
     - uses: actions/checkout@v5
       with:
