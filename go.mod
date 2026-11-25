@@ -12,10 +12,11 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.7
 	github.com/peterh/liner v1.2.2
 	github.com/pkg/errors v0.9.1
-	github.com/spf13/cobra v1.10.1
+	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.0.0-20211117180635-dee7805ff2e1
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
