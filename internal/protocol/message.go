@@ -578,13 +578,14 @@ func (r *Rows) Close() error {
 	var err error
 	if !r.message.hasBeenConsumed() {
 		slot := r.message.lastByte()
-		if slot == 0xee {
+		switch slot {
+		case 0xee:
 			// More rows are available.
 			err = ErrRowsPart
-		} else if slot == 0xff {
+		case 0xff:
 			// Rows EOF marker
 			err = io.EOF
-		} else {
+		default:
 			err = fmt.Errorf("unexpected end of message")
 		}
 	}
